@@ -1,3 +1,5 @@
+#![recursion_limit = "512"]
+
 mod derive_action;
 mod derive_app_context;
 mod derive_into_element;

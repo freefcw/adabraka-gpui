@@ -15,7 +15,7 @@ inspector = []
 [lib]
 name = "adabraka_gpui_macros"
 path = "src/gpui_macros.rs"
-doctest = true
+doctest = false
 proc-macro = true
 
 [[test]]
