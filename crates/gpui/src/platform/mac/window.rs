@@ -1,4 +1,4 @@
-use super::{BoolExt, MacDisplay, NSRange, NSStringExt, ns_string, renderer};
+use super::{BoolExt, MacDisplay, NSRange, NSStringExt, display_id_for_screen, ns_string, renderer};
 use crate::{
     AnyWindowHandle, Bounds, Capslock, DisplayLink, ExternalPaths, FileDropEvent,
     ForegroundExecutor, KeyDownEvent, Keystroke, Modifiers, ModifiersChangedEvent, MouseButton,
@@ -26,7 +26,7 @@ use cocoa::{
     },
 };
 
-use core_graphics::display::{CGDirectDisplayID, CGPoint, CGRect};
+use core_graphics::display::{CGPoint, CGRect};
 use ctor::ctor;
 use futures::channel::oneshot;
 use objc::{
@@ -510,7 +510,7 @@ impl MacWindowState {
             window_state: self.self_ref.clone(),
         });
         if let Some(mut display_link) = DisplayLink::new(
-            display_id,
+            display_id.0,
             Box::into_raw(frame_request_context) as *mut c_void,
             step,
             drop_frame_request_context,
@@ -668,7 +668,7 @@ impl MacWindow {
                 let screen = cocoa::foundation::NSArray::objectAtIndex(screens, i);
                 let frame = NSScreen::frame(screen);
                 let display_id = display_id_for_screen(screen);
-                if display_id == display.0 {
+                if display_id == display.id() {
                     screen_frame = Some(frame);
                     target_screen = screen;
                 }
@@ -2630,16 +2630,6 @@ where
         Some(result)
     } else {
         None
-    }
-}
-
-unsafe fn display_id_for_screen(screen: id) -> CGDirectDisplayID {
-    unsafe {
-        let device_description = NSScreen::deviceDescription(screen);
-        let screen_number_key: id = NSString::alloc(nil).init_str("NSScreenNumber");
-        let screen_number = device_description.objectForKey_(screen_number_key);
-        let screen_number: NSUInteger = msg_send![screen_number, unsignedIntegerValue];
-        screen_number as CGDirectDisplayID
     }
 }
 

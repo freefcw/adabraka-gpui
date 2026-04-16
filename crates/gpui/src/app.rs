@@ -43,7 +43,8 @@ use crate::{
     PlatformKeyboardMapper, Point, PowerSaveBlockerKind, PromptBuilder, PromptButton, PromptHandle,
     PromptLevel, Render, RenderImage, RenderablePromptHandle, Reservation, ScreenCaptureSource,
     SharedString, Size, SubscriberSet, Subscription, SvgRenderer, SystemPowerEvent, Task,
-    TextSystem, TrayIconEvent, TrayIconRenderingMode, TrayMenuItem, Window, WindowAppearance,
+    TextSystem, TrayAnchor, TrayIconEvent, TrayIconRenderingMode, TrayMenuItem, Window,
+    WindowAppearance,
     WindowHandle, WindowId,
     WindowInvalidator, WindowPosition,
     colors::{Colors, GlobalColors},
@@ -1027,6 +1028,11 @@ impl App {
     /// When enabled, clicking the tray icon fires `TrayIconEvent::LeftClick` instead of showing the NSMenu.
     pub fn set_tray_panel_mode(&self, enabled: bool) {
         self.platform.set_tray_panel_mode(enabled);
+    }
+
+    #[allow(missing_docs)]
+    pub fn tray_icon_anchor(&self) -> Option<TrayAnchor> {
+        self.platform.get_tray_icon_anchor()
     }
 
     /// Get the screen bounds of the tray icon, useful for positioning a panel below it.

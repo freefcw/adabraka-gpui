@@ -3,6 +3,7 @@ use super::{
     BoolExt, MacKeyboardLayout, MacKeyboardMapper,
     attributed_string::{NSAttributedString, NSMutableAttributedString},
     events::key_to_native,
+    global_point_to_native_screen_point,
     renderer,
 };
 use crate::{
@@ -10,8 +11,8 @@ use crate::{
     CursorStyle, ForegroundExecutor, Image, ImageFormat, KeyContext, Keymap, MacDispatcher,
     MacDisplay, MacWindow, Menu, MenuItem, OsMenu, OwnedMenu, PathPromptOptions, Platform,
     PlatformDisplay, PlatformKeyboardLayout, PlatformKeyboardMapper, PlatformTextSystem,
-    PlatformWindow, Result, SemanticVersion, SharedString, SystemMenuType, Task, TrayIconEvent,
-    TrayIconRenderingMode, TrayMenuItem, WindowAppearance, WindowParams, hash,
+    PlatformWindow, Result, SemanticVersion, SharedString, SystemMenuType, Task, TrayAnchor,
+    TrayIconEvent, TrayIconRenderingMode, TrayMenuItem, WindowAppearance, WindowParams, hash,
 };
 use anyhow::{Context as _, anyhow};
 use block::ConcreteBlock;
@@ -1349,6 +1350,11 @@ impl Platform for MacPlatform {
         Self::ensure_tray(&mut state).set_panel_mode(enabled);
     }
 
+    fn get_tray_icon_anchor(&self) -> Option<TrayAnchor> {
+        let state = self.0.lock();
+        state.tray.as_ref().and_then(|tray| tray.get_icon_anchor())
+    }
+
     fn get_tray_icon_bounds(&self) -> Option<crate::Bounds<crate::Pixels>> {
         let state = self.0.lock();
         state.tray.as_ref().and_then(|tray| tray.get_icon_bounds())
@@ -1673,20 +1679,10 @@ impl Platform for MacPlatform {
             let _: () = msg_send![menu, setAutoenablesItems: NO];
             super::tray::build_menu_with_selector(menu, &items, sel!(handleContextMenuItem:));
 
-            let main_screen: id = cocoa::appkit::NSScreen::mainScreen(nil);
-            let screen_height = if main_screen != nil {
-                cocoa::appkit::NSScreen::frame(main_screen).size.height
-            } else {
-                0.0
-            };
-
-            let point = cocoa::foundation::NSPoint::new(
-                position.x.0 as f64,
-                screen_height - position.y.0 as f64,
-            );
-
-            let _: () =
-                msg_send![menu, popUpMenuPositioningItem: nil atLocation: point inView: nil];
+            if let Some(point) = global_point_to_native_screen_point(position) {
+                let _: () =
+                    msg_send![menu, popUpMenuPositioningItem: nil atLocation: point inView: nil];
+            }
             let _: () = msg_send![menu, release];
         }
     }

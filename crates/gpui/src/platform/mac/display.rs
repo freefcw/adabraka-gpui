@@ -1,9 +1,9 @@
-use crate::{Bounds, DisplayId, Pixels, PlatformDisplay, px, size};
+use crate::{Bounds, DisplayId, Pixels, PlatformDisplay, Point, TrayAnchor, point, px, size};
 use anyhow::Result;
 use cocoa::{
     appkit::NSScreen,
     base::{id, nil},
-    foundation::{NSDictionary, NSString},
+    foundation::{NSDictionary, NSPoint, NSRect, NSString},
 };
 use core_foundation::uuid::{CFUUIDGetUUIDBytes, CFUUIDRef};
 use core_graphics::display::{CGDirectDisplayID, CGDisplayBounds, CGGetActiveDisplayList};
@@ -61,6 +61,62 @@ impl MacDisplay {
                 panic!("Failed to get active display list. Result: {result}");
             }
         }
+    }
+}
+
+pub(crate) unsafe fn display_id_for_screen(screen: id) -> DisplayId {
+    unsafe {
+        let device_description = NSScreen::deviceDescription(screen);
+        let screen_number_key: id = NSString::alloc(nil).init_str("NSScreenNumber");
+        let screen_number = device_description.objectForKey_(screen_number_key);
+        let screen_number: CGDirectDisplayID = msg_send![screen_number, unsignedIntegerValue];
+        DisplayId(screen_number)
+    }
+}
+
+pub(crate) unsafe fn primary_screen_frame() -> Option<NSRect> {
+    unsafe {
+        let screens = NSScreen::screens(nil);
+        if screens == nil || cocoa::foundation::NSArray::count(screens) == 0 {
+            return None;
+        }
+
+        let screen = cocoa::foundation::NSArray::objectAtIndex(screens, 0);
+        Some(NSScreen::frame(screen))
+    }
+}
+
+pub(crate) unsafe fn global_point_to_native_screen_point(
+    position: Point<Pixels>,
+) -> Option<NSPoint> {
+    unsafe {
+        let primary_frame = primary_screen_frame()?;
+        Some(NSPoint::new(
+            position.x.0 as f64,
+            primary_frame.size.height - position.y.0 as f64,
+        ))
+    }
+}
+
+pub(crate) unsafe fn screen_frame_to_tray_anchor(screen: id, frame: NSRect) -> Option<TrayAnchor> {
+    unsafe {
+        if screen == nil {
+            return None;
+        }
+
+        let screen_frame = NSScreen::frame(screen);
+        let local_x = frame.origin.x - screen_frame.origin.x;
+        let local_y = screen_frame.origin.y + screen_frame.size.height
+            - frame.origin.y
+            - frame.size.height;
+
+        Some(TrayAnchor {
+            display_id: display_id_for_screen(screen),
+            bounds: Bounds::new(
+                point(px(local_x as f32), px(local_y as f32)),
+                size(px(frame.size.width as f32), px(frame.size.height as f32)),
+            ),
+        })
     }
 }
 

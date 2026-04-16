@@ -1,7 +1,7 @@
+use super::screen_frame_to_tray_anchor;
 use crate::platform::TrayMenuItem;
-use crate::{Bounds, Pixels, TrayIconRenderingMode, point, px, size};
+use crate::{Bounds, Pixels, TrayAnchor, TrayIconRenderingMode};
 use cocoa::{
-    appkit::NSScreen,
     base::{NO, YES, id, nil},
     foundation::{NSData, NSSize, NSString},
 };
@@ -159,7 +159,7 @@ impl MacTray {
         }
     }
 
-    pub fn get_icon_bounds(&self) -> Option<Bounds<Pixels>> {
+    pub fn get_icon_anchor(&self) -> Option<TrayAnchor> {
         unsafe {
             let button: id = msg_send![*self.status_item, button];
             if button == nil {
@@ -173,21 +173,12 @@ impl MacTray {
 
             let frame: cocoa::foundation::NSRect = msg_send![button_window, frame];
             let screen: id = msg_send![button_window, screen];
-            if screen == nil {
-                return None;
-            }
-            let screen_frame = NSScreen::frame(screen);
-
-            let local_x = frame.origin.x - screen_frame.origin.x;
-            let flipped_y = screen_frame.origin.y + screen_frame.size.height
-                - frame.origin.y
-                - frame.size.height;
-
-            Some(Bounds::new(
-                point(px(local_x as f32), px(flipped_y as f32)),
-                size(px(frame.size.width as f32), px(frame.size.height as f32)),
-            ))
+            screen_frame_to_tray_anchor(screen, frame)
         }
+    }
+
+    pub fn get_icon_bounds(&self) -> Option<Bounds<Pixels>> {
+        self.get_icon_anchor().map(|anchor| anchor.bounds)
     }
 }
 

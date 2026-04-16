@@ -284,6 +284,9 @@ pub(crate) trait Platform: 'static {
     fn set_tray_menu(&self, _menu: Vec<TrayMenuItem>) {}
     fn set_tray_tooltip(&self, _tooltip: &str) {}
     fn set_tray_panel_mode(&self, _enabled: bool) {}
+    fn get_tray_icon_anchor(&self) -> Option<TrayAnchor> {
+        None
+    }
     fn get_tray_icon_bounds(&self) -> Option<Bounds<Pixels>> {
         None
     }
@@ -1466,6 +1469,13 @@ pub enum TrayIconEvent {
     DoubleClick,
 }
 
+#[allow(missing_docs)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct TrayAnchor {
+    pub display_id: DisplayId,
+    pub bounds: Bounds<Pixels>,
+}
+
 /// A menu item for a system tray context menu.
 #[derive(Debug, Clone)]
 pub enum TrayMenuItem {
@@ -1674,7 +1684,23 @@ pub enum WindowPosition {
     /// Center the window on the given display.
     CenterOnDisplay(DisplayId),
     /// Center the window above the tray icon area.
+    ///
+    /// Deprecated: this variant only carries the tray icon bounds and does
+    /// not know which display the tray is on, which causes window placement
+    /// to be off on multi-monitor setups. Prefer [`WindowPosition::TrayAnchored`],
+    /// which carries a full [`TrayAnchor`] (including `display_id`).
+    #[deprecated(
+        since = "0.5.3",
+        note = "Use `WindowPosition::TrayAnchored(TrayAnchor)` instead; the new variant carries `display_id` and fixes multi-monitor placement. This variant will be removed in a future release."
+    )]
     TrayCenter(Bounds<Pixels>),
+    /// Center the window above the tray icon area, using a full [`TrayAnchor`].
+    ///
+    /// The `TrayAnchor` carries both the tray icon `bounds` (display-local,
+    /// top-left origin) and the `display_id` it resides on. Callers should
+    /// also propagate `display_id` to `WindowOptions.display_id` so the
+    /// window is opened on the correct screen in multi-monitor setups.
+    TrayAnchored(TrayAnchor),
     /// Position the window in the top-right corner.
     TopRight {
         /// The margin from the screen edge.

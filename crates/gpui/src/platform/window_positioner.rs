@@ -26,7 +26,14 @@ pub fn compute_window_bounds(
                 Bounds::new(Point::default(), size)
             }
         }
+        #[allow(deprecated)]
         WindowPosition::TrayCenter(tray_bounds) => {
+            let x = tray_bounds.origin.x + (tray_bounds.size.width - size.width) * 0.5;
+            let y = tray_bounds.origin.y + tray_bounds.size.height;
+            Bounds::new(point(x, y), size)
+        }
+        WindowPosition::TrayAnchored(anchor) => {
+            let tray_bounds = anchor.bounds;
             let x = tray_bounds.origin.x + (tray_bounds.size.width - size.width) * 0.5;
             let y = tray_bounds.origin.y + tray_bounds.size.height;
             Bounds::new(point(x, y), size)
