@@ -1,6 +1,6 @@
 use crate::{
-    point, seal::Sealed, Bounds, Capslock, Context, Empty, IntoElement, Keystroke, Modifiers,
-    Pixels, Point, Render, Window,
+    Bounds, Capslock, Context, Empty, IntoElement, Keystroke, Modifiers, Pixels, Point, Render,
+    Window, point, seal::Sealed,
 };
 use smallvec::SmallVec;
 use std::{any::Any, fmt::Debug, ops::Deref, path::PathBuf};
@@ -589,8 +589,8 @@ impl PlatformInput {
 mod test {
 
     use crate::{
-        self as gpui, div, AppContext as _, Context, FocusHandle, InteractiveElement, IntoElement,
-        KeyBinding, Keystroke, ParentElement, Render, TestAppContext, Window,
+        self as gpui, AppContext as _, Context, FocusHandle, InteractiveElement, IntoElement,
+        KeyBinding, Keystroke, ParentElement, Render, TestAppContext, Window, div,
     };
 
     struct TestView {

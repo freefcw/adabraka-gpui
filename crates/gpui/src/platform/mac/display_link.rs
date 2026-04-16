@@ -3,7 +3,8 @@ use crate::{
     dispatch_sys::{
         _dispatch_source_type_data_add, dispatch_resume, dispatch_set_context,
         dispatch_source_cancel, dispatch_source_create, dispatch_source_merge_data,
-        dispatch_source_set_event_handler_f, dispatch_source_t, dispatch_suspend,
+        dispatch_source_set_cancel_handler_f, dispatch_source_set_event_handler_f,
+        dispatch_source_t,
     },
 };
 use anyhow::Result;
@@ -14,6 +15,34 @@ use util::ResultExt;
 pub struct DisplayLink {
     display_link: Option<sys::DisplayLink>,
     frame_requests: dispatch_source_t,
+    frame_requests_resumed: bool,
+}
+
+struct FrameRequestsContext {
+    data: *mut c_void,
+    callback: unsafe extern "C" fn(*mut c_void),
+    drop_data: unsafe extern "C" fn(*mut c_void),
+}
+
+impl Drop for FrameRequestsContext {
+    fn drop(&mut self) {
+        unsafe {
+            (self.drop_data)(self.data);
+        }
+    }
+}
+
+unsafe extern "C" fn handle_frame_requests(context: *mut c_void) {
+    let context = unsafe { &*(context as *const FrameRequestsContext) };
+    unsafe {
+        (context.callback)(context.data);
+    }
+}
+
+unsafe extern "C" fn release_frame_requests(context: *mut c_void) {
+    unsafe {
+        drop(Box::from_raw(context as *mut FrameRequestsContext));
+    }
 }
 
 impl DisplayLink {
@@ -21,6 +50,7 @@ impl DisplayLink {
         display_id: CGDirectDisplayID,
         data: *mut c_void,
         callback: unsafe extern "C" fn(*mut c_void),
+        drop_data: unsafe extern "C" fn(*mut c_void),
     ) -> Result<DisplayLink> {
         unsafe extern "C" fn display_link_callback(
             _display_link_out: *mut sys::CVDisplayLink,
@@ -44,43 +74,54 @@ impl DisplayLink {
                 0,
                 dispatch_get_main_queue(),
             );
+
+            let display_link = match sys::DisplayLink::new(
+                display_id,
+                display_link_callback,
+                frame_requests as *mut c_void,
+            ) {
+                Ok(display_link) => display_link,
+                Err(err) => {
+                    drop_data(data);
+                    dispatch_source_cancel(frame_requests);
+                    dispatch_resume(crate::dispatch_sys::dispatch_object_t {
+                        _ds: frame_requests,
+                    });
+                    return Err(err);
+                }
+            };
+
+            let context = Box::into_raw(Box::new(FrameRequestsContext {
+                data,
+                callback,
+                drop_data,
+            }));
             dispatch_set_context(
                 crate::dispatch_sys::dispatch_object_t {
                     _ds: frame_requests,
                 },
-                data,
+                context as *mut c_void,
             );
-            dispatch_source_set_event_handler_f(frame_requests, Some(callback));
-
-            let display_link = sys::DisplayLink::new(
-                display_id,
-                display_link_callback,
-                frame_requests as *mut c_void,
-            )?;
+            dispatch_source_set_event_handler_f(frame_requests, Some(handle_frame_requests));
+            dispatch_source_set_cancel_handler_f(frame_requests, Some(release_frame_requests));
 
             Ok(Self {
                 display_link: Some(display_link),
                 frame_requests,
+                frame_requests_resumed: false,
             })
         }
     }
 
     pub fn start(&mut self) -> Result<()> {
         unsafe {
-            dispatch_resume(crate::dispatch_sys::dispatch_object_t {
-                _ds: self.frame_requests,
-            });
+            if !self.frame_requests_resumed {
+                dispatch_resume(crate::dispatch_sys::dispatch_object_t {
+                    _ds: self.frame_requests,
+                });
+                self.frame_requests_resumed = true;
+            }
             self.display_link.as_mut().unwrap().start()?;
-        }
-        Ok(())
-    }
-
-    pub fn stop(&mut self) -> Result<()> {
-        unsafe {
-            dispatch_suspend(crate::dispatch_sys::dispatch_object_t {
-                _ds: self.frame_requests,
-            });
-            self.display_link.as_mut().unwrap().stop()?;
         }
         Ok(())
     }
@@ -88,7 +129,9 @@ impl DisplayLink {
 
 impl Drop for DisplayLink {
     fn drop(&mut self) {
-        self.stop().log_err();
+        unsafe {
+            self.display_link.as_mut().unwrap().stop().log_err();
+        }
         // We see occasional segfaults on the CVDisplayLink thread.
         //
         // It seems possible that this happens because CVDisplayLinkRelease releases the CVDisplayLink
@@ -99,6 +142,11 @@ impl Drop for DisplayLink {
         std::mem::forget(self.display_link.take());
         unsafe {
             dispatch_source_cancel(self.frame_requests);
+            if !self.frame_requests_resumed {
+                dispatch_resume(crate::dispatch_sys::dispatch_object_t {
+                    _ds: self.frame_requests,
+                });
+            }
         }
     }
 }

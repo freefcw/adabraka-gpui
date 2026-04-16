@@ -1,8 +1,8 @@
-use gpui::single_instance::{send_activate_to_existing, SingleInstance};
+use gpui::single_instance::{SingleInstance, send_activate_to_existing};
 use gpui::{
-    div, prelude::*, px, rgb, rgba, size, App, Application, Bounds, Context, Entity, Keystroke,
-    Toast, ToastPosition, ToastStack, TrayIconEvent, TrayMenuItem, Window,
-    WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions,
+    App, Application, Bounds, Context, Entity, Keystroke, Toast, ToastPosition, ToastStack,
+    TrayIconEvent, TrayMenuItem, Window, WindowBackgroundAppearance, WindowBounds, WindowKind,
+    WindowOptions, div, prelude::*, px, rgb, rgba, size,
 };
 
 const APP_ID: &str = "com.example.daemon-app";

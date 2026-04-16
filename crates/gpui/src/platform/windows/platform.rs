@@ -826,23 +826,12 @@ impl Platform for WindowsPlatform {
     fn request_user_attention(&self, attention_type: AttentionType) {
         let hwnd = self
             .find_current_active_window()
-            .or_else(|| {
-                self.raw_window_handles
-                    .read()
-                    .first()
-                    .map(|h| h.as_raw())
-            });
+            .or_else(|| self.raw_window_handles.read().first().map(|h| h.as_raw()));
         let Some(hwnd) = hwnd else { return };
 
         let (flags, count) = match attention_type {
-            AttentionType::Informational => (
-                FLASHW_TRAY | FLASHW_TIMERNOFG,
-                3u32,
-            ),
-            AttentionType::Critical => (
-                FLASHW_ALL | FLASHW_TIMER,
-                0u32,
-            ),
+            AttentionType::Informational => (FLASHW_TRAY | FLASHW_TIMERNOFG, 3u32),
+            AttentionType::Critical => (FLASHW_ALL | FLASHW_TIMER, 0u32),
         };
         let mut fi = FLASHWINFO {
             cbSize: std::mem::size_of::<FLASHWINFO>() as u32,
@@ -950,11 +939,7 @@ impl Platform for WindowsPlatform {
         BiometricStatus::Unavailable
     }
 
-    fn authenticate_biometric(
-        &self,
-        _reason: &str,
-        callback: Box<dyn FnOnce(bool) + Send>,
-    ) {
+    fn authenticate_biometric(&self, _reason: &str, callback: Box<dyn FnOnce(bool) + Send>) {
         callback(false);
     }
 }

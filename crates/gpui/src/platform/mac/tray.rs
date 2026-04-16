@@ -1,8 +1,8 @@
 use crate::platform::TrayMenuItem;
-use crate::{point, px, size, Bounds, Pixels};
+use crate::{Bounds, Pixels, point, px, size};
 use cocoa::{
     appkit::NSScreen,
-    base::{id, nil, NO, YES},
+    base::{NO, YES, id, nil},
     foundation::{NSData, NSSize, NSString},
 };
 use objc::{class, msg_send, rc::StrongPtr, sel, sel_impl};

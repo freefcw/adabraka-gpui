@@ -386,6 +386,7 @@ unsafe fn build_window_class(name: &'static str, superclass: &Class) -> *const C
 }
 
 struct MacWindowState {
+    self_ref: Weak<Mutex<MacWindowState>>,
     handle: AnyWindowHandle,
     executor: ForegroundExecutor,
     native_window: id,
@@ -419,9 +420,26 @@ struct MacWindowState {
     select_previous_tab_callback: Option<Box<dyn FnMut()>>,
     toggle_tab_bar_callback: Option<Box<dyn FnMut()>>,
     activated_least_once: bool,
+    is_closing: bool,
+}
+
+struct FrameRequestContext {
+    window_state: Weak<Mutex<MacWindowState>>,
+}
+
+unsafe extern "C" fn drop_frame_request_context(context: *mut c_void) {
+    unsafe {
+        drop(Box::from_raw(context as *mut FrameRequestContext));
+    }
 }
 
 impl MacWindowState {
+    fn begin_close(&mut self) {
+        self.is_closing = true;
+        self.request_frame_callback.take();
+        self.stop_display_link();
+    }
+
     fn move_traffic_light(&self) {
         if let Some(traffic_light_position) = self.traffic_light_position {
             if self.is_fullscreen() {
@@ -475,6 +493,9 @@ impl MacWindowState {
 
     fn start_display_link(&mut self) {
         self.stop_display_link();
+        if self.is_closing || self.request_frame_callback.is_none() {
+            return;
+        }
         unsafe {
             if !self
                 .native_window
@@ -485,8 +506,16 @@ impl MacWindowState {
             }
         }
         let display_id = unsafe { display_id_for_screen(self.native_window.screen()) };
-        if let Some(mut display_link) =
-            DisplayLink::new(display_id, self.native_view.as_ptr() as *mut c_void, step).log_err()
+        let frame_request_context = Box::new(FrameRequestContext {
+            window_state: self.self_ref.clone(),
+        });
+        if let Some(mut display_link) = DisplayLink::new(
+            display_id,
+            Box::into_raw(frame_request_context) as *mut c_void,
+            step,
+            drop_frame_request_context,
+        )
+        .log_err()
         {
             display_link.start().log_err();
             self.display_link = Some(display_link);
@@ -683,50 +712,54 @@ impl MacWindow {
             let native_view = NSView::initWithFrame_(native_view, NSView::bounds(content_view));
             assert!(!native_view.is_null());
 
-            let mut window = Self(Arc::new(Mutex::new(MacWindowState {
-                handle,
-                executor,
-                native_window,
-                native_view: NonNull::new_unchecked(native_view),
-                blurred_view: None,
-                display_link: None,
-                renderer: renderer::new_renderer(
-                    renderer_context,
-                    native_window as *mut _,
-                    native_view as *mut _,
-                    bounds.size.map(|pixels| pixels.0),
-                    false,
-                ),
-                request_frame_callback: None,
-                event_callback: None,
-                activate_callback: None,
-                resize_callback: None,
-                moved_callback: None,
-                should_close_callback: None,
-                close_callback: None,
-                appearance_changed_callback: None,
-                input_handler: None,
-                last_key_equivalent: None,
-                synthetic_drag_counter: 0,
-                traffic_light_position: titlebar
-                    .as_ref()
-                    .and_then(|titlebar| titlebar.traffic_light_position),
-                transparent_titlebar: titlebar
-                    .as_ref()
-                    .is_none_or(|titlebar| titlebar.appears_transparent),
-                previous_modifiers_changed_event: None,
-                keystroke_for_do_command: None,
-                do_command_handled: None,
-                external_files_dragged: false,
-                first_mouse: false,
-                fullscreen_restore_bounds: Bounds::default(),
-                move_tab_to_new_window_callback: None,
-                merge_all_windows_callback: None,
-                select_next_tab_callback: None,
-                select_previous_tab_callback: None,
-                toggle_tab_bar_callback: None,
-                activated_least_once: false,
-            })));
+            let mut window = Self(Arc::new_cyclic(|self_ref| {
+                Mutex::new(MacWindowState {
+                    self_ref: self_ref.clone(),
+                    handle,
+                    executor,
+                    native_window,
+                    native_view: NonNull::new_unchecked(native_view),
+                    blurred_view: None,
+                    display_link: None,
+                    renderer: renderer::new_renderer(
+                        renderer_context,
+                        native_window as *mut _,
+                        native_view as *mut _,
+                        bounds.size.map(|pixels| pixels.0),
+                        false,
+                    ),
+                    request_frame_callback: None,
+                    event_callback: None,
+                    activate_callback: None,
+                    resize_callback: None,
+                    moved_callback: None,
+                    should_close_callback: None,
+                    close_callback: None,
+                    appearance_changed_callback: None,
+                    input_handler: None,
+                    last_key_equivalent: None,
+                    synthetic_drag_counter: 0,
+                    traffic_light_position: titlebar
+                        .as_ref()
+                        .and_then(|titlebar| titlebar.traffic_light_position),
+                    transparent_titlebar: titlebar
+                        .as_ref()
+                        .is_none_or(|titlebar| titlebar.appears_transparent),
+                    previous_modifiers_changed_event: None,
+                    keystroke_for_do_command: None,
+                    do_command_handled: None,
+                    external_files_dragged: false,
+                    first_mouse: false,
+                    fullscreen_restore_bounds: Bounds::default(),
+                    move_tab_to_new_window_callback: None,
+                    merge_all_windows_callback: None,
+                    select_next_tab_callback: None,
+                    select_previous_tab_callback: None,
+                    toggle_tab_bar_callback: None,
+                    activated_least_once: false,
+                    is_closing: false,
+                })
+            }));
 
             (*native_window).set_ivar(
                 WINDOW_STATE_IVAR,
@@ -960,9 +993,9 @@ impl MacWindow {
 impl Drop for MacWindow {
     fn drop(&mut self) {
         let mut this = self.0.lock();
-        this.renderer.destroy();
         let window = this.native_window;
-        this.display_link.take();
+        this.begin_close();
+        this.renderer.destroy();
         unsafe {
             this.native_window.setDelegate_(nil);
         }
@@ -1405,7 +1438,9 @@ impl PlatformWindow for MacWindow {
     }
 
     fn on_request_frame(&self, callback: Box<dyn FnMut(RequestFrameOptions)>) {
-        self.0.as_ref().lock().request_frame_callback = Some(callback);
+        let mut lock = self.0.as_ref().lock();
+        lock.request_frame_callback = Some(callback);
+        lock.start_display_link();
     }
 
     fn on_input(&self, callback: Box<dyn FnMut(PlatformInput) -> crate::DispatchEventResult>) {
@@ -2117,10 +2152,12 @@ extern "C" fn window_did_change_key_status(this: &Object, selector: Sel, _: id) 
                 callback(Default::default());
 
                 let mut lock = window_state.lock();
-                lock.request_frame_callback = Some(callback);
-                #[cfg(not(feature = "macos-blade"))]
-                lock.renderer.set_presents_with_transaction(false);
-                lock.start_display_link();
+                if !lock.is_closing {
+                    lock.request_frame_callback = Some(callback);
+                    #[cfg(not(feature = "macos-blade"))]
+                    lock.renderer.set_presents_with_transaction(false);
+                    lock.start_display_link();
+                }
             }
         } else {
             lock.activated_least_once = true;
@@ -2161,6 +2198,7 @@ extern "C" fn close_window(this: &Object, _: Sel) {
         let close_callback = {
             let window_state = get_window_state(this);
             let mut lock = window_state.as_ref().lock();
+            lock.begin_close();
             lock.close_callback.take()
         };
 
@@ -2245,22 +2283,29 @@ extern "C" fn display_layer(this: &Object, _: Sel, _: id) {
         callback(Default::default());
 
         let mut lock = window_state.lock();
-        lock.request_frame_callback = Some(callback);
-        #[cfg(not(feature = "macos-blade"))]
-        lock.renderer.set_presents_with_transaction(false);
-        lock.start_display_link();
+        if !lock.is_closing {
+            lock.request_frame_callback = Some(callback);
+            #[cfg(not(feature = "macos-blade"))]
+            lock.renderer.set_presents_with_transaction(false);
+            lock.start_display_link();
+        }
     }
 }
 
-unsafe extern "C" fn step(view: *mut c_void) {
-    let view = view as id;
-    let window_state = unsafe { get_window_state(&*view) };
+unsafe extern "C" fn step(context: *mut c_void) {
+    let context = unsafe { &*(context as *const FrameRequestContext) };
+    let Some(window_state) = context.window_state.upgrade() else {
+        return;
+    };
     let mut lock = window_state.lock();
 
     if let Some(mut callback) = lock.request_frame_callback.take() {
         drop(lock);
         callback(Default::default());
-        window_state.lock().request_frame_callback = Some(callback);
+        let mut lock = window_state.lock();
+        if !lock.is_closing {
+            lock.request_frame_callback = Some(callback);
+        }
     }
 }
 

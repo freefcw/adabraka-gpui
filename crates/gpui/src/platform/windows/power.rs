@@ -3,8 +3,8 @@ use std::time::Duration;
 
 use windows::Win32::{
     System::Power::{
-        SetThreadExecutionState, ES_CONTINUOUS, ES_DISPLAY_REQUIRED,
-        ES_SYSTEM_REQUIRED, EXECUTION_STATE,
+        ES_CONTINUOUS, ES_DISPLAY_REQUIRED, ES_SYSTEM_REQUIRED, EXECUTION_STATE,
+        SetThreadExecutionState,
     },
     System::SystemInformation::GetTickCount,
     UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO},

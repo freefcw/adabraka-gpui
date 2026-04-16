@@ -1005,9 +1005,7 @@ impl X11Client {
                         return Some(());
                     }
 
-                    if let Some(media_event) =
-                        crate::platform::linux::keysym_to_media_key(keysym)
-                    {
+                    if let Some(media_event) = crate::platform::linux::keysym_to_media_key(keysym) {
                         if let Some(cb) = state.common.callbacks.media_key.as_mut() {
                             cb(media_event);
                         }
@@ -2668,13 +2666,7 @@ fn send_net_wm_state_attention(
         32,
         x_window,
         atoms._NET_WM_STATE,
-        ClientMessageData::from([
-            action,
-            atoms._NET_WM_STATE_DEMANDS_ATTENTION,
-            0,
-            1,
-            0,
-        ]),
+        ClientMessageData::from([action, atoms._NET_WM_STATE_DEMANDS_ATTENTION, 0, 1, 0]),
     );
     let _ = xcb.send_event(
         false,

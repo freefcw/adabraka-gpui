@@ -418,9 +418,10 @@ impl GlobalLineLayoutCache {
         let lines = self.lines.read();
         if let Some(entry) = lines.get(key) {
             // Relaxed is fine — this is just for approximate LRU ordering
-            entry
-                .last_access
-                .store(self.access_counter.fetch_add(1, Ordering::Relaxed), Ordering::Relaxed);
+            entry.last_access.store(
+                self.access_counter.fetch_add(1, Ordering::Relaxed),
+                Ordering::Relaxed,
+            );
             Some(entry.value.clone())
         } else {
             None
@@ -432,18 +433,22 @@ impl GlobalLineLayoutCache {
         if lines.len() >= GLOBAL_CACHE_MAX_ENTRIES {
             Self::evict_oldest(&mut lines);
         }
-        lines.insert(key, GlobalCacheEntry {
-            value: layout,
-            last_access: AtomicU64::new(self.access_counter.fetch_add(1, Ordering::Relaxed)),
-        });
+        lines.insert(
+            key,
+            GlobalCacheEntry {
+                value: layout,
+                last_access: AtomicU64::new(self.access_counter.fetch_add(1, Ordering::Relaxed)),
+            },
+        );
     }
 
     fn get_wrapped_line(&self, key: &dyn AsCacheKeyRef) -> Option<Arc<WrappedLineLayout>> {
         let wrapped = self.wrapped_lines.read();
         if let Some(entry) = wrapped.get(key) {
-            entry
-                .last_access
-                .store(self.access_counter.fetch_add(1, Ordering::Relaxed), Ordering::Relaxed);
+            entry.last_access.store(
+                self.access_counter.fetch_add(1, Ordering::Relaxed),
+                Ordering::Relaxed,
+            );
             Some(entry.value.clone())
         } else {
             None
@@ -455,17 +460,25 @@ impl GlobalLineLayoutCache {
         if wrapped.len() >= GLOBAL_CACHE_MAX_ENTRIES {
             Self::evict_oldest(&mut wrapped);
         }
-        wrapped.insert(key, GlobalCacheEntry {
-            value: layout,
-            last_access: AtomicU64::new(self.access_counter.fetch_add(1, Ordering::Relaxed)),
-        });
+        wrapped.insert(
+            key,
+            GlobalCacheEntry {
+                value: layout,
+                last_access: AtomicU64::new(self.access_counter.fetch_add(1, Ordering::Relaxed)),
+            },
+        );
     }
 
     fn evict_oldest<V>(map: &mut FxHashMap<Arc<CacheKey>, GlobalCacheEntry<V>>) {
         let half = map.len() / 2;
         let mut entries: Vec<_> = map
             .keys()
-            .map(|k| (k.clone(), map.get(k).unwrap().last_access.load(Ordering::Relaxed)))
+            .map(|k| {
+                (
+                    k.clone(),
+                    map.get(k).unwrap().last_access.load(Ordering::Relaxed),
+                )
+            })
             .collect();
         entries.sort_by_key(|(_, access)| *access);
         for (key, _) in entries.into_iter().take(half) {

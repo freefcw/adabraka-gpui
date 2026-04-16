@@ -30,8 +30,8 @@ impl LinuxGlobalHotkey {
 pub mod x11 {
     use super::*;
     use std::rc::Rc;
-    use x11rb::protocol::xproto::{self, ConnectionExt as _, GrabMode, ModMask};
     use x11rb::connection::Connection;
+    use x11rb::protocol::xproto::{self, ConnectionExt as _, GrabMode, ModMask};
     use x11rb::xcb_ffi::XCBConnection;
 
     fn keystroke_to_x11_modmask(keystroke: &Keystroke) -> u16 {

@@ -39,12 +39,12 @@ use crate::{
     CrashReport, CursorStyle, DialogOptions, DispatchPhase, DisplayId, EventEmitter, FocusHandle,
     FocusMap, FocusedWindowInfo, ForegroundExecutor, Global, KeyBinding, KeyContext, Keymap,
     Keystroke, LayoutId, MediaKeyEvent, Menu, MenuItem, NetworkStatus, OsInfo, OwnedMenu,
-    PathPromptOptions, PermissionStatus, Pixels, Platform, PlatformDisplay,
-    PlatformKeyboardLayout, PlatformKeyboardMapper, Point, PowerSaveBlockerKind, PromptBuilder,
-    PromptButton, PromptHandle, PromptLevel, Render, RenderImage, RenderablePromptHandle,
-    Reservation, ScreenCaptureSource, SharedString, Size, SubscriberSet, Subscription, SvgRenderer,
-    SystemPowerEvent, Task, TextSystem, TrayIconEvent, TrayMenuItem, Window, WindowAppearance,
-    WindowHandle, WindowId, WindowInvalidator, WindowPosition,
+    PathPromptOptions, PermissionStatus, Pixels, Platform, PlatformDisplay, PlatformKeyboardLayout,
+    PlatformKeyboardMapper, Point, PowerSaveBlockerKind, PromptBuilder, PromptButton, PromptHandle,
+    PromptLevel, Render, RenderImage, RenderablePromptHandle, Reservation, ScreenCaptureSource,
+    SharedString, Size, SubscriberSet, Subscription, SvgRenderer, SystemPowerEvent, Task,
+    TextSystem, TrayIconEvent, TrayMenuItem, Window, WindowAppearance, WindowHandle, WindowId,
+    WindowInvalidator, WindowPosition,
     colors::{Colors, GlobalColors},
     current_platform, hash, init_app_menus,
 };
@@ -1028,10 +1028,7 @@ impl App {
     }
 
     /// Register a callback for system tray icon events.
-    pub fn on_tray_icon_event(
-        &self,
-        mut callback: impl FnMut(TrayIconEvent, &mut App) + 'static,
-    ) {
+    pub fn on_tray_icon_event(&self, mut callback: impl FnMut(TrayIconEvent, &mut App) + 'static) {
         let this = self.this.clone();
         self.platform.on_tray_icon_event(Box::new(move |event| {
             if let Some(app) = this.upgrade() {
@@ -1117,12 +1114,11 @@ impl App {
         mut callback: impl FnMut(SystemPowerEvent, &mut App) + 'static,
     ) {
         let this = self.this.clone();
-        self.platform
-            .on_system_power_event(Box::new(move |event| {
-                if let Some(app) = this.upgrade() {
-                    callback(event, &mut app.borrow_mut());
-                }
-            }));
+        self.platform.on_system_power_event(Box::new(move |event| {
+            if let Some(app) = this.upgrade() {
+                callback(event, &mut app.borrow_mut());
+            }
+        }));
     }
 
     /// Start a power save blocker to prevent the system from sleeping or the display from dimming.
@@ -1160,17 +1156,13 @@ impl App {
     }
 
     /// Register a callback for media key events (play, pause, next, previous).
-    pub fn on_media_key_event(
-        &self,
-        mut callback: impl FnMut(MediaKeyEvent, &mut App) + 'static,
-    ) {
+    pub fn on_media_key_event(&self, mut callback: impl FnMut(MediaKeyEvent, &mut App) + 'static) {
         let this = self.this.clone();
-        self.platform
-            .on_media_key_event(Box::new(move |event| {
-                if let Some(app) = this.upgrade() {
-                    callback(event, &mut app.borrow_mut());
-                }
-            }));
+        self.platform.on_media_key_event(Box::new(move |event| {
+            if let Some(app) = this.upgrade() {
+                callback(event, &mut app.borrow_mut());
+            }
+        }));
     }
 
     /// Request the user's attention by bouncing the dock icon or flashing the taskbar.

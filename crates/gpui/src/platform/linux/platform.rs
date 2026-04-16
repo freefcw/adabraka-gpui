@@ -25,8 +25,8 @@ use xkbcommon::xkb::{self, Keycode, Keysym, State};
 
 use crate::{
     Action, AnyWindowHandle, AttentionType, BackgroundExecutor, BiometricStatus, ClipboardItem,
-    CursorStyle, DialogOptions, DisplayId, FocusedWindowInfo, ForegroundExecutor, Keymap, Keystroke,
-    LinuxDispatcher, MediaKeyEvent, Menu, MenuItem, NetworkStatus, OsInfo, OwnedMenu,
+    CursorStyle, DialogOptions, DisplayId, FocusedWindowInfo, ForegroundExecutor, Keymap,
+    Keystroke, LinuxDispatcher, MediaKeyEvent, Menu, MenuItem, NetworkStatus, OsInfo, OwnedMenu,
     PathPromptOptions, Pixels, Platform, PlatformDisplay, PlatformKeyboardLayout,
     PlatformKeyboardMapper, PlatformTextSystem, PlatformWindow, Point, PowerSaveBlockerKind,
     Result, SharedString, SystemPowerEvent, Task, TrayIconEvent, TrayMenuItem, WindowAppearance,
@@ -709,7 +709,9 @@ impl<P: LinuxClient + 'static> Platform for P {
 
     fn on_network_status_change(&self, callback: Box<dyn FnMut(NetworkStatus)>) {
         self.with_common(|common| common.callbacks.network_status_change = Some(callback));
-        log::warn!("Network change monitoring requires D-Bus integration — not yet implemented on Linux");
+        log::warn!(
+            "Network change monitoring requires D-Bus integration — not yet implemented on Linux"
+        );
     }
 
     fn start_power_save_blocker(&self, kind: PowerSaveBlockerKind) -> Option<u32> {
@@ -722,10 +724,7 @@ impl<P: LinuxClient + 'static> Platform for P {
                     )?
                 }
                 PowerSaveBlockerKind::PreventAppSuspension => {
-                    crate::platform::linux::power::inhibit_suspend(
-                        "gpui",
-                        "Power save blocker",
-                    )?
+                    crate::platform::linux::power::inhibit_suspend("gpui", "Power save blocker")?
                 }
             };
             let id = common.next_blocker_id;
@@ -749,7 +748,9 @@ impl<P: LinuxClient + 'static> Platform for P {
 
     fn on_system_power_event(&self, callback: Box<dyn FnMut(SystemPowerEvent)>) {
         self.with_common(|common| common.callbacks.system_power = Some(callback));
-        log::warn!("System power events require D-Bus logind integration — not yet implemented on Linux");
+        log::warn!(
+            "System power events require D-Bus logind integration — not yet implemented on Linux"
+        );
     }
 
     fn on_media_key_event(&self, callback: Box<dyn FnMut(MediaKeyEvent)>) {

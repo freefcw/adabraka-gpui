@@ -1,4 +1,4 @@
-use crate::{point, Bounds, Pixels, PlatformDisplay, Point, Size, WindowPosition};
+use crate::{Bounds, Pixels, PlatformDisplay, Point, Size, WindowPosition, point};
 use std::rc::Rc;
 
 /// Compute window bounds from a desired size and a semantic position.

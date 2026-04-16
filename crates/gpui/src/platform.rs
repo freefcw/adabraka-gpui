@@ -331,10 +331,16 @@ pub(crate) trait Platform: 'static {
     fn set_keep_alive_without_windows(&self, _keep_alive: bool) {}
 
     fn on_system_power_event(&self, _callback: Box<dyn FnMut(SystemPowerEvent)>) {}
-    fn start_power_save_blocker(&self, _kind: PowerSaveBlockerKind) -> Option<u32> { None }
+    fn start_power_save_blocker(&self, _kind: PowerSaveBlockerKind) -> Option<u32> {
+        None
+    }
     fn stop_power_save_blocker(&self, _id: u32) {}
-    fn system_idle_time(&self) -> Option<Duration> { None }
-    fn network_status(&self) -> NetworkStatus { NetworkStatus::Online }
+    fn system_idle_time(&self) -> Option<Duration> {
+        None
+    }
+    fn network_status(&self) -> NetworkStatus {
+        NetworkStatus::Online
+    }
     fn on_network_status_change(&self, _callback: Box<dyn FnMut(NetworkStatus)>) {}
     fn on_media_key_event(&self, _callback: Box<dyn FnMut(MediaKeyEvent)>) {}
     fn request_user_attention(&self, _attention_type: AttentionType) {}
@@ -345,7 +351,8 @@ pub(crate) trait Platform: 'static {
         _position: Point<Pixels>,
         _items: Vec<TrayMenuItem>,
         _callback: Box<dyn FnMut(SharedString)>,
-    ) {}
+    ) {
+    }
     fn show_dialog(&self, _options: DialogOptions) -> oneshot::Receiver<usize> {
         let (tx, rx) = oneshot::channel();
         tx.send(0).ok();
@@ -360,12 +367,10 @@ pub(crate) trait Platform: 'static {
             hostname: String::new().into(),
         }
     }
-    fn biometric_status(&self) -> BiometricStatus { BiometricStatus::Unavailable }
-    fn authenticate_biometric(
-        &self,
-        _reason: &str,
-        callback: Box<dyn FnOnce(bool) + Send>,
-    ) {
+    fn biometric_status(&self) -> BiometricStatus {
+        BiometricStatus::Unavailable
+    }
+    fn authenticate_biometric(&self, _reason: &str, callback: Box<dyn FnOnce(bool) + Send>) {
         callback(false);
     }
 }

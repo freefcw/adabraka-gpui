@@ -1676,11 +1676,7 @@ impl Platform for MacPlatform {
         unsafe {
             let menu: id = msg_send![class!(NSMenu), new];
             let _: () = msg_send![menu, setAutoenablesItems: NO];
-            super::tray::build_menu_with_selector(
-                menu,
-                &items,
-                sel!(handleContextMenuItem:),
-            );
+            super::tray::build_menu_with_selector(menu, &items, sel!(handleContextMenuItem:));
 
             let main_screen: id = cocoa::appkit::NSScreen::mainScreen(nil);
             let screen_height = if main_screen != nil {
@@ -1694,7 +1690,8 @@ impl Platform for MacPlatform {
                 screen_height - position.y.0 as f64,
             );
 
-            let _: () = msg_send![menu, popUpMenuPositioningItem: nil atLocation: point inView: nil];
+            let _: () =
+                msg_send![menu, popUpMenuPositioningItem: nil atLocation: point inView: nil];
             let _: () = msg_send![menu, release];
         }
     }
@@ -2073,9 +2070,7 @@ extern "C" fn handle_system_power_event(this: &mut Object, _: Sel, notification:
         let event = match name_bytes {
             b"NSWorkspaceWillSleepNotification" => crate::SystemPowerEvent::Suspend,
             b"NSWorkspaceDidWakeNotification" => crate::SystemPowerEvent::Resume,
-            b"NSWorkspaceSessionDidResignActiveNotification" => {
-                crate::SystemPowerEvent::LockScreen
-            }
+            b"NSWorkspaceSessionDidResignActiveNotification" => crate::SystemPowerEvent::LockScreen,
             b"NSWorkspaceSessionDidBecomeActiveNotification" => {
                 crate::SystemPowerEvent::UnlockScreen
             }

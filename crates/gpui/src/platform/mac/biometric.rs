@@ -1,5 +1,5 @@
 use crate::{BiometricKind, BiometricStatus};
-use cocoa::base::{id, nil, BOOL, YES};
+use cocoa::base::{BOOL, YES, id, nil};
 use cocoa::foundation::NSString;
 use objc::{class, msg_send, sel, sel_impl};
 

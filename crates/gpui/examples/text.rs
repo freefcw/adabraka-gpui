@@ -4,9 +4,9 @@ use std::{
 };
 
 use gpui::{
-    bounds, colors::DefaultColors, div, point, prelude::*, px, relative, rgb, size, AbsoluteLength,
-    App, Application, Context, DefiniteLength, ElementId, Global, Hsla, Menu, SharedString,
-    TextStyle, TitlebarOptions, Window, WindowBounds, WindowOptions,
+    AbsoluteLength, App, Application, Context, DefiniteLength, ElementId, Global, Hsla, Menu,
+    SharedString, TextStyle, TitlebarOptions, Window, WindowBounds, WindowOptions, bounds,
+    colors::DefaultColors, div, point, prelude::*, px, relative, rgb, size,
 };
 use std::iter;
 
