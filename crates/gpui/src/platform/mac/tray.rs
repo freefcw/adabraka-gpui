@@ -153,17 +153,19 @@ impl MacTray {
             }
 
             let frame: cocoa::foundation::NSRect = msg_send![button_window, frame];
-
-            let main_screen: id = NSScreen::mainScreen(nil);
-            if main_screen == nil {
+            let screen: id = msg_send![button_window, screen];
+            if screen == nil {
                 return None;
             }
-            let screen_frame = NSScreen::frame(main_screen);
+            let screen_frame = NSScreen::frame(screen);
 
-            let flipped_y = screen_frame.size.height - frame.origin.y - frame.size.height;
+            let local_x = frame.origin.x - screen_frame.origin.x;
+            let flipped_y = screen_frame.origin.y + screen_frame.size.height
+                - frame.origin.y
+                - frame.size.height;
 
             Some(Bounds::new(
-                point(px(frame.origin.x as f32), px(flipped_y as f32)),
+                point(px(local_x as f32), px(flipped_y as f32)),
                 size(px(frame.size.width as f32), px(frame.size.height as f32)),
             ))
         }
