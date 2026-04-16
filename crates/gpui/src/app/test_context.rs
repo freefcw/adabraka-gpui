@@ -326,6 +326,16 @@ impl TestAppContext {
         self.test_platform.opened_url.borrow().clone()
     }
 
+    /// Returns the latest tray icon bytes set through the platform.
+    pub fn tray_icon(&self) -> Option<Vec<u8>> {
+        self.test_platform.tray_icon()
+    }
+
+    /// Returns the latest tray icon rendering mode set through the platform.
+    pub fn tray_icon_rendering_mode(&self) -> crate::TrayIconRenderingMode {
+        self.test_platform.tray_icon_rendering_mode()
+    }
+
     /// Simulates the user resizing the window to the new size.
     pub fn simulate_window_resize(&self, window_handle: AnyWindowHandle, size: Size<Pixels>) {
         self.test_window(window_handle).simulate_resize(size);

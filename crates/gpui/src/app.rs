@@ -43,7 +43,8 @@ use crate::{
     PlatformKeyboardMapper, Point, PowerSaveBlockerKind, PromptBuilder, PromptButton, PromptHandle,
     PromptLevel, Render, RenderImage, RenderablePromptHandle, Reservation, ScreenCaptureSource,
     SharedString, Size, SubscriberSet, Subscription, SvgRenderer, SystemPowerEvent, Task,
-    TextSystem, TrayIconEvent, TrayMenuItem, Window, WindowAppearance, WindowHandle, WindowId,
+    TextSystem, TrayIconEvent, TrayIconRenderingMode, TrayMenuItem, Window, WindowAppearance,
+    WindowHandle, WindowId,
     WindowInvalidator, WindowPosition,
     colors::{Colors, GlobalColors},
     current_platform, hash, init_app_menus,
@@ -1004,6 +1005,12 @@ impl App {
     /// Set the system tray icon.
     pub fn set_tray_icon(&self, icon: Option<&[u8]>) {
         self.platform.set_tray_icon(icon);
+    }
+
+    /// Set how the system tray icon should be rendered.
+    pub fn set_tray_icon_rendering_mode(&self, rendering_mode: TrayIconRenderingMode) {
+        self.platform
+            .set_tray_icon_rendering_mode(rendering_mode);
     }
 
     /// Set the system tray menu items.
@@ -2711,7 +2718,7 @@ impl<'a, T> Drop for GpuiBorrow<'a, T> {
 mod test {
     use std::{cell::RefCell, rc::Rc};
 
-    use crate::{AppContext, TestAppContext};
+    use crate::{AppContext, TestAppContext, TrayIconRenderingMode};
 
     #[test]
     fn test_gpui_borrow() {
@@ -2742,5 +2749,67 @@ mod test {
         });
 
         assert_eq!(*observation_count.borrow(), 2);
+    }
+
+    #[test]
+    fn test_tray_icon_rendering_mode_default() {
+        assert_eq!(
+            TrayIconRenderingMode::default(),
+            TrayIconRenderingMode::Adaptive
+        );
+    }
+
+    #[test]
+    fn test_set_tray_icon_forwards_to_platform() {
+        let cx = TestAppContext::single();
+        let icon = [1_u8, 2, 3, 4];
+
+        cx.update(|cx| {
+            cx.set_tray_icon(Some(&icon));
+        });
+
+        assert_eq!(cx.tray_icon(), Some(icon.to_vec()));
+    }
+
+    #[test]
+    fn test_set_tray_icon_rendering_mode_forwards_to_platform() {
+        let cx = TestAppContext::single();
+
+        cx.update(|cx| {
+            cx.set_tray_icon_rendering_mode(TrayIconRenderingMode::Original);
+        });
+
+        assert_eq!(
+            cx.tray_icon_rendering_mode(),
+            TrayIconRenderingMode::Original
+        );
+    }
+
+    #[test]
+    fn test_tray_icon_rendering_mode_and_icon_updates_are_order_independent() {
+        let first = TestAppContext::single();
+        let second = TestAppContext::single();
+        let icon = [9_u8, 8, 7, 6];
+
+        first.update(|cx| {
+            cx.set_tray_icon_rendering_mode(TrayIconRenderingMode::Original);
+            cx.set_tray_icon(Some(&icon));
+        });
+
+        second.update(|cx| {
+            cx.set_tray_icon(Some(&icon));
+            cx.set_tray_icon_rendering_mode(TrayIconRenderingMode::Original);
+        });
+
+        assert_eq!(first.tray_icon(), Some(icon.to_vec()));
+        assert_eq!(second.tray_icon(), Some(icon.to_vec()));
+        assert_eq!(
+            first.tray_icon_rendering_mode(),
+            TrayIconRenderingMode::Original
+        );
+        assert_eq!(
+            second.tray_icon_rendering_mode(),
+            TrayIconRenderingMode::Original
+        );
     }
 }

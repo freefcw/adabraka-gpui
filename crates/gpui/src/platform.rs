@@ -280,6 +280,7 @@ pub(crate) trait Platform: 'static {
     fn on_keyboard_layout_change(&self, callback: Box<dyn FnMut()>);
 
     fn set_tray_icon(&self, _icon: Option<&[u8]>) {}
+    fn set_tray_icon_rendering_mode(&self, _rendering_mode: TrayIconRenderingMode) {}
     fn set_tray_menu(&self, _menu: Vec<TrayMenuItem>) {}
     fn set_tray_tooltip(&self, _tooltip: &str) {}
     fn set_tray_panel_mode(&self, _enabled: bool) {}
@@ -1437,6 +1438,21 @@ pub enum WindowBackgroundAppearance {
     ///
     /// Not always supported.
     Blurred,
+}
+
+/// Controls how a system tray icon should be rendered.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum TrayIconRenderingMode {
+    /// Render using the platform's default status icon appearance.
+    ///
+    /// On macOS, this uses template rendering so the icon adapts to the menu bar appearance.
+    #[default]
+    Adaptive,
+    /// Render the icon with its original colors when supported by the platform.
+    ///
+    /// On macOS, this disables template rendering.
+    Original,
 }
 
 /// Events that can occur on a system tray icon.

@@ -721,6 +721,8 @@ impl Platform for WindowsPlatform {
         }
     }
 
+    fn set_tray_icon_rendering_mode(&self, _rendering_mode: TrayIconRenderingMode) {}
+
     fn set_tray_menu(&self, menu: Vec<TrayMenuItem>) {
         let mut state = self.inner.state.borrow_mut();
         if let Some(ref mut tray) = state.tray {

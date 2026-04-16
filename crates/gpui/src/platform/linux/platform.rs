@@ -29,8 +29,8 @@ use crate::{
     Keystroke, LinuxDispatcher, MediaKeyEvent, Menu, MenuItem, NetworkStatus, OsInfo, OwnedMenu,
     PathPromptOptions, Pixels, Platform, PlatformDisplay, PlatformKeyboardLayout,
     PlatformKeyboardMapper, PlatformTextSystem, PlatformWindow, Point, PowerSaveBlockerKind,
-    Result, SharedString, SystemPowerEvent, Task, TrayIconEvent, TrayMenuItem, WindowAppearance,
-    WindowParams, px,
+    Result, SharedString, SystemPowerEvent, Task, TrayIconEvent, TrayIconRenderingMode,
+    TrayMenuItem, WindowAppearance, WindowParams, px,
 };
 
 #[cfg(any(feature = "wayland", feature = "x11"))]
@@ -83,6 +83,7 @@ pub trait LinuxClient {
     }
 
     fn set_tray_icon(&self, _icon: Option<&[u8]>) {}
+    fn set_tray_icon_rendering_mode(&self, _rendering_mode: TrayIconRenderingMode) {}
     fn set_tray_menu(&self, _menu: Vec<TrayMenuItem>) {}
     fn set_tray_tooltip(&self, _tooltip: &str) {}
     fn register_global_hotkey(&self, _id: u32, _keystroke: &Keystroke) -> Result<()> {
@@ -654,6 +655,8 @@ impl<P: LinuxClient + 'static> Platform for P {
     fn set_tray_icon(&self, icon: Option<&[u8]>) {
         LinuxClient::set_tray_icon(self, icon);
     }
+
+    fn set_tray_icon_rendering_mode(&self, _rendering_mode: TrayIconRenderingMode) {}
 
     fn set_tray_menu(&self, menu: Vec<TrayMenuItem>) {
         LinuxClient::set_tray_menu(self, menu);

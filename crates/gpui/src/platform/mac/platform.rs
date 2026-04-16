@@ -11,7 +11,7 @@ use crate::{
     MacDisplay, MacWindow, Menu, MenuItem, OsMenu, OwnedMenu, PathPromptOptions, Platform,
     PlatformDisplay, PlatformKeyboardLayout, PlatformKeyboardMapper, PlatformTextSystem,
     PlatformWindow, Result, SemanticVersion, SharedString, SystemMenuType, Task, TrayIconEvent,
-    TrayMenuItem, WindowAppearance, WindowParams, hash,
+    TrayIconRenderingMode, TrayMenuItem, WindowAppearance, WindowParams, hash,
 };
 use anyhow::{Context as _, anyhow};
 use block::ConcreteBlock;
@@ -205,6 +205,7 @@ pub(crate) struct MacPlatformState {
     keyboard_mapper: Rc<MacKeyboardMapper>,
     keep_alive_without_windows: bool,
     tray: Option<MacTray>,
+    tray_icon_rendering_mode: TrayIconRenderingMode,
     tray_icon_callback: Option<Box<dyn FnMut(TrayIconEvent)>>,
     tray_menu_callback: Option<Box<dyn FnMut(SharedString)>>,
     global_hotkey_callback: Option<Box<dyn FnMut(u32)>>,
@@ -261,6 +262,7 @@ impl MacPlatform {
             keyboard_mapper,
             keep_alive_without_windows: false,
             tray: None,
+            tray_icon_rendering_mode: TrayIconRenderingMode::default(),
             tray_icon_callback: None,
             tray_menu_callback: None,
             global_hotkey_callback: None,
@@ -274,6 +276,10 @@ impl MacPlatform {
             attention_request_id: 0,
             context_menu_callback: None,
         }))
+    }
+
+    fn ensure_tray<'a>(state: &'a mut MacPlatformState) -> &'a MacTray {
+        state.tray.get_or_insert_with(MacTray::new)
     }
 
     unsafe fn read_from_pasteboard(&self, pasteboard: *mut Object, kind: id) -> Option<&[u8]> {
@@ -1316,42 +1322,31 @@ impl Platform for MacPlatform {
 
     fn set_tray_icon(&self, icon: Option<&[u8]>) {
         let mut state = self.0.lock();
-        if state.tray.is_none() {
-            state.tray = Some(MacTray::new());
-        }
+        let rendering_mode = state.tray_icon_rendering_mode;
+        Self::ensure_tray(&mut state).set_icon(icon, rendering_mode);
+    }
+
+    fn set_tray_icon_rendering_mode(&self, rendering_mode: TrayIconRenderingMode) {
+        let mut state = self.0.lock();
+        state.tray_icon_rendering_mode = rendering_mode;
         if let Some(tray) = &state.tray {
-            tray.set_icon(icon);
+            tray.set_icon_rendering_mode(rendering_mode);
         }
     }
 
     fn set_tray_menu(&self, menu: Vec<TrayMenuItem>) {
         let mut state = self.0.lock();
-        if state.tray.is_none() {
-            state.tray = Some(MacTray::new());
-        }
-        if let Some(tray) = &state.tray {
-            tray.set_menu(menu);
-        }
+        Self::ensure_tray(&mut state).set_menu(menu);
     }
 
     fn set_tray_tooltip(&self, tooltip: &str) {
         let mut state = self.0.lock();
-        if state.tray.is_none() {
-            state.tray = Some(MacTray::new());
-        }
-        if let Some(tray) = &state.tray {
-            tray.set_tooltip(tooltip);
-        }
+        Self::ensure_tray(&mut state).set_tooltip(tooltip);
     }
 
     fn set_tray_panel_mode(&self, enabled: bool) {
         let mut state = self.0.lock();
-        if state.tray.is_none() {
-            state.tray = Some(MacTray::new());
-        }
-        if let Some(tray) = &state.tray {
-            tray.set_panel_mode(enabled);
-        }
+        Self::ensure_tray(&mut state).set_panel_mode(enabled);
     }
 
     fn get_tray_icon_bounds(&self) -> Option<crate::Bounds<crate::Pixels>> {

@@ -1,5 +1,5 @@
 use crate::platform::TrayMenuItem;
-use crate::{Bounds, Pixels, point, px, size};
+use crate::{Bounds, Pixels, TrayIconRenderingMode, point, px, size};
 use cocoa::{
     appkit::NSScreen,
     base::{NO, YES, id, nil},
@@ -38,7 +38,21 @@ impl MacTray {
         }
     }
 
-    pub fn set_icon(&self, icon_data: Option<&[u8]>) {
+    pub fn set_icon_rendering_mode(&self, rendering_mode: TrayIconRenderingMode) {
+        unsafe {
+            let button: id = msg_send![*self.status_item, button];
+            if button == nil {
+                return;
+            }
+
+            let image: id = msg_send![button, image];
+            if image != nil {
+                Self::apply_icon_rendering_mode(image, rendering_mode);
+            }
+        }
+    }
+
+    pub fn set_icon(&self, icon_data: Option<&[u8]>, rendering_mode: TrayIconRenderingMode) {
         unsafe {
             let button: id = msg_send![*self.status_item, button];
             if button == nil {
@@ -55,7 +69,7 @@ impl MacTray {
                     let image: id = msg_send![image, initWithData: ns_data];
                     if image != nil {
                         let _: () = msg_send![image, setSize: NSSize::new(18.0, 18.0)];
-                        let _: () = msg_send![image, setTemplate: YES];
+                        Self::apply_icon_rendering_mode(image, rendering_mode);
                         let _: () = msg_send![button, setImage: image];
                         let empty = NSString::alloc(nil).init_str("");
                         let _: () = msg_send![button, setTitle: empty];
@@ -66,6 +80,11 @@ impl MacTray {
                 }
             }
         }
+    }
+
+    unsafe fn apply_icon_rendering_mode(image: id, rendering_mode: TrayIconRenderingMode) {
+        let is_template = matches!(rendering_mode, TrayIconRenderingMode::Adaptive);
+        let _: () = msg_send![image, setTemplate: if is_template { YES } else { NO }];
     }
 
     #[allow(dead_code)]

@@ -3,7 +3,7 @@ use crate::{
     DummyKeyboardMapper, ForegroundExecutor, Keymap, NoopTextSystem, Platform, PlatformDisplay,
     PlatformKeyboardLayout, PlatformKeyboardMapper, PlatformTextSystem, PromptButton,
     ScreenCaptureFrame, ScreenCaptureSource, ScreenCaptureStream, SourceMetadata, Task,
-    TestDisplay, TestWindow, WindowAppearance, WindowParams, size,
+    TestDisplay, TestWindow, TrayIconRenderingMode, WindowAppearance, WindowParams, size,
 };
 use anyhow::Result;
 use collections::VecDeque;
@@ -34,6 +34,8 @@ pub(crate) struct TestPlatform {
     current_primary_item: Mutex<Option<ClipboardItem>>,
     pub(crate) prompts: RefCell<TestPrompts>,
     screen_capture_sources: RefCell<Vec<TestScreenCaptureSource>>,
+    tray_icon: Mutex<Option<Vec<u8>>>,
+    tray_icon_rendering_mode: Mutex<TrayIconRenderingMode>,
     pub opened_url: RefCell<Option<String>>,
     pub text_system: Arc<dyn PlatformTextSystem>,
     #[cfg(target_os = "windows")]
@@ -116,6 +118,8 @@ impl TestPlatform {
             #[cfg(any(target_os = "linux", target_os = "freebsd"))]
             current_primary_item: Mutex::new(None),
             weak: weak.clone(),
+            tray_icon: Mutex::new(None),
+            tray_icon_rendering_mode: Mutex::new(TrayIconRenderingMode::default()),
             opened_url: Default::default(),
             #[cfg(target_os = "windows")]
             bitmap_factory,
@@ -219,6 +223,14 @@ impl TestPlatform {
     pub(crate) fn did_prompt_for_new_path(&self) -> bool {
         !self.prompts.borrow().new_path.is_empty()
     }
+
+    pub(crate) fn tray_icon(&self) -> Option<Vec<u8>> {
+        self.tray_icon.lock().clone()
+    }
+
+    pub(crate) fn tray_icon_rendering_mode(&self) -> TrayIconRenderingMode {
+        *self.tray_icon_rendering_mode.lock()
+    }
 }
 
 impl Platform for TestPlatform {
@@ -321,6 +333,14 @@ impl Platform for TestPlatform {
 
     fn window_appearance(&self) -> WindowAppearance {
         WindowAppearance::Light
+    }
+
+    fn set_tray_icon(&self, icon: Option<&[u8]>) {
+        *self.tray_icon.lock() = icon.map(Vec::from);
+    }
+
+    fn set_tray_icon_rendering_mode(&self, rendering_mode: TrayIconRenderingMode) {
+        *self.tray_icon_rendering_mode.lock() = rendering_mode;
     }
 
     fn open_url(&self, url: &str) {
