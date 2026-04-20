@@ -2685,7 +2685,7 @@ unsafe fn remove_layer_background(layer: id) {
 
                 let all_indices = NSRange {
                     location: 0,
-                    length: count,
+                    length: count as usize,
                 };
                 let indices: id = msg_send![class!(NSMutableIndexSet), indexSet];
                 let _: () = msg_send![indices, addIndexesInRange: all_indices];

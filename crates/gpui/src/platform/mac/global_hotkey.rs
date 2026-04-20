@@ -151,14 +151,14 @@ fn suppress_function_modifier_for_key_code(key_code: CGKeyCode) -> bool {
 }
 
 fn semantic_hotkey_for_key_code(key_code: CGKeyCode, actual_modifiers: Modifiers) -> Keystroke {
-    use cocoa::appkit::*;
+    use objc2_app_kit::*;
 
     let special_key = special_key_for_key_code(key_code);
     let first_char = if special_key.is_none() {
         chars_for_modified_key(key_code, NO_MOD)
             .chars()
             .next()
-            .map(|ch| ch as u16)
+            .map(|ch| ch as u32)
     } else {
         None
     };

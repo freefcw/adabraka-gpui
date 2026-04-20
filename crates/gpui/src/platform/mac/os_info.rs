@@ -1,10 +1,10 @@
 use crate::OsInfo;
-use cocoa::base::{id, nil};
+use objc::runtime::Object;
 use objc::{class, msg_send, sel, sel_impl};
 use std::ffi::CStr;
 
-unsafe fn nsstring_to_string(nsstring: id) -> String {
-    if nsstring == nil {
+unsafe fn nsstring_to_string(nsstring: *mut Object) -> String {
+    if nsstring.is_null() {
         return String::new();
     }
     let cstr: *const std::ffi::c_char = msg_send![nsstring, UTF8String];
@@ -18,12 +18,12 @@ unsafe fn nsstring_to_string(nsstring: id) -> String {
 
 pub fn get_os_info() -> OsInfo {
     unsafe {
-        let process_info: id = msg_send![class!(NSProcessInfo), processInfo];
-        let version_string: id = msg_send![process_info, operatingSystemVersionString];
+        let process_info: *mut Object = msg_send![class!(NSProcessInfo), processInfo];
+        let version_string: *mut Object = msg_send![process_info, operatingSystemVersionString];
         let version = nsstring_to_string(version_string);
 
-        let current_locale: id = msg_send![class!(NSLocale), currentLocale];
-        let locale_id: id = msg_send![current_locale, localeIdentifier];
+        let current_locale: *mut Object = msg_send![class!(NSLocale), currentLocale];
+        let locale_id: *mut Object = msg_send![current_locale, localeIdentifier];
         let locale = nsstring_to_string(locale_id);
 
         let mut hostname_buf = [0u8; 256];

@@ -171,7 +171,7 @@ impl MacTray {
                 return None;
             }
 
-            let frame: cocoa::foundation::NSRect = msg_send![button_window, frame];
+            let frame = msg_send![button_window, frame];
             let screen: id = msg_send![button_window, screen];
             screen_frame_to_tray_anchor(screen, frame)
         }

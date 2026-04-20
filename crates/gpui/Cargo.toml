@@ -33,7 +33,6 @@ macos-blade = [
     "blade-macros",
     "blade-util",
     "bytemuck",
-    "objc2",
     "objc2-metal",
 ]
 runtime_shaders = []
@@ -641,7 +640,40 @@ version = "0.2"
 
 [target.'cfg(target_os = "macos")'.dependencies.objc2]
 version = "0.6"
-optional = true
+
+[target.'cfg(target_os = "macos")'.dependencies.objc2-app-kit]
+version = "0.3"
+features = [
+    "NSAlert",
+    "NSApplication",
+    "NSAppearance",
+    "NSButton",
+    "NSControl",
+    "NSDockTile",
+    "NSEvent",
+    "NSGraphics",
+    "NSOpenPanel",
+    "NSPanel",
+    "NSPasteboard",
+    "NSResponder",
+    "NSSavePanel",
+    "NSScreen",
+    "NSView",
+    "NSWindow",
+    "objc2-core-graphics",
+]
+
+[target.'cfg(target_os = "macos")'.dependencies.objc2-foundation]
+version = "0.3"
+features = [
+    "NSArray",
+    "NSData",
+    "NSDictionary",
+    "NSObjCRuntime",
+    "NSString",
+    "NSURL",
+    "objc2-core-foundation",
+]
 
 [target.'cfg(target_os = "macos")'.dependencies.objc2-metal]
 version = "0.3"

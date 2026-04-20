@@ -1,6 +1,6 @@
 use super::tray::MacTray;
 use super::{
-    BoolExt, MacKeyboardLayout, MacKeyboardMapper,
+    BoolExt, MacKeyboardLayout, MacKeyboardMapper, NSRange as PlatformNSRange,
     attributed_string::{NSAttributedString, NSMutableAttributedString},
     events::key_to_native,
     global_point_to_native_screen_point, renderer,
@@ -19,14 +19,12 @@ use cocoa::{
     appkit::{
         NSApplication, NSApplicationActivationPolicy::NSApplicationActivationPolicyAccessory,
         NSApplicationActivationPolicy::NSApplicationActivationPolicyRegular, NSEventModifierFlags,
-        NSMenu, NSMenuItem, NSModalResponse, NSOpenPanel, NSPasteboard, NSPasteboardTypePNG,
-        NSPasteboardTypeRTF, NSPasteboardTypeRTFD, NSPasteboardTypeString, NSPasteboardTypeTIFF,
-        NSSavePanel, NSWindow,
+        NSMenu, NSMenuItem, NSModalResponse, NSWindow,
     },
     base::{BOOL, NO, YES, id, nil, selector},
     foundation::{
-        NSArray, NSAutoreleasePool, NSBundle, NSData, NSInteger, NSProcessInfo, NSRange, NSSize,
-        NSString, NSUInteger, NSURL,
+        NSArray, NSAutoreleasePool, NSBundle, NSData, NSInteger, NSProcessInfo, NSSize, NSString,
+        NSUInteger, NSURL,
     },
 };
 use core_foundation::{
@@ -47,6 +45,16 @@ use objc::{
     runtime::{Class, Object, Sel},
     sel, sel_impl,
 };
+use objc2::{MainThreadMarker, rc::Retained};
+use objc2_app_kit::{
+    NSOpenPanel as Objc2NSOpenPanel, NSPasteboard as Objc2NSPasteboard, NSPasteboardType,
+    NSPasteboardTypePNG as Objc2NSPasteboardTypePNG,
+    NSPasteboardTypeRTF as Objc2NSPasteboardTypeRTF,
+    NSPasteboardTypeRTFD as Objc2NSPasteboardTypeRTFD,
+    NSPasteboardTypeString as Objc2NSPasteboardTypeString,
+    NSPasteboardTypeTIFF as Objc2NSPasteboardTypeTIFF, NSSavePanel as Objc2NSSavePanel,
+};
+use objc2_foundation::{NSData as Objc2NSData, NSString as Objc2NSString, NSURL as Objc2NSURL};
 use parking_lot::Mutex;
 use ptr::null_mut;
 use std::{
@@ -188,9 +196,9 @@ pub(crate) struct MacPlatformState {
     text_system: Arc<dyn PlatformTextSystem>,
     renderer_context: renderer::Context,
     headless: bool,
-    pasteboard: id,
-    text_hash_pasteboard_type: id,
-    metadata_pasteboard_type: id,
+    pasteboard: Retained<Objc2NSPasteboard>,
+    text_hash_pasteboard_type: Retained<Objc2NSString>,
+    metadata_pasteboard_type: Retained<Objc2NSString>,
     reopen: Option<Box<dyn FnMut()>>,
     on_keyboard_layout_change: Option<Box<dyn FnMut()>>,
     quit: Option<Box<dyn FnMut()>>,
@@ -250,9 +258,9 @@ impl MacPlatform {
             background_executor: BackgroundExecutor::new(dispatcher.clone()),
             foreground_executor: ForegroundExecutor::new(dispatcher),
             renderer_context: renderer::Context::default(),
-            pasteboard: unsafe { NSPasteboard::generalPasteboard(nil) },
-            text_hash_pasteboard_type: unsafe { ns_string("zed-text-hash") },
-            metadata_pasteboard_type: unsafe { ns_string("zed-metadata") },
+            pasteboard: unsafe { Objc2NSPasteboard::generalPasteboard() },
+            text_hash_pasteboard_type: Objc2NSString::from_str("zed-text-hash"),
+            metadata_pasteboard_type: Objc2NSString::from_str("zed-metadata"),
             reopen: None,
             quit: None,
             menu_command: None,
@@ -287,18 +295,13 @@ impl MacPlatform {
         state.tray.get_or_insert_with(MacTray::new)
     }
 
-    unsafe fn read_from_pasteboard(&self, pasteboard: *mut Object, kind: id) -> Option<&[u8]> {
-        unsafe {
-            let data = pasteboard.dataForType(kind);
-            if data == nil {
-                None
-            } else {
-                Some(slice::from_raw_parts(
-                    data.bytes() as *mut u8,
-                    data.length() as usize,
-                ))
-            }
-        }
+    unsafe fn read_from_pasteboard(
+        &self,
+        pasteboard: &Objc2NSPasteboard,
+        kind: &NSPasteboardType,
+    ) -> Option<Vec<u8>> {
+        let data = unsafe { pasteboard.dataForType(kind) }?;
+        Some(data.to_vec())
     }
 
     unsafe fn create_menu_bar(
@@ -814,22 +817,23 @@ impl Platform for MacPlatform {
         self.foreground_executor()
             .spawn(async move {
                 unsafe {
-                    let panel = NSOpenPanel::openPanel(nil);
-                    panel.setCanChooseDirectories_(options.directories.to_objc());
-                    panel.setCanChooseFiles_(options.files.to_objc());
-                    panel.setAllowsMultipleSelection_(options.multiple.to_objc());
-
-                    panel.setCanCreateDirectories(true.to_objc());
-                    panel.setResolvesAliases_(false.to_objc());
+                    let panel = Objc2NSOpenPanel::openPanel(MainThreadMarker::new_unchecked());
+                    panel.setCanChooseDirectories(options.directories);
+                    panel.setCanChooseFiles(options.files);
+                    panel.setAllowsMultipleSelection(options.multiple);
+                    panel.setCanCreateDirectories(true);
+                    panel.setResolvesAliases(false);
+                    let panel_for_completion = panel.clone();
                     let done_tx = Cell::new(Some(done_tx));
                     let block = ConcreteBlock::new(move |response: NSModalResponse| {
                         let result = if response == NSModalResponse::NSModalResponseOk {
                             let mut result = Vec::new();
-                            let urls = panel.URLs();
+                            let urls = panel_for_completion.URLs();
                             for i in 0..urls.count() {
                                 let url = urls.objectAtIndex(i);
-                                if url.isFileURL() == YES
-                                    && let Ok(path) = ns_url_to_path(url)
+                                if url.isFileURL()
+                                    && let Ok(path) =
+                                        ns_url_to_path(Retained::as_ptr(&url) as *mut Object)
                                 {
                                     result.push(path)
                                 }
@@ -844,12 +848,14 @@ impl Platform for MacPlatform {
                         }
                     });
                     let block = block.copy();
+                    let panel_ptr = Retained::as_ptr(&panel) as *mut Object;
 
                     if let Some(prompt) = options.prompt {
-                        let _: () = msg_send![panel, setPrompt: ns_string(&prompt)];
+                        let prompt = Objc2NSString::from_str(&prompt);
+                        panel.setPrompt(Some(&prompt));
                     }
 
-                    let _: () = msg_send![panel, beginWithCompletionHandler: block];
+                    let _: () = msg_send![panel_ptr, beginWithCompletionHandler: block];
                 }
             })
             .detach();
@@ -867,51 +873,56 @@ impl Platform for MacPlatform {
         self.foreground_executor()
             .spawn(async move {
                 unsafe {
-                    let panel = NSSavePanel::savePanel(nil);
-                    let path = ns_string(directory.to_string_lossy().as_ref());
-                    let url = NSURL::fileURLWithPath_isDirectory_(nil, path, true.to_objc());
-                    panel.setDirectoryURL(url);
+                    let panel = Objc2NSSavePanel::savePanel(MainThreadMarker::new_unchecked());
+                    let path = Objc2NSString::from_str(directory.to_string_lossy().as_ref());
+                    let url = Objc2NSURL::fileURLWithPath_isDirectory(&path, true);
+                    panel.setDirectoryURL(Some(&url));
+                    let panel_ptr = Retained::as_ptr(&panel) as *mut Object;
+                    let panel_for_completion = panel.clone();
 
                     if let Some(suggested_name) = suggested_name {
-                        let name_string = ns_string(&suggested_name);
-                        let _: () = msg_send![panel, setNameFieldStringValue: name_string];
+                        let name_string = Objc2NSString::from_str(&suggested_name);
+                        panel.setNameFieldStringValue(&name_string);
                     }
 
                     let done_tx = Cell::new(Some(done_tx));
                     let block = ConcreteBlock::new(move |response: NSModalResponse| {
                         let mut result = None;
                         if response == NSModalResponse::NSModalResponseOk {
-                            let url = panel.URL();
-                            if url.isFileURL() == YES {
-                                result = ns_url_to_path(panel.URL()).ok().map(|mut result| {
-                                    let Some(filename) = result.file_name() else {
-                                        return result;
-                                    };
-                                    let chunks = filename
-                                        .as_bytes()
-                                        .split(|&b| b == b'.')
-                                        .collect::<Vec<_>>();
+                            if let Some(url) = panel_for_completion.URL()
+                                && url.isFileURL()
+                            {
+                                result = ns_url_to_path(Retained::as_ptr(&url) as *mut Object)
+                                    .ok()
+                                    .map(|mut result| {
+                                        let Some(filename) = result.file_name() else {
+                                            return result;
+                                        };
+                                        let chunks = filename
+                                            .as_bytes()
+                                            .split(|&b| b == b'.')
+                                            .collect::<Vec<_>>();
 
-                                    // https://github.com/zed-industries/zed/issues/16969
-                                    // Workaround a bug in macOS Sequoia that adds an extra file-extension
-                                    // sometimes. e.g. `a.sql` becomes `a.sql.s` or `a.txtx` becomes `a.txtx.txt`
-                                    //
-                                    // This is conditional on OS version because I'd like to get rid of it, so that
-                                    // you can manually create a file called `a.sql.s`. That said it seems better
-                                    // to break that use-case than breaking `a.sql`.
-                                    if chunks.len() == 3
-                                        && chunks[1].starts_with(chunks[2])
-                                        && Self::os_version() >= SemanticVersion::new(15, 0, 0)
-                                    {
-                                        let new_filename = OsStr::from_bytes(
-                                            &filename.as_bytes()
-                                                [..chunks[0].len() + 1 + chunks[1].len()],
-                                        )
-                                        .to_owned();
-                                        result.set_file_name(&new_filename);
-                                    }
-                                    result
-                                })
+                                        // https://github.com/zed-industries/zed/issues/16969
+                                        // Workaround a bug in macOS Sequoia that adds an extra file-extension
+                                        // sometimes. e.g. `a.sql` becomes `a.sql.s` or `a.txtx` becomes `a.txtx.txt`
+                                        //
+                                        // This is conditional on OS version because I'd like to get rid of it, so that
+                                        // you can manually create a file called `a.sql.s`. That said it seems better
+                                        // to break that use-case than breaking `a.sql`.
+                                        if chunks.len() == 3
+                                            && chunks[1].starts_with(chunks[2])
+                                            && Self::os_version() >= SemanticVersion::new(15, 0, 0)
+                                        {
+                                            let new_filename = OsStr::from_bytes(
+                                                &filename.as_bytes()
+                                                    [..chunks[0].len() + 1 + chunks[1].len()],
+                                            )
+                                            .to_owned();
+                                            result.set_file_name(&new_filename);
+                                        }
+                                        result
+                                    })
                             }
                         }
 
@@ -920,7 +931,7 @@ impl Platform for MacPlatform {
                         }
                     });
                     let block = block.copy();
-                    let _: () = msg_send![panel, beginWithCompletionHandler: block];
+                    let _: () = msg_send![panel_ptr, beginWithCompletionHandler: block];
                 }
             })
             .detach();
@@ -1169,63 +1180,57 @@ impl Platform for MacPlatform {
 
                 // Only set rich text clipboard types if we actually have 1+ images to include.
                 if any_images {
+                    let attributed_string_len: usize = msg_send![attributed_string, length];
                     let rtfd_data = attributed_string.RTFDFromRange_documentAttributes_(
-                        NSRange::new(0, msg_send![attributed_string, length]),
+                        PlatformNSRange::from(0..attributed_string_len),
                         nil,
                     );
-                    if rtfd_data != nil {
+                    if let Some(rtfd_data) = rtfd_data.cast::<Objc2NSData>().as_ref() {
                         state
                             .pasteboard
-                            .setData_forType(rtfd_data, NSPasteboardTypeRTFD);
+                            .setData_forType(Some(rtfd_data), Objc2NSPasteboardTypeRTFD);
                     }
 
                     let rtf_data = attributed_string.RTFFromRange_documentAttributes_(
-                        NSRange::new(0, attributed_string.length()),
+                        PlatformNSRange::from(0..(attributed_string.length() as usize)),
                         nil,
                     );
-                    if rtf_data != nil {
+                    if let Some(rtf_data) = rtf_data.cast::<Objc2NSData>().as_ref() {
                         state
                             .pasteboard
-                            .setData_forType(rtf_data, NSPasteboardTypeRTF);
+                            .setData_forType(Some(rtf_data), Objc2NSPasteboardTypeRTF);
                     }
                 }
 
                 let plain_text = attributed_string.string();
+                let plain_text = plain_text
+                    .cast::<Objc2NSString>()
+                    .as_ref()
+                    .expect("NSMutableAttributedString::string should return NSString");
                 state
                     .pasteboard
-                    .setString_forType(plain_text, NSPasteboardTypeString);
+                    .setString_forType(plain_text, Objc2NSPasteboardTypeString);
             }
         }
     }
 
     fn read_from_clipboard(&self) -> Option<ClipboardItem> {
         let state = self.0.lock();
-        let pasteboard = state.pasteboard;
+        let pasteboard = &state.pasteboard;
 
         // First, see if it's a string.
         unsafe {
-            let types: id = pasteboard.types();
-            let string_type: id = ns_string("public.utf8-plain-text");
-
-            if msg_send![types, containsObject: string_type] {
-                let data = pasteboard.dataForType(string_type);
-                if data == nil {
-                    return None;
-                } else if data.bytes().is_null() {
-                    // https://developer.apple.com/documentation/foundation/nsdata/1410616-bytes?language=objc
-                    // "If the length of the NSData object is 0, this property returns nil."
-                    return Some(self.read_string_from_clipboard(&state, &[]));
-                } else {
-                    let bytes =
-                        slice::from_raw_parts(data.bytes() as *mut u8, data.length() as usize);
-
-                    return Some(self.read_string_from_clipboard(&state, bytes));
-                }
+            if let Some(types) = pasteboard.types()
+                && types.containsObject(Objc2NSPasteboardTypeString)
+            {
+                let data = pasteboard.dataForType(Objc2NSPasteboardTypeString)?;
+                let bytes = data.to_vec();
+                return Some(self.read_string_from_clipboard(&state, &bytes));
             }
 
             // If it wasn't a string, try the various supported image types.
             for format in ImageFormat::iter() {
-                if let Some(item) = try_clipboard_image(pasteboard, format) {
+                if let Some(item) = try_clipboard_image(&pasteboard, format) {
                     return Some(item);
                 }
             }
@@ -1669,15 +1674,15 @@ impl MacPlatform {
         unsafe {
             let text = String::from_utf8_lossy(text_bytes).to_string();
             let metadata = self
-                .read_from_pasteboard(state.pasteboard, state.text_hash_pasteboard_type)
+                .read_from_pasteboard(&state.pasteboard, &state.text_hash_pasteboard_type)
                 .and_then(|hash_bytes| {
                     let hash_bytes = hash_bytes.try_into().ok()?;
                     let hash = u64::from_be_bytes(hash_bytes);
                     let metadata = self
-                        .read_from_pasteboard(state.pasteboard, state.metadata_pasteboard_type)?;
+                        .read_from_pasteboard(&state.pasteboard, &state.metadata_pasteboard_type)?;
 
                     if hash == ClipboardString::text_hash(&text) {
-                        String::from_utf8(metadata.to_vec()).ok()
+                        String::from_utf8(metadata).ok()
                     } else {
                         None
                     }
@@ -1694,34 +1699,22 @@ impl MacPlatform {
             let state = self.0.lock();
             state.pasteboard.clearContents();
 
-            let text_bytes = NSData::dataWithBytes_length_(
-                nil,
-                string.text.as_ptr() as *const c_void,
-                string.text.len() as u64,
-            );
+            let text_bytes = Objc2NSData::with_bytes(string.text.as_bytes());
             state
                 .pasteboard
-                .setData_forType(text_bytes, NSPasteboardTypeString);
+                .setData_forType(Some(&text_bytes), Objc2NSPasteboardTypeString);
 
             if let Some(metadata) = string.metadata.as_ref() {
                 let hash_bytes = ClipboardString::text_hash(&string.text).to_be_bytes();
-                let hash_bytes = NSData::dataWithBytes_length_(
-                    nil,
-                    hash_bytes.as_ptr() as *const c_void,
-                    hash_bytes.len() as u64,
-                );
+                let hash_bytes = Objc2NSData::with_bytes(&hash_bytes);
                 state
                     .pasteboard
-                    .setData_forType(hash_bytes, state.text_hash_pasteboard_type);
+                    .setData_forType(Some(&hash_bytes), &state.text_hash_pasteboard_type);
 
-                let metadata_bytes = NSData::dataWithBytes_length_(
-                    nil,
-                    metadata.as_ptr() as *const c_void,
-                    metadata.len() as u64,
-                );
+                let metadata_bytes = Objc2NSData::with_bytes(metadata.as_bytes());
                 state
                     .pasteboard
-                    .setData_forType(metadata_bytes, state.metadata_pasteboard_type);
+                    .setData_forType(Some(&metadata_bytes), &state.metadata_pasteboard_type);
             }
         }
     }
@@ -1731,39 +1724,31 @@ impl MacPlatform {
             let state = self.0.lock();
             state.pasteboard.clearContents();
 
-            let bytes = NSData::dataWithBytes_length_(
-                nil,
-                image.bytes.as_ptr() as *const c_void,
-                image.bytes.len() as u64,
-            );
+            let bytes = Objc2NSData::with_bytes(&image.bytes);
 
             state
                 .pasteboard
-                .setData_forType(bytes, Into::<UTType>::into(image.format).inner_mut());
+                .setData_forType(Some(&bytes), Into::<UTType>::into(image.format).inner());
         }
     }
 }
 
-fn try_clipboard_image(pasteboard: id, format: ImageFormat) -> Option<ClipboardItem> {
-    let mut ut_type: UTType = format.into();
+fn try_clipboard_image(
+    pasteboard: &Objc2NSPasteboard,
+    format: ImageFormat,
+) -> Option<ClipboardItem> {
+    let ut_type: UTType = format.into();
 
     unsafe {
-        let types: id = pasteboard.types();
-        if msg_send![types, containsObject: ut_type.inner()] {
-            let data = pasteboard.dataForType(ut_type.inner_mut());
-            if data == nil {
-                None
-            } else {
-                let bytes = Vec::from(slice::from_raw_parts(
-                    data.bytes() as *mut u8,
-                    data.length() as usize,
-                ));
-                let id = hash(&bytes);
+        let types = pasteboard.types()?;
+        if types.containsObject(ut_type.inner()) {
+            let data = pasteboard.dataForType(ut_type.inner())?;
+            let bytes = data.to_vec();
+            let id = hash(&bytes);
 
-                Some(ClipboardItem {
-                    entries: vec![ClipboardEntry::Image(Image { format, bytes, id })],
-                })
-            }
+            Some(ClipboardItem {
+                entries: vec![ClipboardEntry::Image(Image { format, bytes, id })],
+            })
         } else {
             None
         }
@@ -2430,50 +2415,52 @@ impl From<ImageFormat> for UTType {
 }
 
 // See https://developer.apple.com/documentation/uniformtypeidentifiers/uttype-swift.struct/
-struct UTType(id);
+enum UTType {
+    Static(&'static NSPasteboardType),
+    Owned(Retained<Objc2NSString>),
+}
 
 impl UTType {
     pub fn png() -> Self {
         // https://developer.apple.com/documentation/uniformtypeidentifiers/uttype-swift.struct/png
-        Self(unsafe { NSPasteboardTypePNG }) // This is a rare case where there's a built-in NSPasteboardType
+        Self::Static(unsafe { Objc2NSPasteboardTypePNG }) // This is a rare case where there's a built-in NSPasteboardType
     }
 
     pub fn jpeg() -> Self {
         // https://developer.apple.com/documentation/uniformtypeidentifiers/uttype-swift.struct/jpeg
-        Self(unsafe { ns_string("public.jpeg") })
+        Self::Owned(Objc2NSString::from_str("public.jpeg"))
     }
 
     pub fn gif() -> Self {
         // https://developer.apple.com/documentation/uniformtypeidentifiers/uttype-swift.struct/gif
-        Self(unsafe { ns_string("com.compuserve.gif") })
+        Self::Owned(Objc2NSString::from_str("com.compuserve.gif"))
     }
 
     pub fn webp() -> Self {
         // https://developer.apple.com/documentation/uniformtypeidentifiers/uttype-swift.struct/webp
-        Self(unsafe { ns_string("org.webmproject.webp") })
+        Self::Owned(Objc2NSString::from_str("org.webmproject.webp"))
     }
 
     pub fn bmp() -> Self {
         // https://developer.apple.com/documentation/uniformtypeidentifiers/uttype-swift.struct/bmp
-        Self(unsafe { ns_string("com.microsoft.bmp") })
+        Self::Owned(Objc2NSString::from_str("com.microsoft.bmp"))
     }
 
     pub fn svg() -> Self {
         // https://developer.apple.com/documentation/uniformtypeidentifiers/uttype-swift.struct/svg
-        Self(unsafe { ns_string("public.svg-image") })
+        Self::Owned(Objc2NSString::from_str("public.svg-image"))
     }
 
     pub fn tiff() -> Self {
         // https://developer.apple.com/documentation/uniformtypeidentifiers/uttype-swift.struct/tiff
-        Self(unsafe { NSPasteboardTypeTIFF }) // This is a rare case where there's a built-in NSPasteboardType
+        Self::Static(unsafe { Objc2NSPasteboardTypeTIFF }) // This is a rare case where there's a built-in NSPasteboardType
     }
 
-    fn inner(&self) -> *const Object {
-        self.0
-    }
-
-    fn inner_mut(&self) -> *mut Object {
-        self.0 as *mut _
+    fn inner(&self) -> &NSPasteboardType {
+        match self {
+            Self::Static(kind) => kind,
+            Self::Owned(kind) => kind,
+        }
     }
 }
 
@@ -2502,16 +2489,12 @@ mod tests {
 
         let text_from_other_app = "text from other app";
         unsafe {
-            let bytes = NSData::dataWithBytes_length_(
-                nil,
-                text_from_other_app.as_ptr() as *const c_void,
-                text_from_other_app.len() as u64,
-            );
+            let bytes = Objc2NSData::with_bytes(text_from_other_app.as_bytes());
             platform
                 .0
                 .lock()
                 .pasteboard
-                .setData_forType(bytes, NSPasteboardTypeString);
+                .setData_forType(Some(&bytes), Objc2NSPasteboardTypeString);
         }
         assert_eq!(
             platform.read_from_clipboard(),
@@ -2521,7 +2504,7 @@ mod tests {
 
     fn build_platform() -> MacPlatform {
         let platform = MacPlatform::new(false);
-        platform.0.lock().pasteboard = unsafe { NSPasteboard::pasteboardWithUniqueName(nil) };
+        platform.0.lock().pasteboard = unsafe { Objc2NSPasteboard::pasteboardWithUniqueName() };
         platform
     }
 }

@@ -1,7 +1,7 @@
 use crate::platform::FocusedWindowInfo;
-use cocoa::base::{id, nil};
 use core_foundation::base::TCFType;
 use core_foundation::string::CFString;
+use objc::runtime::Object;
 use objc::{class, msg_send, sel, sel_impl};
 use std::ffi::c_void;
 
@@ -17,16 +17,16 @@ unsafe extern "C" {
 
 pub fn get_focused_window_info() -> Option<FocusedWindowInfo> {
     unsafe {
-        let workspace: id = msg_send![class!(NSWorkspace), sharedWorkspace];
-        let frontmost_app: id = msg_send![workspace, frontmostApplication];
-        if frontmost_app == nil {
+        let workspace: *mut Object = msg_send![class!(NSWorkspace), sharedWorkspace];
+        let frontmost_app: *mut Object = msg_send![workspace, frontmostApplication];
+        if frontmost_app.is_null() {
             return None;
         }
 
-        let app_name_ns: id = msg_send![frontmost_app, localizedName];
+        let app_name_ns: *mut Object = msg_send![frontmost_app, localizedName];
         let app_name = nsstring_to_string(app_name_ns)?;
 
-        let bundle_id_ns: id = msg_send![frontmost_app, bundleIdentifier];
+        let bundle_id_ns: *mut Object = msg_send![frontmost_app, bundleIdentifier];
         let bundle_id = nsstring_to_string(bundle_id_ns);
 
         let pid: i32 = msg_send![frontmost_app, processIdentifier];
@@ -82,9 +82,9 @@ fn get_window_title_via_accessibility(pid: i32) -> Option<String> {
     }
 }
 
-unsafe fn nsstring_to_string(nsstring: id) -> Option<String> {
+unsafe fn nsstring_to_string(nsstring: *mut Object) -> Option<String> {
     unsafe {
-        if nsstring == nil {
+        if nsstring.is_null() {
             return None;
         }
         let bytes: *const std::ffi::c_char = msg_send![nsstring, UTF8String];

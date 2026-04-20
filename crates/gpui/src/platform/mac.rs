@@ -45,12 +45,13 @@ mod window;
 mod window_appearance;
 
 use crate::{DevicePixels, Pixels, Size, px, size};
-use cocoa::{
-    base::{id, nil},
-    foundation::{NSAutoreleasePool, NSNotFound, NSRect, NSSize, NSString, NSUInteger},
+use objc::{
+    msg_send,
+    runtime::{BOOL, NO, Object, YES},
+    sel, sel_impl,
 };
-
-use objc::runtime::{BOOL, NO, YES};
+use objc2::rc::Retained;
+use objc2_foundation::{NSNotFound, NSRect, NSSize, NSString};
 use std::{
     ffi::{CStr, c_char},
     ops::Range,
@@ -83,14 +84,14 @@ trait NSStringExt {
     unsafe fn to_str(&self) -> &str;
 }
 
-impl NSStringExt for id {
+impl NSStringExt for *mut Object {
     unsafe fn to_str(&self) -> &str {
         unsafe {
-            let cstr = self.UTF8String();
+            let cstr: *const c_char = msg_send![*self, UTF8String];
             if cstr.is_null() {
                 ""
             } else {
-                CStr::from_ptr(cstr as *mut c_char).to_str().unwrap()
+                CStr::from_ptr(cstr).to_str().unwrap()
             }
         }
     }
@@ -99,20 +100,20 @@ impl NSStringExt for id {
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 struct NSRange {
-    pub location: NSUInteger,
-    pub length: NSUInteger,
+    pub location: usize,
+    pub length: usize,
 }
 
 impl NSRange {
     fn invalid() -> Self {
         Self {
-            location: NSNotFound as NSUInteger,
+            location: NSNotFound as usize,
             length: 0,
         }
     }
 
     fn is_valid(&self) -> bool {
-        self.location != NSNotFound as NSUInteger
+        self.location != NSNotFound as usize
     }
 
     fn to_range(self) -> Option<Range<usize>> {
@@ -129,8 +130,8 @@ impl NSRange {
 impl From<Range<usize>> for NSRange {
     fn from(range: Range<usize>) -> Self {
         NSRange {
-            location: range.start as NSUInteger,
-            length: range.len() as NSUInteger,
+            location: range.start,
+            length: range.len(),
         }
     }
 }
@@ -139,15 +140,16 @@ unsafe impl objc::Encode for NSRange {
     fn encode() -> objc::Encoding {
         let encoding = format!(
             "{{NSRange={}{}}}",
-            NSUInteger::encode().as_str(),
-            NSUInteger::encode().as_str()
+            usize::encode().as_str(),
+            usize::encode().as_str()
         );
         unsafe { objc::Encoding::from_str(&encoding) }
     }
 }
 
-unsafe fn ns_string(string: &str) -> id {
-    unsafe { NSString::alloc(nil).init_str(string).autorelease() }
+unsafe fn ns_string(string: &str) -> *mut Object {
+    let string = Retained::into_raw(NSString::from_str(string)).cast::<Object>();
+    unsafe { msg_send![string, autorelease] }
 }
 
 impl From<NSSize> for Size<Pixels> {
@@ -169,6 +171,32 @@ impl From<NSRect> for Size<Pixels> {
 impl From<NSRect> for Size<DevicePixels> {
     fn from(rect: NSRect) -> Self {
         let NSSize { width, height } = rect.size;
+        size(DevicePixels(width as i32), DevicePixels(height as i32))
+    }
+}
+
+#[allow(deprecated)]
+impl From<cocoa::foundation::NSSize> for Size<Pixels> {
+    fn from(value: cocoa::foundation::NSSize) -> Self {
+        Size {
+            width: px(value.width as f32),
+            height: px(value.height as f32),
+        }
+    }
+}
+
+#[allow(deprecated)]
+impl From<cocoa::foundation::NSRect> for Size<Pixels> {
+    fn from(rect: cocoa::foundation::NSRect) -> Self {
+        let cocoa::foundation::NSSize { width, height } = rect.size;
+        size(width.into(), height.into())
+    }
+}
+
+#[allow(deprecated)]
+impl From<cocoa::foundation::NSRect> for Size<DevicePixels> {
+    fn from(rect: cocoa::foundation::NSRect) -> Self {
+        let cocoa::foundation::NSSize { width, height } = rect.size;
         size(DevicePixels(width as i32), DevicePixels(height as i32))
     }
 }

@@ -1,13 +1,11 @@
 use crate::{Bounds, DisplayId, Pixels, PlatformDisplay, Point, TrayAnchor, point, px, size};
 use anyhow::Result;
-use cocoa::{
-    appkit::NSScreen,
-    base::{id, nil},
-    foundation::{NSDictionary, NSPoint, NSRect, NSString},
-};
 use core_foundation::uuid::{CFUUIDGetUUIDBytes, CFUUIDRef};
 use core_graphics::display::{CGDirectDisplayID, CGDisplayBounds, CGGetActiveDisplayList};
-use objc::{msg_send, sel, sel_impl};
+use objc::runtime::Object;
+use objc2::MainThreadMarker;
+use objc2_app_kit::NSScreen;
+use objc2_foundation::{NSNumber, NSPoint, NSRect, NSString};
 use uuid::Uuid;
 
 #[derive(Debug)]
@@ -32,13 +30,11 @@ impl MacDisplay {
         //
         // https://chromium.googlesource.com/chromium/src/+/66.0.3359.158/ui/display/mac/screen_mac.mm#56
         unsafe {
-            let screens = NSScreen::screens(nil);
-            let screen = cocoa::foundation::NSArray::objectAtIndex(screens, 0);
-            let device_description = NSScreen::deviceDescription(screen);
-            let screen_number_key: id = NSString::alloc(nil).init_str("NSScreenNumber");
-            let screen_number = device_description.objectForKey_(screen_number_key);
-            let screen_number: CGDirectDisplayID = msg_send![screen_number, unsignedIntegerValue];
-            Self(screen_number)
+            let screens = NSScreen::screens(MainThreadMarker::new_unchecked());
+            let screen = screens
+                .firstObject()
+                .expect("AppKit returned no screens for NSScreen::screens");
+            Self(screen_number(&screen))
         }
     }
 
@@ -64,25 +60,32 @@ impl MacDisplay {
     }
 }
 
-pub(crate) unsafe fn display_id_for_screen(screen: id) -> DisplayId {
+unsafe fn as_screen<'a>(screen: *mut Object) -> Option<&'a NSScreen> {
+    unsafe { screen.cast::<NSScreen>().as_ref() }
+}
+
+unsafe fn screen_number(screen: &NSScreen) -> CGDirectDisplayID {
+    let device_description = screen.deviceDescription();
+    let screen_number_key = NSString::from_str("NSScreenNumber");
+    let screen_number = device_description
+        .objectForKey(&screen_number_key)
+        .expect("NSScreen deviceDescription missing NSScreenNumber")
+        .downcast::<NSNumber>()
+        .expect("NSScreenNumber should be an NSNumber");
+    screen_number.as_u32()
+}
+
+pub(crate) unsafe fn display_id_for_screen(screen: *mut Object) -> DisplayId {
     unsafe {
-        let device_description = NSScreen::deviceDescription(screen);
-        let screen_number_key: id = NSString::alloc(nil).init_str("NSScreenNumber");
-        let screen_number = device_description.objectForKey_(screen_number_key);
-        let screen_number: CGDirectDisplayID = msg_send![screen_number, unsignedIntegerValue];
-        DisplayId(screen_number)
+        let screen = as_screen(screen).expect("display_id_for_screen received a null NSScreen");
+        DisplayId(screen_number(screen))
     }
 }
 
 pub(crate) unsafe fn primary_screen_frame() -> Option<NSRect> {
     unsafe {
-        let screens = NSScreen::screens(nil);
-        if screens == nil || cocoa::foundation::NSArray::count(screens) == 0 {
-            return None;
-        }
-
-        let screen = cocoa::foundation::NSArray::objectAtIndex(screens, 0);
-        Some(NSScreen::frame(screen))
+        let screens = NSScreen::screens(MainThreadMarker::new_unchecked());
+        screens.firstObject().map(|screen| screen.frame())
     }
 }
 
@@ -98,19 +101,19 @@ pub(crate) unsafe fn global_point_to_native_screen_point(
     }
 }
 
-pub(crate) unsafe fn screen_frame_to_tray_anchor(screen: id, frame: NSRect) -> Option<TrayAnchor> {
+pub(crate) unsafe fn screen_frame_to_tray_anchor(
+    screen: *mut Object,
+    frame: NSRect,
+) -> Option<TrayAnchor> {
     unsafe {
-        if screen == nil {
-            return None;
-        }
-
-        let screen_frame = NSScreen::frame(screen);
+        let screen = as_screen(screen)?;
+        let screen_frame = screen.frame();
         let local_x = frame.origin.x - screen_frame.origin.x;
         let local_y =
             screen_frame.origin.y + screen_frame.size.height - frame.origin.y - frame.size.height;
 
         Some(TrayAnchor {
-            display_id: display_id_for_screen(screen),
+            display_id: DisplayId(screen_number(screen)),
             bounds: Bounds::new(
                 point(px(local_x as f32), px(local_y as f32)),
                 size(px(frame.size.width as f32), px(frame.size.height as f32)),

@@ -6,11 +6,7 @@ use crate::{
 };
 use anyhow::Result;
 use block::ConcreteBlock;
-use cocoa::{
-    base::{NO, YES},
-    foundation::{NSSize, NSUInteger},
-    quartzcore::AutoresizingMask,
-};
+use cocoa::base::{NO, YES};
 
 use core_foundation::base::TCFType;
 use core_video::{
@@ -23,6 +19,7 @@ use metal::{
     RenderPassColorAttachmentDescriptorRef,
 };
 use objc::{self, msg_send, sel, sel_impl};
+use objc2_foundation::NSSize;
 use parking_lot::Mutex;
 
 use std::{cell::Cell, ffi::c_void, mem, ptr, sync::Arc};
@@ -37,6 +34,7 @@ const SHADERS_SOURCE_FILE: &str = include_str!(concat!(env!("OUT_DIR"), "/stitch
 // Use 4x MSAA, all devices support it.
 // https://developer.apple.com/documentation/metal/mtldevice/1433355-supportstexturesamplecount
 const PATH_SAMPLE_COUNT: u32 = 4;
+const LAYER_AUTOSIZING_MASK: u32 = (1 << 1) | (1 << 4);
 
 pub type Context = Arc<Mutex<InstanceBufferPool>>;
 pub type Renderer = MetalRenderer;
@@ -147,11 +145,7 @@ impl MetalRenderer {
         unsafe {
             let _: () = msg_send![&*layer, setAllowsNextDrawableTimeout: NO];
             let _: () = msg_send![&*layer, setNeedsDisplayOnBoundsChange: YES];
-            let _: () = msg_send![
-                &*layer,
-                setAutoresizingMask: AutoresizingMask::WIDTH_SIZABLE
-                    | AutoresizingMask::HEIGHT_SIZABLE
-            ];
+            let _: () = msg_send![&*layer, setAutoresizingMask: LAYER_AUTOSIZING_MASK];
         }
         #[cfg(feature = "runtime_shaders")]
         let library = device
@@ -296,15 +290,9 @@ impl MetalRenderer {
     }
 
     pub fn update_drawable_size(&mut self, size: Size<DevicePixels>) {
-        let size = NSSize {
-            width: size.width.0 as f64,
-            height: size.height.0 as f64,
-        };
+        let size = NSSize::new(size.width.0 as f64, size.height.0 as f64);
         unsafe {
-            let _: () = msg_send![
-                self.layer(),
-                setDrawableSize: size
-            ];
+            let _: () = msg_send![self.layer(), setDrawableSize: size];
         }
         let device_pixels_size = Size {
             width: DevicePixels(size.width as i32),
@@ -572,7 +560,7 @@ impl MetalRenderer {
 
         instance_buffer.metal_buffer.did_modify_range(NSRange {
             location: 0,
-            length: instance_offset as NSUInteger,
+            length: instance_offset as u64,
         });
         Ok(command_buffer.to_owned())
     }
