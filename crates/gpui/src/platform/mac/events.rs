@@ -111,7 +111,7 @@ impl PlatformInput {
             let event_type = native_event.r#type();
 
             // Filter out event types that aren't in the NSEventType enum.
-            // See https://github.com/servo/cocoa-rs/issues/155#issuecomment-323482792 for details.
+            // See the linked runtime-compatibility discussion for details.
             match event_type.0 as u64 {
                 0 | 21 | 32 | 33 | 35 | 36 | 37 => {
                     return None;

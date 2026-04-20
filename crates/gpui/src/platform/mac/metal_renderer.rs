@@ -6,8 +6,6 @@ use crate::{
 };
 use anyhow::Result;
 use block::ConcreteBlock;
-use cocoa::base::{NO, YES};
-
 use core_foundation::base::TCFType;
 use core_video::{
     metal_texture::CVMetalTextureGetTexture, metal_texture_cache::CVMetalTextureCache,
@@ -18,7 +16,11 @@ use metal::{
     CAMetalLayer, CommandQueue, MTLPixelFormat, MTLResourceOptions, NSRange,
     RenderPassColorAttachmentDescriptorRef,
 };
-use objc::{self, msg_send, sel, sel_impl};
+use objc::{
+    self, msg_send,
+    runtime::{NO, YES},
+    sel, sel_impl,
+};
 use objc2_foundation::NSSize;
 use parking_lot::Mutex;
 

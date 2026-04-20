@@ -5,10 +5,6 @@ use crate::{
 };
 use anyhow::{Result, anyhow};
 use block::ConcreteBlock;
-use cocoa::{
-    base::{YES, id, nil},
-    foundation::{NSArray, NSString},
-};
 use collections::HashMap;
 use core_foundation::base::TCFType;
 use core_graphics::display::{
@@ -23,12 +19,28 @@ use objc::{
     class,
     declare::ClassDecl,
     msg_send,
-    runtime::{Class, Object, Sel},
+    runtime::{Class, Object, Sel, YES},
     sel, sel_impl,
 };
 use std::{cell::RefCell, ffi::c_void, mem, ptr, rc::Rc};
 
-use super::NSStringExt;
+use super::{NSStringExt, ns_string};
+
+type ObjcId = *mut Object;
+
+#[allow(non_camel_case_types)]
+type id = ObjcId;
+
+#[allow(non_upper_case_globals)]
+const nil: ObjcId = ptr::null_mut();
+
+unsafe fn array_count(array: id) -> usize {
+    unsafe { msg_send![array, count] }
+}
+
+unsafe fn array_object_at_index(array: id, index: usize) -> id {
+    unsafe { msg_send![array, objectAtIndex: index] }
+}
 
 #[derive(Clone)]
 pub struct MacScreenCaptureSource {
@@ -89,7 +101,7 @@ impl ScreenCaptureSource for MacScreenCaptureSource {
             let delegate: id = msg_send![DELEGATE_CLASS, alloc];
             let output: id = msg_send![OUTPUT_CLASS, alloc];
 
-            let excluded_windows = NSArray::array(nil);
+            let excluded_windows: id = msg_send![class!(NSArray), array];
             let filter: id = msg_send![filter, initWithDisplay:self.sc_display excludingWindows:excluded_windows];
             let configuration: id = msg_send![configuration, init];
             let _: id = msg_send![configuration, setScalesToFit: true];
@@ -193,11 +205,11 @@ struct ScreenMeta {
 
 unsafe fn screen_id_to_human_label() -> HashMap<CGDirectDisplayID, ScreenMeta> {
     let screens: id = msg_send![class!(NSScreen), screens];
-    let count: usize = msg_send![screens, count];
+    let count = unsafe { array_count(screens) };
     let mut map = HashMap::default();
-    let screen_number_key = unsafe { NSString::alloc(nil).init_str("NSScreenNumber") };
+    let screen_number_key = unsafe { ns_string("NSScreenNumber") };
     for i in 0..count {
-        let screen: id = msg_send![screens, objectAtIndex: i];
+        let screen = unsafe { array_object_at_index(screens, i) };
         let device_desc: id = msg_send![screen, deviceDescription];
         if device_desc == nil {
             continue;
@@ -243,8 +255,8 @@ pub(crate) fn get_sources() -> oneshot::Receiver<Result<Vec<Rc<dyn ScreenCapture
             let result = if error == nil {
                 let displays: id = msg_send![shareable_content, displays];
                 let mut result = Vec::new();
-                for i in 0..displays.count() {
-                    let display = displays.objectAtIndex(i);
+                for i in 0..array_count(displays) {
+                    let display = array_object_at_index(displays, i);
                     let id: CGDirectDisplayID = msg_send![display, displayID];
                     let meta = screen_id_to_label.get(&id).cloned();
                     let source = MacScreenCaptureSource {

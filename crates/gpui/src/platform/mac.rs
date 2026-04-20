@@ -174,29 +174,3 @@ impl From<NSRect> for Size<DevicePixels> {
         size(DevicePixels(width as i32), DevicePixels(height as i32))
     }
 }
-
-#[allow(deprecated)]
-impl From<cocoa::foundation::NSSize> for Size<Pixels> {
-    fn from(value: cocoa::foundation::NSSize) -> Self {
-        Size {
-            width: px(value.width as f32),
-            height: px(value.height as f32),
-        }
-    }
-}
-
-#[allow(deprecated)]
-impl From<cocoa::foundation::NSRect> for Size<Pixels> {
-    fn from(rect: cocoa::foundation::NSRect) -> Self {
-        let cocoa::foundation::NSSize { width, height } = rect.size;
-        size(width.into(), height.into())
-    }
-}
-
-#[allow(deprecated)]
-impl From<cocoa::foundation::NSRect> for Size<DevicePixels> {
-    fn from(rect: cocoa::foundation::NSRect) -> Self {
-        let cocoa::foundation::NSSize { width, height } = rect.size;
-        size(DevicePixels(width as i32), DevicePixels(height as i32))
-    }
-}

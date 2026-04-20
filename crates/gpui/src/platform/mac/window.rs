@@ -138,7 +138,7 @@ pub(crate) struct NSOperatingSystemVersion {
 }
 
 impl NSOperatingSystemVersion {
-    fn new(
+    pub(crate) fn new(
         major_version: NSUInteger,
         minor_version: NSUInteger,
         patch_version: NSUInteger,

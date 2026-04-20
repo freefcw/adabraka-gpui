@@ -5,7 +5,6 @@ use crate::{
     point, px, size, swap_rgba_pa_to_bgra,
 };
 use anyhow::anyhow;
-use cocoa::appkit::CGFloat;
 use collections::HashMap;
 use core_foundation::{
     attributed_string::CFMutableAttributedString,
@@ -14,7 +13,7 @@ use core_foundation::{
     string::CFString,
 };
 use core_graphics::{
-    base::{CGGlyph, kCGImageAlphaPremultipliedLast},
+    base::{CGFloat, CGGlyph, kCGImageAlphaPremultipliedLast},
     color_space::CGColorSpace,
     context::{CGContext, CGTextDrawingMode},
     display::CGPoint,

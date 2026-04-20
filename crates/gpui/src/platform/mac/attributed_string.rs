@@ -1,9 +1,8 @@
 use objc::runtime::Object;
 use objc::{class, msg_send, sel, sel_impl};
 
-/// The `cocoa` crate does not define NSAttributedString (and related Cocoa classes),
-/// which are needed for copying rich text (that is, text intermingled with images)
-/// to the clipboard. This adds access to those APIs.
+/// Bindings for NSAttributedString-related APIs used when copying rich text
+/// (that is, text intermingled with images) to the clipboard.
 #[allow(non_snake_case)]
 pub trait NSAttributedString: Sized {
     unsafe fn alloc(_: Self) -> *mut Object {
@@ -66,9 +65,16 @@ impl NSMutableAttributedString for *mut Object {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cocoa::appkit::NSImage;
-    use cocoa::base::nil;
-    use cocoa::foundation::NSString;
+    use objc::runtime::Object;
+    use std::ptr;
+
+    use crate::platform::mac::ns_string;
+
+    type id = *mut Object;
+
+    #[allow(non_upper_case_globals)]
+    const nil: id = ptr::null_mut();
+
     #[test]
     #[ignore] // This was SIGSEGV-ing on CI but not locally; need to investigate https://github.com/zed-industries/zed/actions/runs/10362363230/job/28684225486?pr=15782#step:4:1348
     fn test_nsattributed_string() {
@@ -84,12 +90,12 @@ mod tests {
 
         unsafe {
             let image: id = msg_send![class!(NSImage), alloc];
-            image.initWithContentsOfFile_(NSString::alloc(nil).init_str("test.jpeg"));
-            let _size = image.size();
+            let image: id = msg_send![image, initWithContentsOfFile: ns_string("test.jpeg")];
+            let _size: crate::platform::mac::NSSize = msg_send![image, size];
 
-            let string = NSString::alloc(nil).init_str("Test String");
+            let string = ns_string("Test String");
             let attr_string = NSMutableAttributedString::alloc(nil).init_attributed_string(string);
-            let hello_string = NSString::alloc(nil).init_str("Hello World");
+            let hello_string = ns_string("Hello World");
             let hello_attr_string =
                 NSAttributedString::alloc(nil).init_attributed_string(hello_string);
             attr_string.appendAttributedString_(hello_attr_string);
@@ -100,12 +106,12 @@ mod tests {
                 msg_send![class!(NSAttributedString), attributedStringWithAttachment: attachment];
             attr_string.appendAttributedString_(image_attr_string);
 
-            let another_string = NSString::alloc(nil).init_str("Another String");
+            let another_string = ns_string("Another String");
             let another_attr_string =
                 NSAttributedString::alloc(nil).init_attributed_string(another_string);
             attr_string.appendAttributedString_(another_attr_string);
 
-            let _len: cocoa::foundation::NSUInteger = msg_send![attr_string, length];
+            let _len: usize = msg_send![attr_string, length];
 
             ///////////////////////////////////////////////////
             // pasteboard.clearContents();

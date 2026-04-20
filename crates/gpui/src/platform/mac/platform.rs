@@ -15,7 +15,6 @@ use crate::{
 };
 use anyhow::{Context as _, anyhow};
 use block::ConcreteBlock;
-use cocoa::base::{BOOL, NO, YES};
 use core_foundation::{
     base::{CFRelease, CFType, CFTypeRef, OSStatus, TCFType},
     boolean::CFBoolean,
@@ -31,7 +30,7 @@ use objc::{
     class,
     declare::ClassDecl,
     msg_send,
-    runtime::{Class, Object, Sel},
+    runtime::{BOOL, Class, NO, Object, Sel, YES},
     sel, sel_impl,
 };
 use objc2::{AnyThread, MainThreadMarker, MainThreadOnly, rc::Retained};
@@ -725,7 +724,7 @@ impl Platform for MacPlatform {
 
     #[cfg(feature = "screen-capture")]
     fn is_screen_capture_supported(&self) -> bool {
-        let min_version = cocoa::foundation::NSOperatingSystemVersion::new(12, 3, 0);
+        let min_version = super::NSOperatingSystemVersion::new(12, 3, 0);
         super::is_macos_version_at_least(min_version)
     }
 
@@ -1135,7 +1134,7 @@ impl Platform for MacPlatform {
                 CursorStyle::ResizeDown => msg_send![class!(NSCursor), resizeDownCursor],
 
                 // Undocumented, private class methods:
-                // https://stackoverflow.com/questions/27242353/cocoa-predefined-resize-mouse-cursor
+                // https://stackoverflow.com/questions/27242353/predefined-resize-mouse-cursor
                 CursorStyle::ResizeUpLeftDownRight => {
                     msg_send![class!(NSCursor), _windowResizeNorthWestSouthEastCursor]
                 }
