@@ -8,7 +8,7 @@ A GPU-accelerated UI framework for Rust, forked from [Zed's GPUI](https://github
 ## Getting Started
 
 ```toml
-adabraka-gpui = "0.4"
+adabraka-gpui = "0.6.0"
 ```
 
 ## Platform Support
