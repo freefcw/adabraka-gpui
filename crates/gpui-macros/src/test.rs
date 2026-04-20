@@ -182,7 +182,9 @@ fn generate_test_function(
         }
 
         parse_quote! {
-            #[test]
+            // Use the built-in test attribute via the prelude path so a glob-imported
+            // `gpui::test` proc macro cannot recursively capture this expansion.
+            #[::core::prelude::v1::test]
             fn #outer_fn_name() {
                 #inner_fn
 
@@ -265,7 +267,9 @@ fn generate_test_function(
         }
 
         parse_quote! {
-            #[test]
+            // Use the built-in test attribute via the prelude path so a glob-imported
+            // `gpui::test` proc macro cannot recursively capture this expansion.
+            #[::core::prelude::v1::test]
             fn #outer_fn_name() {
                 #inner_fn
 

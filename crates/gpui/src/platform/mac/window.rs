@@ -1,4 +1,6 @@
-use super::{BoolExt, MacDisplay, NSRange, NSStringExt, display_id_for_screen, ns_string, renderer};
+use super::{
+    BoolExt, MacDisplay, NSRange, NSStringExt, display_id_for_screen, ns_string, renderer,
+};
 use crate::{
     AnyWindowHandle, Bounds, Capslock, DisplayLink, ExternalPaths, FileDropEvent,
     ForegroundExecutor, KeyDownEvent, Keystroke, Modifiers, ModifiersChangedEvent, MouseButton,

@@ -44,9 +44,7 @@ use crate::{
     PromptLevel, Render, RenderImage, RenderablePromptHandle, Reservation, ScreenCaptureSource,
     SharedString, Size, SubscriberSet, Subscription, SvgRenderer, SystemPowerEvent, Task,
     TextSystem, TrayAnchor, TrayIconEvent, TrayIconRenderingMode, TrayMenuItem, Window,
-    WindowAppearance,
-    WindowHandle, WindowId,
-    WindowInvalidator, WindowPosition,
+    WindowAppearance, WindowHandle, WindowId, WindowInvalidator, WindowPosition,
     colors::{Colors, GlobalColors},
     current_platform, hash, init_app_menus,
 };
@@ -1010,8 +1008,7 @@ impl App {
 
     /// Set how the system tray icon should be rendered.
     pub fn set_tray_icon_rendering_mode(&self, rendering_mode: TrayIconRenderingMode) {
-        self.platform
-            .set_tray_icon_rendering_mode(rendering_mode);
+        self.platform.set_tray_icon_rendering_mode(rendering_mode);
     }
 
     /// Set the system tray menu items.

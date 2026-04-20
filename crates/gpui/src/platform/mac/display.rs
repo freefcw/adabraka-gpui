@@ -106,9 +106,8 @@ pub(crate) unsafe fn screen_frame_to_tray_anchor(screen: id, frame: NSRect) -> O
 
         let screen_frame = NSScreen::frame(screen);
         let local_x = frame.origin.x - screen_frame.origin.x;
-        let local_y = screen_frame.origin.y + screen_frame.size.height
-            - frame.origin.y
-            - frame.size.height;
+        let local_y =
+            screen_frame.origin.y + screen_frame.size.height - frame.origin.y - frame.size.height;
 
         Some(TrayAnchor {
             display_id: display_id_for_screen(screen),

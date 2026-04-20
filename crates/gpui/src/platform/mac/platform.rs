@@ -3,8 +3,7 @@ use super::{
     BoolExt, MacKeyboardLayout, MacKeyboardMapper,
     attributed_string::{NSAttributedString, NSMutableAttributedString},
     events::key_to_native,
-    global_point_to_native_screen_point,
-    renderer,
+    global_point_to_native_screen_point, renderer,
 };
 use crate::{
     Action, AnyWindowHandle, BackgroundExecutor, ClipboardEntry, ClipboardItem, ClipboardString,
@@ -210,8 +209,8 @@ pub(crate) struct MacPlatformState {
     tray_icon_callback: Option<Box<dyn FnMut(TrayIconEvent)>>,
     tray_menu_callback: Option<Box<dyn FnMut(SharedString)>>,
     global_hotkey_callback: Option<Box<dyn FnMut(u32)>>,
-    global_hotkey_monitors: Vec<id>,
-    global_hotkey_registrations: std::collections::HashMap<u32, crate::Keystroke>,
+    global_hotkey_handler: Option<EventHandlerRef>,
+    global_hotkey_registrations: std::collections::HashMap<u32, RegisteredGlobalHotkey>,
     system_power_callback: Option<Box<dyn FnMut(crate::SystemPowerEvent)>>,
     network_change_callback: Option<Box<dyn FnMut(crate::NetworkStatus)>>,
     media_key_callback: Option<Box<dyn FnMut(crate::MediaKeyEvent)>>,
@@ -219,6 +218,11 @@ pub(crate) struct MacPlatformState {
     network_monitor: Option<*const c_void>,
     attention_request_id: isize,
     context_menu_callback: Option<Box<dyn FnMut(crate::SharedString)>>,
+}
+
+struct RegisteredGlobalHotkey {
+    keystroke: crate::Keystroke,
+    hotkey_ref: EventHotKeyRef,
 }
 
 impl Default for MacPlatform {
@@ -267,7 +271,7 @@ impl MacPlatform {
             tray_icon_callback: None,
             tray_menu_callback: None,
             global_hotkey_callback: None,
-            global_hotkey_monitors: Vec::new(),
+            global_hotkey_handler: None,
             global_hotkey_registrations: std::collections::HashMap::new(),
             system_power_callback: None,
             network_change_callback: None,
@@ -1370,72 +1374,21 @@ impl Platform for MacPlatform {
 
     fn register_global_hotkey(&self, id: u32, keystroke: &crate::Keystroke) -> Result<()> {
         let mut state = self.0.lock();
-        state
-            .global_hotkey_registrations
-            .insert(id, keystroke.clone());
 
-        if state.global_hotkey_monitors.is_empty() {
-            let platform_ptr = &self.0 as *const Mutex<MacPlatformState> as *const c_void;
-
+        if state.global_hotkey_handler.is_none() {
             unsafe {
-                let mask: u64 = 1 << 10;
-
-                let global_block = ConcreteBlock::new(move |event: id| {
-                    let platform_state = &*(platform_ptr as *const Mutex<MacPlatformState>);
-                    let mut lock = platform_state.lock();
-                    if let Some(hotkey_id) = super::global_hotkey::find_matching_hotkey(
-                        &lock.global_hotkey_registrations,
-                        event,
-                    ) {
-                        if let Some(mut callback) = lock.global_hotkey_callback.take() {
-                            drop(lock);
-                            callback(hotkey_id);
-                            platform_state.lock().global_hotkey_callback = Some(callback);
-                        }
-                    }
-                });
-                let global_block = global_block.copy();
-                let global_monitor: id = msg_send![
-                    class!(NSEvent),
-                    addGlobalMonitorForEventsMatchingMask: mask
-                    handler: &*global_block
-                ];
-                std::mem::forget(global_block);
-
-                let local_block = ConcreteBlock::new(move |event: id| -> id {
-                    let platform_state = &*(platform_ptr as *const Mutex<MacPlatformState>);
-                    let mut lock = platform_state.lock();
-                    if let Some(hotkey_id) = super::global_hotkey::find_matching_hotkey(
-                        &lock.global_hotkey_registrations,
-                        event,
-                    ) {
-                        if let Some(mut callback) = lock.global_hotkey_callback.take() {
-                            drop(lock);
-                            callback(hotkey_id);
-                            platform_state.lock().global_hotkey_callback = Some(callback);
-                        }
-                    }
-                    event
-                });
-                let local_block = local_block.copy();
-                let local_monitor: id = msg_send![
-                    class!(NSEvent),
-                    addLocalMonitorForEventsMatchingMask: mask
-                    handler: &*local_block
-                ];
-                std::mem::forget(local_block);
-
-                state.global_hotkey_monitors.push(global_monitor);
-                state.global_hotkey_monitors.push(local_monitor);
+                install_global_hotkey_handler(&self.0, &mut state)?;
             }
         }
 
-        Ok(())
+        replace_global_hotkey_registration(&mut state, id, keystroke)
     }
 
     fn unregister_global_hotkey(&self, id: u32) {
         let mut state = self.0.lock();
-        state.global_hotkey_registrations.remove(&id);
+        if let Some(registration) = state.global_hotkey_registrations.remove(&id) {
+            unsafe { unregister_hotkey_ref(registration.hotkey_ref) };
+        }
     }
 
     fn on_global_hotkey(&self, callback: Box<dyn FnMut(u32)>) {
@@ -1923,6 +1876,9 @@ extern "C" fn on_keyboard_layout_change(this: &mut Object, _: Sel, _: id) {
     let mut lock = platform.0.lock();
     let keyboard_layout = MacKeyboardLayout::new();
     lock.keyboard_mapper = Rc::new(MacKeyboardMapper::new(keyboard_layout.id()));
+    if !lock.global_hotkey_registrations.is_empty() {
+        reregister_global_hotkeys_for_current_layout(&mut lock);
+    }
     if let Some(mut callback) = lock.on_keyboard_layout_change.take() {
         drop(lock);
         callback();
@@ -2147,6 +2103,188 @@ extern "C" fn handle_dock_menu(this: &mut Object, _: Sel, _: id) -> id {
     }
 }
 
+unsafe fn install_global_hotkey_handler(
+    platform_ptr: *const Mutex<MacPlatformState>,
+    state: &mut MacPlatformState,
+) -> Result<()> {
+    let event_types = [EventTypeSpec {
+        event_class: K_EVENT_CLASS_KEYBOARD,
+        event_kind: K_EVENT_HOTKEY_PRESSED,
+    }];
+    let mut handler_ref = ptr::null_mut();
+    let status = unsafe {
+        InstallEventHandler(
+            GetApplicationEventTarget(),
+            hotkey_event_handler,
+            event_types.len() as u32,
+            event_types.as_ptr(),
+            platform_ptr as *mut c_void,
+            &mut handler_ref,
+        )
+    };
+    if status != NO_ERR {
+        return Err(anyhow!(
+            "failed to install macOS global hotkey handler: OSStatus {}",
+            status
+        ));
+    }
+
+    state.global_hotkey_handler = Some(handler_ref);
+    Ok(())
+}
+
+fn replace_global_hotkey_registration(
+    state: &mut MacPlatformState,
+    id: u32,
+    keystroke: &crate::Keystroke,
+) -> Result<()> {
+    let previous_registration = state.global_hotkey_registrations.remove(&id);
+    if let Some(previous_registration) = previous_registration.as_ref() {
+        unsafe { unregister_hotkey_ref(previous_registration.hotkey_ref) };
+    }
+
+    match register_hotkey_ref(id, keystroke) {
+        Ok(hotkey_ref) => {
+            state.global_hotkey_registrations.insert(
+                id,
+                RegisteredGlobalHotkey {
+                    keystroke: keystroke.clone(),
+                    hotkey_ref,
+                },
+            );
+            Ok(())
+        }
+        Err(err) => {
+            if let Some(mut previous_registration) = previous_registration {
+                match register_hotkey_ref(id, &previous_registration.keystroke) {
+                    Ok(hotkey_ref) => {
+                        previous_registration.hotkey_ref = hotkey_ref;
+                        state
+                            .global_hotkey_registrations
+                            .insert(id, previous_registration);
+                    }
+                    Err(restore_err) => {
+                        log::error!(
+                            "failed to restore macOS global hotkey {} ({}) after registration failure: {}",
+                            id,
+                            previous_registration.keystroke,
+                            restore_err
+                        );
+                    }
+                }
+            }
+
+            Err(err)
+        }
+    }
+}
+
+fn reregister_global_hotkeys_for_current_layout(state: &mut MacPlatformState) {
+    let registrations = std::mem::take(&mut state.global_hotkey_registrations);
+
+    for registration in registrations.values() {
+        unsafe { unregister_hotkey_ref(registration.hotkey_ref) };
+    }
+
+    for (id, mut registration) in registrations {
+        match register_hotkey_ref(id, &registration.keystroke) {
+            Ok(hotkey_ref) => {
+                registration.hotkey_ref = hotkey_ref;
+                state.global_hotkey_registrations.insert(id, registration);
+            }
+            Err(err) => {
+                log::error!(
+                    "failed to re-register macOS global hotkey {} ({}) after keyboard layout change: {}",
+                    id,
+                    registration.keystroke,
+                    err
+                );
+            }
+        }
+    }
+}
+
+fn register_hotkey_ref(id: u32, keystroke: &crate::Keystroke) -> Result<EventHotKeyRef> {
+    let native_hotkey = super::global_hotkey::hotkey_to_native(keystroke)?;
+    let hotkey_id = EventHotKeyID {
+        signature: GPUI_HOTKEY_SIGNATURE,
+        id,
+    };
+    let mut hotkey_ref = ptr::null_mut();
+    let status = unsafe {
+        RegisterEventHotKey(
+            native_hotkey.key_code,
+            native_hotkey.modifiers,
+            hotkey_id,
+            GetApplicationEventTarget(),
+            K_EVENT_HOTKEY_EXCLUSIVE,
+            &mut hotkey_ref,
+        )
+    };
+    if status != NO_ERR {
+        return Err(global_hotkey_registration_error(status));
+    }
+
+    Ok(hotkey_ref)
+}
+
+unsafe fn unregister_hotkey_ref(hotkey_ref: EventHotKeyRef) {
+    unsafe {
+        let _ = UnregisterEventHotKey(hotkey_ref);
+    }
+}
+
+unsafe extern "C" fn hotkey_event_handler(
+    _: EventHandlerCallRef,
+    event: EventRef,
+    user_data: *mut c_void,
+) -> OSStatus {
+    if user_data.is_null() {
+        return EVENT_NOT_HANDLED_ERR;
+    }
+
+    let mut hotkey_id = EventHotKeyID {
+        signature: 0,
+        id: 0,
+    };
+    let status = unsafe {
+        GetEventParameter(
+            event,
+            K_EVENT_PARAM_DIRECT_OBJECT,
+            TYPE_EVENT_HOTKEY_ID,
+            ptr::null_mut(),
+            std::mem::size_of::<EventHotKeyID>(),
+            ptr::null_mut(),
+            &mut hotkey_id as *mut EventHotKeyID as *mut c_void,
+        )
+    };
+    if status != NO_ERR {
+        return status;
+    }
+
+    if hotkey_id.signature != GPUI_HOTKEY_SIGNATURE {
+        return EVENT_NOT_HANDLED_ERR;
+    }
+
+    let platform_state = unsafe { &*(user_data as *const Mutex<MacPlatformState>) };
+    let mut lock = platform_state.lock();
+    if let Some(mut callback) = lock.global_hotkey_callback.take() {
+        drop(lock);
+        callback(hotkey_id.id);
+        platform_state.lock().global_hotkey_callback = Some(callback);
+    }
+
+    NO_ERR
+}
+
+fn global_hotkey_registration_error(status: OSStatus) -> anyhow::Error {
+    if status == EVENT_HOTKEY_EXISTS_ERR {
+        anyhow!("global hotkey is already in use")
+    } else {
+        anyhow!("RegisterEventHotKey failed with OSStatus {}", status)
+    }
+}
+
 unsafe fn ns_string(string: &str) -> id {
     unsafe { NSString::alloc(nil).init_str(string).autorelease() }
 }
@@ -2161,6 +2299,44 @@ unsafe fn ns_url_to_path(url: id) -> Result<PathBuf> {
     })))
 }
 
+type EventTargetRef = *mut c_void;
+type EventHandlerRef = *mut c_void;
+type EventHandlerCallRef = *mut c_void;
+type EventHotKeyRef = *mut c_void;
+type EventRef = *mut c_void;
+type EventHandlerUPP = unsafe extern "C" fn(EventHandlerCallRef, EventRef, *mut c_void) -> OSStatus;
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct EventTypeSpec {
+    event_class: u32,
+    event_kind: u32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct EventHotKeyID {
+    signature: u32,
+    id: u32,
+}
+
+const NO_ERR: OSStatus = 0;
+const EVENT_NOT_HANDLED_ERR: OSStatus = -9874;
+const EVENT_HOTKEY_EXISTS_ERR: OSStatus = -9878;
+const K_EVENT_HOTKEY_PRESSED: u32 = 5;
+const K_EVENT_HOTKEY_EXCLUSIVE: u32 = 1;
+const K_EVENT_CLASS_KEYBOARD: u32 = four_char_code(*b"keyb");
+const K_EVENT_PARAM_DIRECT_OBJECT: u32 = four_char_code(*b"----");
+const TYPE_EVENT_HOTKEY_ID: u32 = four_char_code(*b"hkid");
+const GPUI_HOTKEY_SIGNATURE: u32 = four_char_code(*b"GPUI");
+
+const fn four_char_code(bytes: [u8; 4]) -> u32 {
+    ((bytes[0] as u32) << 24)
+        | ((bytes[1] as u32) << 16)
+        | ((bytes[2] as u32) << 8)
+        | (bytes[3] as u32)
+}
+
 #[link(name = "Carbon", kind = "framework")]
 unsafe extern "C" {
     pub(super) fn TISCopyCurrentKeyboardLayoutInputSource() -> *mut Object;
@@ -2168,6 +2344,33 @@ unsafe extern "C" {
         inputSource: *mut Object,
         propertyKey: *const c_void,
     ) -> *mut Object;
+    fn GetApplicationEventTarget() -> EventTargetRef;
+    fn InstallEventHandler(
+        target: EventTargetRef,
+        handler: EventHandlerUPP,
+        num_types: u32,
+        event_list: *const EventTypeSpec,
+        user_data: *mut c_void,
+        handler_ref: *mut EventHandlerRef,
+    ) -> OSStatus;
+    fn GetEventParameter(
+        event: EventRef,
+        name: u32,
+        desired_type: u32,
+        actual_type: *mut u32,
+        buffer_size: usize,
+        actual_size: *mut usize,
+        data: *mut c_void,
+    ) -> OSStatus;
+    fn RegisterEventHotKey(
+        hot_key_code: u32,
+        hot_key_modifiers: u32,
+        hot_key_id: EventHotKeyID,
+        target: EventTargetRef,
+        options: u32,
+        out_ref: *mut EventHotKeyRef,
+    ) -> OSStatus;
+    fn UnregisterEventHotKey(hot_key: EventHotKeyRef) -> OSStatus;
 
     pub(super) fn UCKeyTranslate(
         keyLayoutPtr: *const ::std::os::raw::c_void,
