@@ -12,6 +12,7 @@ pub fn request_user_attention(attention_type: AttentionType) -> isize {
     app.requestUserAttention(request_type)
 }
 
+#[allow(unused_unsafe)]
 pub fn cancel_user_attention(request_id: isize) {
     let app = unsafe { NSApplication::sharedApplication(MainThreadMarker::new_unchecked()) };
     unsafe {
@@ -19,6 +20,7 @@ pub fn cancel_user_attention(request_id: isize) {
     }
 }
 
+#[allow(unused_unsafe)]
 pub fn set_dock_badge(label: Option<&str>) {
     let app = unsafe { NSApplication::sharedApplication(MainThreadMarker::new_unchecked()) };
     let dock_tile = unsafe { app.dockTile() };

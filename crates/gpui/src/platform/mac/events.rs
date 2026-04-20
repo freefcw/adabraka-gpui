@@ -83,6 +83,7 @@ unsafe fn as_event<'a>(native_event: *mut Object) -> &'a NSEvent {
     unsafe { &*native_event.cast::<NSEvent>() }
 }
 
+#[allow(unused_unsafe)]
 fn read_modifiers(native_event: &NSEvent) -> Modifiers {
     let modifiers = unsafe { native_event.modifierFlags() };
     let control = modifiers.contains(NSEventModifierFlags::Control);
@@ -291,6 +292,7 @@ impl PlatformInput {
     }
 }
 
+#[allow(unused_unsafe)]
 unsafe fn parse_keystroke(native_event: &NSEvent) -> Keystroke {
     unsafe {
         use objc2_app_kit::*;

@@ -1,130 +1,126 @@
 use super::screen_frame_to_tray_anchor;
 use crate::platform::TrayMenuItem;
 use crate::{Bounds, Pixels, TrayAnchor, TrayIconRenderingMode};
-use cocoa::{
-    base::{NO, YES, id, nil},
-    foundation::{NSData, NSSize, NSString},
+use objc::{msg_send, runtime::Object, sel, sel_impl};
+use objc2::{AnyThread, MainThreadMarker, MainThreadOnly, rc::Retained};
+use objc2_app_kit::{
+    NSApplication, NSControlStateValueOff, NSControlStateValueOn, NSImage, NSMenu, NSMenuItem,
+    NSStatusBar, NSStatusItem,
 };
-use objc::{class, msg_send, rc::StrongPtr, sel, sel_impl};
-use std::cell::Cell;
-use std::ffi::c_void;
+use objc2_foundation::{NSData, NSSize, NSString};
+use std::{
+    cell::{Cell, RefCell},
+    ffi::c_void,
+    ptr,
+};
+
+type ObjcId = *mut Object;
 
 pub(crate) struct MacTray {
-    status_item: StrongPtr,
+    status_item: Retained<NSStatusItem>,
     panel_mode: Cell<bool>,
-    stored_menu: Cell<id>,
+    stored_menu: RefCell<Option<Retained<NSMenu>>>,
 }
 
 impl MacTray {
+    #[allow(unused_unsafe)]
     pub fn new() -> Self {
         unsafe {
-            let status_bar: id = msg_send![class!(NSStatusBar), systemStatusBar];
+            let status_bar = NSStatusBar::systemStatusBar();
             let length: f64 = -1.0;
-            let status_item: id = msg_send![status_bar, statusItemWithLength: length];
-            let status_item = StrongPtr::retain(status_item);
-            let _: () = msg_send![*status_item, setVisible: YES];
+            let status_item = status_bar.statusItemWithLength(length);
+            status_item.setVisible(true);
 
-            let button: id = msg_send![*status_item, button];
-            if button != nil {
-                let default_title = NSString::alloc(nil).init_str("App");
-                let _: () = msg_send![button, setTitle: default_title];
+            if let Some(button) = status_item.button(main_thread_marker()) {
+                let default_title = NSString::from_str("App");
+                button.setTitle(&default_title);
             }
 
             Self {
                 status_item,
                 panel_mode: Cell::new(false),
-                stored_menu: Cell::new(nil),
+                stored_menu: RefCell::new(None),
             }
         }
     }
 
     pub fn set_icon_rendering_mode(&self, rendering_mode: TrayIconRenderingMode) {
         unsafe {
-            let button: id = msg_send![*self.status_item, button];
-            if button == nil {
-                return;
-            }
-
-            let image: id = msg_send![button, image];
-            if image != nil {
-                Self::apply_icon_rendering_mode(image, rendering_mode);
+            if let Some(button) = self.status_item.button(main_thread_marker()) {
+                if let Some(image) = button.image() {
+                    Self::apply_icon_rendering_mode(&image, rendering_mode);
+                }
             }
         }
     }
 
     pub fn set_icon(&self, icon_data: Option<&[u8]>, rendering_mode: TrayIconRenderingMode) {
         unsafe {
-            let button: id = msg_send![*self.status_item, button];
-            if button == nil {
+            let Some(button) = self.status_item.button(main_thread_marker()) else {
                 return;
-            }
+            };
             match icon_data {
                 Some(data) => {
-                    let ns_data: id = NSData::dataWithBytes_length_(
-                        nil,
-                        data.as_ptr() as *const c_void,
-                        data.len() as u64,
-                    );
-                    let image: id = msg_send![class!(NSImage), alloc];
-                    let image: id = msg_send![image, initWithData: ns_data];
-                    if image != nil {
-                        let _: () = msg_send![image, setSize: NSSize::new(18.0, 18.0)];
-                        Self::apply_icon_rendering_mode(image, rendering_mode);
-                        let _: () = msg_send![button, setImage: image];
-                        let empty = NSString::alloc(nil).init_str("");
-                        let _: () = msg_send![button, setTitle: empty];
+                    let ns_data = NSData::with_bytes(data);
+                    if let Some(image) = NSImage::initWithData(NSImage::alloc(), &ns_data) {
+                        image.setSize(NSSize {
+                            width: 18.0,
+                            height: 18.0,
+                        });
+                        Self::apply_icon_rendering_mode(&image, rendering_mode);
+                        button.setImage(Some(&image));
+                        let empty = NSString::from_str("");
+                        button.setTitle(&empty);
                     }
                 }
                 None => {
-                    let _: () = msg_send![button, setImage: nil];
+                    button.setImage(None);
                 }
             }
         }
     }
 
-    unsafe fn apply_icon_rendering_mode(image: id, rendering_mode: TrayIconRenderingMode) {
+    #[allow(unused_unsafe)]
+    unsafe fn apply_icon_rendering_mode(image: &NSImage, rendering_mode: TrayIconRenderingMode) {
         let is_template = matches!(rendering_mode, TrayIconRenderingMode::Adaptive);
-        let _: () = msg_send![image, setTemplate: if is_template { YES } else { NO }];
+        unsafe { image.setTemplate(is_template) };
     }
 
-    #[allow(dead_code)]
+    #[allow(dead_code, unused_unsafe)]
     pub fn set_title(&self, title: &str) {
         unsafe {
-            let button: id = msg_send![*self.status_item, button];
-            if button == nil {
-                return;
+            if let Some(button) = self.status_item.button(main_thread_marker()) {
+                let ns_title = NSString::from_str(title);
+                button.setTitle(&ns_title);
             }
-            let ns_title = NSString::alloc(nil).init_str(title);
-            let _: () = msg_send![button, setTitle: ns_title];
         }
     }
 
+    #[allow(unused_unsafe)]
     pub fn set_tooltip(&self, tooltip: &str) {
         unsafe {
-            let button: id = msg_send![*self.status_item, button];
-            if button == nil {
-                return;
+            if let Some(button) = self.status_item.button(main_thread_marker()) {
+                let ns_tooltip = NSString::from_str(tooltip);
+                button.setToolTip(Some(&ns_tooltip));
             }
-            let ns_tooltip = NSString::alloc(nil).init_str(tooltip);
-            let _: () = msg_send![button, setToolTip: ns_tooltip];
         }
     }
 
     pub fn set_menu(&self, items: Vec<TrayMenuItem>) {
         unsafe {
-            let old_menu = self.stored_menu.get();
-            if old_menu != nil {
-                let _: () = msg_send![old_menu, release];
-            }
+            let menu = NSMenu::new(main_thread_marker());
+            menu.setAutoenablesItems(false);
+            build_menu_with_selector(
+                Retained::as_ptr(&menu) as ObjcId,
+                &items,
+                sel!(handleTrayMenuItem:),
+            );
 
-            let menu: id = msg_send![class!(NSMenu), new];
-            let _: () = msg_send![menu, setAutoenablesItems: NO];
-            build_menu_with_selector(menu, &items, sel!(handleTrayMenuItem:));
-
-            self.stored_menu.set(menu);
+            self.stored_menu.replace(Some(menu));
 
             if !self.panel_mode.get() {
-                let _: () = msg_send![*self.status_item, setMenu: menu];
+                let stored_menu = self.stored_menu.borrow();
+                self.status_item.setMenu(stored_menu.as_deref());
             }
         }
     }
@@ -133,47 +129,37 @@ impl MacTray {
         self.panel_mode.set(enabled);
         unsafe {
             if enabled {
-                let _: () = msg_send![*self.status_item, setMenu: nil];
+                self.status_item.setMenu(None);
 
-                let button: id = msg_send![*self.status_item, button];
-                if button != nil {
+                if let Some(button) = self.status_item.button(main_thread_marker()) {
                     let delegate = get_app_delegate();
-                    if delegate != nil {
+                    if !delegate.is_null() {
+                        let button = Retained::as_ptr(&button) as ObjcId;
                         let _: () = msg_send![button, setTarget: delegate];
                         let _: () = msg_send![button, setAction: sel!(handleTrayPanelClick:)];
                     }
                 }
             } else {
-                let button: id = msg_send![*self.status_item, button];
-                if button != nil {
-                    let null_sel: *const std::ffi::c_void = std::ptr::null();
-                    let _: () = msg_send![button, setTarget: nil];
+                if let Some(button) = self.status_item.button(main_thread_marker()) {
+                    let button = Retained::as_ptr(&button) as ObjcId;
+                    let null_sel: *const c_void = ptr::null();
+                    let _: () = msg_send![button, setTarget: ptr::null_mut::<Object>()];
                     let _: () = msg_send![button, setAction: null_sel];
                 }
 
-                let stored = self.stored_menu.get();
-                if stored != nil {
-                    let _: () = msg_send![*self.status_item, setMenu: stored];
-                }
+                let stored = self.stored_menu.borrow();
+                self.status_item.setMenu(stored.as_deref());
             }
         }
     }
 
     pub fn get_icon_anchor(&self) -> Option<TrayAnchor> {
         unsafe {
-            let button: id = msg_send![*self.status_item, button];
-            if button == nil {
-                return None;
-            }
-
-            let button_window: id = msg_send![button, window];
-            if button_window == nil {
-                return None;
-            }
-
-            let frame = msg_send![button_window, frame];
-            let screen: id = msg_send![button_window, screen];
-            screen_frame_to_tray_anchor(screen, frame)
+            let button = self.status_item.button(main_thread_marker())?;
+            let button_window = button.window()?;
+            let frame = button_window.frame();
+            let screen = button_window.screen()?;
+            screen_frame_to_tray_anchor(Retained::as_ptr(&screen) as *mut Object, frame)
         }
     }
 
@@ -183,87 +169,116 @@ impl MacTray {
 }
 
 impl Drop for MacTray {
+    #[allow(unused_unsafe)]
     fn drop(&mut self) {
         unsafe {
-            let stored = self.stored_menu.get();
-            if stored != nil {
-                let _: () = msg_send![stored, release];
-            }
-            let status_bar: id = msg_send![class!(NSStatusBar), systemStatusBar];
-            let _: () = msg_send![status_bar, removeStatusItem: *self.status_item];
+            let status_bar = NSStatusBar::systemStatusBar();
+            status_bar.removeStatusItem(&self.status_item);
         }
     }
 }
 
-unsafe fn get_app_delegate() -> id {
-    let app: id = msg_send![class!(NSApplication), sharedApplication];
+unsafe fn get_app_delegate() -> ObjcId {
+    let app = NSApplication::sharedApplication(main_thread_marker());
+    let app = Retained::as_ptr(&app) as ObjcId;
     msg_send![app, delegate]
 }
 
 pub(crate) unsafe fn configure_actionable_item_with_selector(
-    menu_item: id,
+    menu_item: ObjcId,
     item_id: &str,
     selector: objc::runtime::Sel,
 ) {
     unsafe {
         let delegate = get_app_delegate();
-        if delegate != nil {
+        if !delegate.is_null() {
+            let menu_item_ref = &*menu_item.cast::<NSMenuItem>();
             let _: () = msg_send![menu_item, setTarget: delegate];
             let _: () = msg_send![menu_item, setAction: selector];
-            let represented = NSString::alloc(nil).init_str(item_id);
+            let represented = NSString::from_str(item_id);
+            let represented = Retained::as_ptr(&represented) as ObjcId;
             let _: () = msg_send![menu_item, setRepresentedObject: represented];
-            let _: () = msg_send![menu_item, setEnabled: YES];
+            menu_item_ref.setEnabled(true);
         }
     }
 }
 
 pub(crate) unsafe fn build_menu_with_selector(
-    menu: id,
+    menu: ObjcId,
     items: &[TrayMenuItem],
     selector: objc::runtime::Sel,
 ) {
     unsafe {
+        let menu = &*menu.cast::<NSMenu>();
         for item in items {
             match item {
                 TrayMenuItem::Action { label, id } => {
-                    let title = NSString::alloc(nil).init_str(label.as_ref());
-                    let menu_item: id = msg_send![class!(NSMenuItem), alloc];
-                    let empty = NSString::alloc(nil).init_str("");
-                    let menu_item: id =
-                        msg_send![menu_item, initWithTitle:title action:nil keyEquivalent:empty];
-                    configure_actionable_item_with_selector(menu_item, id.as_ref(), selector);
-                    let _: () = msg_send![menu, addItem: menu_item];
+                    let title = NSString::from_str(label.as_ref());
+                    let empty = NSString::from_str("");
+                    let menu_item = NSMenuItem::initWithTitle_action_keyEquivalent(
+                        NSMenuItem::alloc(main_thread_marker()),
+                        &title,
+                        None,
+                        &empty,
+                    );
+                    configure_actionable_item_with_selector(
+                        Retained::as_ptr(&menu_item) as ObjcId,
+                        id.as_ref(),
+                        selector,
+                    );
+                    menu.addItem(&menu_item);
                 }
                 TrayMenuItem::Separator => {
-                    let separator: id = msg_send![class!(NSMenuItem), separatorItem];
-                    let _: () = msg_send![menu, addItem: separator];
+                    let separator = NSMenuItem::separatorItem(main_thread_marker());
+                    menu.addItem(&separator);
                 }
                 TrayMenuItem::Submenu {
                     label,
                     items: sub_items,
                 } => {
-                    let title = NSString::alloc(nil).init_str(label.as_ref());
-                    let menu_item: id = msg_send![class!(NSMenuItem), alloc];
-                    let empty = NSString::alloc(nil).init_str("");
-                    let menu_item: id =
-                        msg_send![menu_item, initWithTitle:title action:nil keyEquivalent:empty];
-                    let submenu: id = msg_send![class!(NSMenu), new];
-                    build_menu_with_selector(submenu, sub_items, selector);
-                    let _: () = msg_send![menu_item, setSubmenu: submenu];
-                    let _: () = msg_send![menu, addItem: menu_item];
+                    let title = NSString::from_str(label.as_ref());
+                    let empty = NSString::from_str("");
+                    let menu_item = NSMenuItem::initWithTitle_action_keyEquivalent(
+                        NSMenuItem::alloc(main_thread_marker()),
+                        &title,
+                        None,
+                        &empty,
+                    );
+                    let submenu = NSMenu::new(main_thread_marker());
+                    build_menu_with_selector(
+                        Retained::as_ptr(&submenu) as ObjcId,
+                        sub_items,
+                        selector,
+                    );
+                    menu_item.setSubmenu(Some(&submenu));
+                    menu.addItem(&menu_item);
                 }
                 TrayMenuItem::Toggle { label, checked, id } => {
-                    let title = NSString::alloc(nil).init_str(label.as_ref());
-                    let menu_item: id = msg_send![class!(NSMenuItem), alloc];
-                    let empty = NSString::alloc(nil).init_str("");
-                    let menu_item: id =
-                        msg_send![menu_item, initWithTitle:title action:nil keyEquivalent:empty];
-                    configure_actionable_item_with_selector(menu_item, id.as_ref(), selector);
-                    let state: isize = if *checked { 1 } else { 0 };
-                    let _: () = msg_send![menu_item, setState: state];
-                    let _: () = msg_send![menu, addItem: menu_item];
+                    let title = NSString::from_str(label.as_ref());
+                    let empty = NSString::from_str("");
+                    let menu_item = NSMenuItem::initWithTitle_action_keyEquivalent(
+                        NSMenuItem::alloc(main_thread_marker()),
+                        &title,
+                        None,
+                        &empty,
+                    );
+                    configure_actionable_item_with_selector(
+                        Retained::as_ptr(&menu_item) as ObjcId,
+                        id.as_ref(),
+                        selector,
+                    );
+                    menu_item.setState(if *checked {
+                        NSControlStateValueOn
+                    } else {
+                        NSControlStateValueOff
+                    });
+                    menu.addItem(&menu_item);
                 }
             }
         }
     }
+}
+
+fn main_thread_marker() -> MainThreadMarker {
+    unsafe { MainThreadMarker::new_unchecked() }
 }
