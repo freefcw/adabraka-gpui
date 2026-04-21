@@ -373,7 +373,7 @@ package = "adabraka_sum_tree"
 version = "0.5.1"
 
 [dependencies.taffy]
-version = "=0.9.0"
+version = "0.9"
 
 [dependencies.thiserror]
 version = "2.0.12"

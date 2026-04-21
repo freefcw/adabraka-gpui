@@ -40,7 +40,7 @@ package = "adabraka_collections"
 version = "0.5.1"
 
 [dependencies.dirs]
-version = "4.0"
+version = "5.0"
 
 [dependencies.dunce]
 version = "1.0"
@@ -49,7 +49,7 @@ version = "1.0"
 version = "0.3"
 
 [dependencies.futures-lite]
-version = "1.13"
+version = "2"
 
 [dependencies.git2]
 version = "0.20.1"
@@ -130,7 +130,7 @@ version = "0.5.1"
 version = "2.5"
 
 [dependencies.which]
-version = "6.0.0"
+version = "8"
 
 
 [dev-dependencies.git2]
@@ -159,7 +159,7 @@ version = "0.3.1"
 version = "0.2"
 
 [target."cfg(unix)".dependencies.nix]
-version = "0.29"
+version = "0.31"
 features = ["user"]
 
 [target."cfg(windows)".dependencies.tendril]
