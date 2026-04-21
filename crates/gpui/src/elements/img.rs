@@ -8,14 +8,22 @@ use crate::{
 use anyhow::{Context as _, Result};
 
 use futures::{AsyncReadExt, Future};
-use image::{
-    AnimationDecoder, DynamicImage, Frame, ImageBuffer, ImageError, ImageFormat, Rgba,
-    codecs::{gif::GifDecoder, webp::WebPDecoder},
-};
+#[cfg(any(feature = "image-format-gif", feature = "image-format-webp"))]
+use image::AnimationDecoder;
+#[cfg(feature = "image-format-webp")]
+use image::DynamicImage;
+#[cfg(feature = "image-format-webp")]
+use image::Rgba;
+#[cfg(feature = "image-format-gif")]
+use image::codecs::gif::GifDecoder;
+#[cfg(feature = "image-format-webp")]
+use image::codecs::webp::WebPDecoder;
+use image::{Frame, ImageBuffer, ImageError};
 use smallvec::SmallVec;
+#[cfg(any(feature = "image-format-gif", feature = "image-format-webp"))]
+use std::io::Cursor;
 use std::{
-    fs,
-    io::{self, Cursor},
+    fs, io,
     ops::{Deref, DerefMut},
     path::{Path, PathBuf},
     str::FromStr,
@@ -29,6 +37,52 @@ use super::{Stateful, StatefulInteractiveElement};
 
 /// The delay before showing the loading state.
 pub const LOADING_DELAY: Duration = Duration::from_millis(200);
+
+const SUPPORTED_IMAGE_EXTENSIONS: &[&str] = &[
+    #[cfg(feature = "image-format-avif")]
+    "avif",
+    #[cfg(feature = "image-format-jpeg")]
+    "jpg",
+    #[cfg(feature = "image-format-jpeg")]
+    "jpeg",
+    #[cfg(feature = "image-format-png")]
+    "png",
+    #[cfg(feature = "image-format-gif")]
+    "gif",
+    #[cfg(feature = "image-format-webp")]
+    "webp",
+    #[cfg(feature = "image-format-tiff")]
+    "tif",
+    #[cfg(feature = "image-format-tiff")]
+    "tiff",
+    #[cfg(feature = "image-format-tga")]
+    "tga",
+    #[cfg(feature = "image-format-dds")]
+    "dds",
+    #[cfg(feature = "image-format-bmp")]
+    "bmp",
+    #[cfg(feature = "image-format-ico")]
+    "ico",
+    #[cfg(feature = "image-format-hdr")]
+    "hdr",
+    #[cfg(feature = "image-format-exr")]
+    "exr",
+    #[cfg(feature = "image-format-pnm")]
+    "pbm",
+    #[cfg(feature = "image-format-pnm")]
+    "pam",
+    #[cfg(feature = "image-format-pnm")]
+    "ppm",
+    #[cfg(feature = "image-format-pnm")]
+    "pgm",
+    #[cfg(feature = "image-format-farbfeld")]
+    "ff",
+    #[cfg(feature = "image-format-farbfeld")]
+    "farbfeld",
+    #[cfg(feature = "image-format-qoi")]
+    "qoi",
+    "svg",
+];
 
 /// A type alias to the resource loader that the `img()` element uses.
 ///
@@ -207,11 +261,7 @@ pub fn img(source: impl Into<ImageSource>) -> Img {
 impl Img {
     /// A list of all format extensions currently supported by this img element
     pub fn extensions() -> &'static [&'static str] {
-        // This is the list in [image::ImageFormat::from_extension] + `svg`
-        &[
-            "avif", "jpg", "jpeg", "png", "gif", "webp", "tif", "tiff", "tga", "dds", "bmp", "ico",
-            "hdr", "exr", "pbm", "pam", "ppm", "pgm", "ff", "farbfeld", "qoi", "svg",
-        ]
+        SUPPORTED_IMAGE_EXTENSIONS
     }
 
     /// Sets the image cache for the current node.
@@ -633,7 +683,8 @@ impl Asset for ImageAssetLoader {
 
             let data = if let Ok(format) = image::guess_format(&bytes) {
                 let data = match format {
-                    ImageFormat::Gif => {
+                    #[cfg(feature = "image-format-gif")]
+                    image::ImageFormat::Gif => {
                         let decoder = GifDecoder::new(Cursor::new(&bytes))?;
                         let mut frames = SmallVec::new();
 
@@ -648,7 +699,8 @@ impl Asset for ImageAssetLoader {
 
                         frames
                     }
-                    ImageFormat::WebP => {
+                    #[cfg(feature = "image-format-webp")]
+                    image::ImageFormat::WebP => {
                         let mut decoder = WebPDecoder::new(Cursor::new(&bytes))?;
 
                         if decoder.has_animation() {

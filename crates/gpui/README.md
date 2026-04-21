@@ -10,6 +10,23 @@ Add the following to your `Cargo.toml`:
 adabraka-gpui = "0.6.0"
 ```
 
+To keep downstream package size under control, you can disable default features and opt into only
+the image formats you need:
+
+```toml
+adabraka-gpui = { version = "0.6.0", default-features = false, features = [
+    "font-kit",
+    "wayland",
+    "x11",
+    "image-format-png",
+    "image-format-jpeg",
+    "image-format-webp",
+] }
+```
+
+`image-format-*` features map to the underlying `image` crate decoder features. `image-rayon`
+re-enables parallel decoding. SVG support is handled separately through `resvg`.
+
 ### Platform Support
 
 | Feature | macOS | Linux (X11) | Linux (Wayland) | Windows |

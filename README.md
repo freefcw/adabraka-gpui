@@ -11,6 +11,23 @@ A GPU-accelerated UI framework for Rust, forked from [Zed's GPUI](https://github
 adabraka-gpui = "0.6.0"
 ```
 
+To trim image decoder footprint for downstream binaries, disable default features and list only the
+platform and image formats you need:
+
+```toml
+adabraka-gpui = { version = "0.6.0", default-features = false, features = [
+    "font-kit",
+    "wayland",
+    "x11",
+    "image-format-png",
+    "image-format-jpeg",
+    "image-format-webp",
+] }
+```
+
+The crate now exposes `image-format-*` features that map directly to `image` crate decoders, plus
+`image-rayon` for parallel decoding. SVG rendering remains available separately via `resvg`.
+
 ## Platform Support
 
 | Feature | macOS | Linux (X11) | Linux (Wayland) | Windows |

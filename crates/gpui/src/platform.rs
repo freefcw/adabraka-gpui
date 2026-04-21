@@ -50,8 +50,11 @@ use crate::{
 use anyhow::Result;
 use async_task::Runnable;
 use futures::channel::oneshot;
+#[cfg(feature = "image-format-gif")]
+use image::AnimationDecoder as _;
+use image::Frame;
+#[cfg(feature = "image-format-gif")]
 use image::codecs::gif::GifDecoder;
-use image::{AnimationDecoder as _, Frame};
 use parking::Unparker;
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use schemars::JsonSchema;
@@ -60,6 +63,7 @@ use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use std::borrow::Cow;
 use std::hash::{Hash, Hasher};
+#[cfg(feature = "image-format-gif")]
 use std::io::Cursor;
 use std::ops;
 use std::time::{Duration, Instant};
@@ -2162,6 +2166,7 @@ impl Image {
         }
 
         let frames = match self.format {
+            #[cfg(feature = "image-format-gif")]
             ImageFormat::Gif => {
                 let decoder = GifDecoder::new(Cursor::new(&self.bytes))?;
                 let mut frames = SmallVec::new();
@@ -2177,6 +2182,8 @@ impl Image {
 
                 frames
             }
+            #[cfg(not(feature = "image-format-gif"))]
+            ImageFormat::Gif => frames_for_image(&self.bytes, image::ImageFormat::Gif)?,
             ImageFormat::Png => frames_for_image(&self.bytes, image::ImageFormat::Png)?,
             ImageFormat::Jpeg => frames_for_image(&self.bytes, image::ImageFormat::Jpeg)?,
             ImageFormat::Webp => frames_for_image(&self.bytes, image::ImageFormat::WebP)?,

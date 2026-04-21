@@ -25,7 +25,42 @@ default = [
     "wayland",
     "x11",
     "windows-manifest",
+    "image-default-formats",
+    "image-rayon",
 ]
+image-default-formats = [
+    "image-format-avif",
+    "image-format-bmp",
+    "image-format-dds",
+    "image-format-exr",
+    "image-format-farbfeld",
+    "image-format-gif",
+    "image-format-hdr",
+    "image-format-ico",
+    "image-format-jpeg",
+    "image-format-png",
+    "image-format-pnm",
+    "image-format-qoi",
+    "image-format-tga",
+    "image-format-tiff",
+    "image-format-webp",
+]
+image-format-avif = ["image/avif"]
+image-format-bmp = ["image/bmp"]
+image-format-dds = ["image/dds"]
+image-format-exr = ["image/exr"]
+image-format-farbfeld = ["image/ff"]
+image-format-gif = ["image/gif"]
+image-format-hdr = ["image/hdr"]
+image-format-ico = ["image/ico"]
+image-format-jpeg = ["image/jpeg"]
+image-format-png = ["image/png"]
+image-format-pnm = ["image/pnm"]
+image-format-qoi = ["image/qoi"]
+image-format-tga = ["image/tga"]
+image-format-tiff = ["image/tiff"]
+image-format-webp = ["image/webp"]
+image-rayon = ["image/rayon"]
 inspector = ["gpui_macros/inspector"]
 leak-detection = ["backtrace"]
 macos-blade = [
@@ -267,6 +302,7 @@ version = "0.5.1"
 
 [dependencies.image]
 version = "0.25.1"
+default-features = false
 
 [dependencies.inventory]
 version = "0.3.19"
