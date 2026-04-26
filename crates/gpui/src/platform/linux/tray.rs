@@ -5,6 +5,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use ksni::blocking::TrayMethods as _;
+
 use crate::platform::{TrayMenuItem, linux::platform::LinuxTrayEvent};
 use crate::{SharedString, TrayIconEvent};
 
@@ -23,6 +25,9 @@ struct GpuiTray {
 }
 
 impl ksni::Tray for GpuiTray {
+    /// Left-click calls `activate()` instead of opening the menu.
+    const MENU_ON_ACTIVATE: bool = false;
+
     fn id(&self) -> String {
         self.id.clone()
     }
@@ -156,7 +161,7 @@ fn convert_menu_item(
 }
 
 pub struct LinuxTray {
-    handle: Option<ksni::Handle<GpuiTray>>,
+    handle: Option<ksni::blocking::Handle<GpuiTray>>,
     action_callback: TrayActionCallback,
     click_callback: TrayClickCallback,
 }
@@ -176,6 +181,9 @@ impl LinuxTray {
         }
     }
 
+    /// No-op on ksni 0.3 — `MENU_ON_ACTIVATE = false` is the compile-time default.
+    pub fn set_panel_mode(&mut self, _enabled: bool) {}
+
     fn ensure_started(&mut self) {
         if self.handle.is_some() {
             return;
@@ -188,18 +196,28 @@ impl LinuxTray {
             action_callback: self.action_callback.clone(),
             click_callback: self.click_callback.clone(),
         };
-        let service = ksni::TrayService::new(tray);
-        self.handle = Some(service.handle());
-        service.spawn();
+        match tray.spawn() {
+            Ok(handle) => {
+                self.handle = Some(handle);
+            }
+            Err(e) => {
+                log::warn!(target: "tray", "Failed to start tray service: {e}");
+            }
+        }
     }
 
     pub fn set_icon(&mut self, icon_data: Option<&[u8]>) {
         self.ensure_started();
         if let Some(handle) = &self.handle {
             let data = icon_data.unwrap_or(&[]).to_vec();
-            handle.update(move |tray: &mut GpuiTray| {
-                tray.icon_data = data.clone();
-            });
+            if handle
+                .update(move |tray: &mut GpuiTray| {
+                    tray.icon_data = data.clone();
+                })
+                .is_none()
+            {
+                log::warn!(target: "tray", "Tray service has shut down, cannot update icon");
+            }
         }
     }
 
@@ -207,18 +225,28 @@ impl LinuxTray {
         self.ensure_started();
         if let Some(handle) = &self.handle {
             let tooltip = tooltip.to_string();
-            handle.update(move |tray: &mut GpuiTray| {
-                tray.tooltip = tooltip.clone();
-            });
+            if handle
+                .update(move |tray: &mut GpuiTray| {
+                    tray.tooltip = tooltip.clone();
+                })
+                .is_none()
+            {
+                log::warn!(target: "tray", "Tray service has shut down, cannot update tooltip");
+            }
         }
     }
 
     pub fn set_menu(&mut self, items: Vec<TrayMenuItem>) {
         self.ensure_started();
         if let Some(handle) = &self.handle {
-            handle.update(move |tray: &mut GpuiTray| {
-                tray.menu_items = items.clone();
-            });
+            if handle
+                .update(move |tray: &mut GpuiTray| {
+                    tray.menu_items = items.clone();
+                })
+                .is_none()
+            {
+                log::warn!(target: "tray", "Tray service has shut down, cannot update menu");
+            }
         }
     }
 
@@ -247,7 +275,7 @@ impl LinuxTray {
 
     pub fn shutdown(&mut self) {
         if let Some(handle) = self.handle.take() {
-            handle.shutdown();
+            handle.shutdown().wait();
         }
     }
 }

@@ -170,6 +170,7 @@ pub trait LinuxClient {
     fn set_tray_icon_rendering_mode(&self, _rendering_mode: TrayIconRenderingMode) {}
     fn set_tray_menu(&self, _menu: Vec<TrayMenuItem>) {}
     fn set_tray_tooltip(&self, _tooltip: &str) {}
+    fn set_tray_panel_mode(&self, _enabled: bool) {}
     fn register_global_hotkey(&self, _id: u32, _keystroke: &Keystroke) -> Result<()> {
         Err(anyhow::anyhow!(
             "Global hotkeys not supported on this platform"
@@ -748,6 +749,10 @@ impl<P: LinuxClient + 'static> Platform for P {
 
     fn set_tray_tooltip(&self, tooltip: &str) {
         LinuxClient::set_tray_tooltip(self, tooltip);
+    }
+
+    fn set_tray_panel_mode(&self, enabled: bool) {
+        LinuxClient::set_tray_panel_mode(self, enabled);
     }
 
     fn on_tray_icon_event(&self, callback: Box<dyn FnMut(TrayIconEvent)>) {

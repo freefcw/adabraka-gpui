@@ -1797,6 +1797,10 @@ impl LinuxClient for X11Client {
         self.0.borrow_mut().tray.set_tooltip(tooltip);
     }
 
+    fn set_tray_panel_mode(&self, enabled: bool) {
+        self.0.borrow_mut().tray.set_panel_mode(enabled);
+    }
+
     fn register_global_hotkey(&self, id: u32, keystroke: &Keystroke) -> crate::Result<()> {
         let mut state = self.0.borrow_mut();
         let xcb = state.xcb_connection.clone();

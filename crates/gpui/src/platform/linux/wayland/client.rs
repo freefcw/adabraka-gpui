@@ -920,6 +920,10 @@ impl LinuxClient for WaylandClient {
         self.0.borrow_mut().tray.set_tooltip(tooltip);
     }
 
+    fn set_tray_panel_mode(&self, enabled: bool) {
+        self.0.borrow_mut().tray.set_panel_mode(enabled);
+    }
+
     fn register_global_hotkey(&self, _id: u32, _keystroke: &Keystroke) -> crate::Result<()> {
         Err(anyhow::anyhow!("Global hotkeys not supported on Wayland"))
     }
