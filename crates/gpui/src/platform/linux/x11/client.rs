@@ -54,7 +54,10 @@ use crate::platform::{
     linux::{
         DEFAULT_CURSOR_ICON_NAME, LinuxClient, get_xkb_compose_state, is_within_click_distance,
         log_cursor_icon_warning, open_uri_internal,
-        platform::{DOUBLE_CLICK_INTERVAL, SCROLL_LINES},
+        platform::{
+            DOUBLE_CLICK_INTERVAL, LinuxTrayEventTarget, SCROLL_LINES, TrayIconEventCallback,
+            TrayMenuActionCallback, install_linux_tray_event_source,
+        },
         reveal_path_internal,
         xdg_desktop_portal::{Event as XDPEvent, XDPEventSource},
     },
@@ -218,6 +221,24 @@ pub struct X11ClientState {
     pub(crate) xdnd_state: Xdnd,
     pub(crate) tray: crate::platform::linux::tray::LinuxTray,
     pub(crate) global_hotkey: crate::platform::linux::global_hotkey::x11::X11GlobalHotkey,
+}
+
+impl LinuxTrayEventTarget for X11ClientState {
+    fn take_tray_icon_event_callback(&mut self) -> Option<TrayIconEventCallback> {
+        self.common.callbacks.tray_icon_event.take()
+    }
+
+    fn restore_tray_icon_event_callback(&mut self, callback: TrayIconEventCallback) {
+        self.common.callbacks.tray_icon_event = Some(callback);
+    }
+
+    fn take_tray_menu_action_callback(&mut self) -> Option<TrayMenuActionCallback> {
+        self.common.callbacks.tray_menu_action.take()
+    }
+
+    fn restore_tray_menu_action_callback(&mut self, callback: TrayMenuActionCallback) {
+        self.common.callbacks.tray_menu_action = Some(callback);
+    }
 }
 
 #[derive(Clone)]
@@ -470,6 +491,11 @@ impl X11Client {
             })
             .map_err(|err| anyhow!("Failed to initialize XDP event source: {err:?}"))?;
 
+        let tray_event_sender =
+            install_linux_tray_event_source(&handle, |client: &mut X11Client| client.0.clone())
+                .map_err(|err| anyhow!("Failed to initialize tray event source: {err:?}"))?;
+        let tray = crate::platform::linux::tray::LinuxTray::with_event_sender(tray_event_sender);
+
         xcb_flush(&xcb_connection);
 
         Ok(X11Client(Rc::new(RefCell::new(X11ClientState {
@@ -516,7 +542,7 @@ impl X11Client {
             clipboard,
             clipboard_item: None,
             xdnd_state: Xdnd::default(),
-            tray: crate::platform::linux::tray::LinuxTray::new(),
+            tray,
             global_hotkey: crate::platform::linux::global_hotkey::x11::X11GlobalHotkey::new(),
         }))))
     }

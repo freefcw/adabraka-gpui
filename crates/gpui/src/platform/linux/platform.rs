@@ -1,4 +1,5 @@
 use std::{
+    cell::RefCell,
     collections::HashMap,
     env,
     path::{Path, PathBuf},
@@ -17,7 +18,10 @@ use std::{
 
 use anyhow::{Context as _, anyhow};
 use async_task::Runnable;
-use calloop::{LoopSignal, channel::Channel};
+use calloop::{
+    LoopHandle, LoopSignal,
+    channel::{Channel, Sender},
+};
 use futures::channel::oneshot;
 use util::ResultExt as _;
 #[cfg(any(feature = "wayland", feature = "x11"))]
@@ -46,6 +50,86 @@ pub(crate) const KEYRING_LABEL: &str = "zed-github-account";
 #[cfg(any(feature = "wayland", feature = "x11"))]
 const FILE_PICKER_PORTAL_MISSING: &str =
     "Couldn't open file picker due to missing xdg-desktop-portal implementation.";
+
+pub(crate) enum LinuxTrayEvent {
+    Click(TrayIconEvent),
+    MenuAction(SharedString),
+}
+
+pub(crate) type TrayIconEventCallback = Box<dyn FnMut(TrayIconEvent)>;
+pub(crate) type TrayMenuActionCallback = Box<dyn FnMut(SharedString)>;
+
+pub(crate) trait LinuxTrayEventTarget {
+    fn take_tray_icon_event_callback(&mut self) -> Option<TrayIconEventCallback>;
+    fn restore_tray_icon_event_callback(&mut self, callback: TrayIconEventCallback);
+    fn take_tray_menu_action_callback(&mut self) -> Option<TrayMenuActionCallback>;
+    fn restore_tray_menu_action_callback(&mut self, callback: TrayMenuActionCallback);
+}
+
+fn dispatch_tray_icon_event<State: LinuxTrayEventTarget>(
+    state: &Rc<RefCell<State>>,
+    event: TrayIconEvent,
+) {
+    let mut state_ref = state.borrow_mut();
+    let mut callback = state_ref.take_tray_icon_event_callback();
+    drop(state_ref);
+
+    if let Some(ref mut callback) = callback {
+        callback(event);
+    }
+
+    if let Some(callback) = callback {
+        state
+            .borrow_mut()
+            .restore_tray_icon_event_callback(callback);
+    }
+}
+
+fn dispatch_tray_menu_action<State: LinuxTrayEventTarget>(
+    state: &Rc<RefCell<State>>,
+    id: SharedString,
+) {
+    let mut state_ref = state.borrow_mut();
+    let mut callback = state_ref.take_tray_menu_action_callback();
+    drop(state_ref);
+
+    if let Some(ref mut callback) = callback {
+        callback(id);
+    }
+
+    if let Some(callback) = callback {
+        state
+            .borrow_mut()
+            .restore_tray_menu_action_callback(callback);
+    }
+}
+
+pub(crate) fn install_linux_tray_event_source<State, Client, Extract>(
+    handle: &LoopHandle<'static, Client>,
+    state_from_client: Extract,
+) -> anyhow::Result<Sender<LinuxTrayEvent>>
+where
+    State: LinuxTrayEventTarget + 'static,
+    Client: 'static,
+    Extract: Fn(&mut Client) -> Rc<RefCell<State>> + 'static,
+{
+    let (tray_event_sender, tray_event_channel) = calloop::channel::channel::<LinuxTrayEvent>();
+    handle
+        .insert_source(tray_event_channel, {
+            let handle = handle.clone();
+            move |event, _, client| {
+                if let calloop::channel::Event::Msg(event) = event {
+                    let state = state_from_client(client);
+                    handle.insert_idle(move |_| match event {
+                        LinuxTrayEvent::Click(event) => dispatch_tray_icon_event(&state, event),
+                        LinuxTrayEvent::MenuAction(id) => dispatch_tray_menu_action(&state, id),
+                    });
+                }
+            }
+        })
+        .map_err(|err| anyhow!("Failed to initialize tray event source: {err:?}"))?;
+    Ok(tray_event_sender)
+}
 
 pub trait LinuxClient {
     fn compositor_name(&self) -> &'static str;
@@ -118,8 +202,8 @@ pub(crate) struct PlatformHandlers {
     pub(crate) will_open_app_menu: Option<Box<dyn FnMut()>>,
     pub(crate) validate_app_menu_command: Option<Box<dyn FnMut(&dyn Action) -> bool>>,
     pub(crate) keyboard_layout_change: Option<Box<dyn FnMut()>>,
-    pub(crate) tray_icon_event: Option<Box<dyn FnMut(TrayIconEvent)>>,
-    pub(crate) tray_menu_action: Option<Box<dyn FnMut(SharedString)>>,
+    pub(crate) tray_icon_event: Option<TrayIconEventCallback>,
+    pub(crate) tray_menu_action: Option<TrayMenuActionCallback>,
     pub(crate) global_hotkey: Option<Box<dyn FnMut(u32)>>,
     pub(crate) system_power: Option<Box<dyn FnMut(SystemPowerEvent)>>,
     pub(crate) network_status_change: Option<Box<dyn FnMut(NetworkStatus)>>,

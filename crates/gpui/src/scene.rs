@@ -517,8 +517,10 @@ pub(crate) struct Quad {
     pub corner_radii: Corners<ScaledPixels>,
     pub border_widths: Edges<ScaledPixels>,
     pub continuous_corners: u32,
+    pub _pad_before_transform: u32, // padding before transform
     pub transform: TransformationMatrix,
     pub blend_mode: u32,
+    pub _pad_end: u32, // padding after blend_mode
 }
 
 impl From<Quad> for Primitive {
@@ -555,6 +557,7 @@ pub(crate) struct Shadow {
     pub content_mask: ContentMask<ScaledPixels>,
     pub color: Hsla,
     pub inset: u32,
+    pub _pad_end: u32,
 }
 
 impl From<Shadow> for Primitive {

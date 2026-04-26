@@ -2837,6 +2837,7 @@ impl Window {
                 corner_radii: corner_radii.scale(scale_factor),
                 color: shadow.color.opacity(opacity),
                 inset: if shadow.inset { 1 } else { 0 },
+                _pad_end: 0,
             });
         }
     }
@@ -2866,8 +2867,10 @@ impl Window {
             border_widths: quad.border_widths.scale(scale_factor),
             border_style: quad.border_style,
             continuous_corners: if quad.continuous_corners { 1 } else { 0 },
+            _pad_before_transform: 0,
             transform: quad.transform,
             blend_mode: quad.blend_mode as u32,
+            _pad_end: 0,
         });
     }
 

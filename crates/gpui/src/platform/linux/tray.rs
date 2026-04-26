@@ -5,7 +5,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use crate::platform::TrayMenuItem;
+use crate::platform::{TrayMenuItem, linux::platform::LinuxTrayEvent};
 use crate::{SharedString, TrayIconEvent};
 
 type TrayActionCallback = Arc<Mutex<Option<Box<dyn Fn(SharedString) + Send>>>>;
@@ -65,19 +65,11 @@ impl ksni::Tray for GpuiTray {
     }
 
     fn activate(&mut self, _x: i32, _y: i32) {
-        if let Ok(guard) = self.click_callback.lock() {
-            if let Some(ref cb) = *guard {
-                cb(TrayIconEvent::LeftClick);
-            }
-        }
+        emit_click(&self.click_callback, TrayIconEvent::LeftClick);
     }
 
     fn secondary_activate(&mut self, _x: i32, _y: i32) {
-        if let Ok(guard) = self.click_callback.lock() {
-            if let Some(ref cb) = *guard {
-                cb(TrayIconEvent::RightClick);
-            }
-        }
+        emit_click(&self.click_callback, TrayIconEvent::RightClick);
     }
 
     fn menu(&self) -> Vec<ksni::MenuItem<Self>> {
@@ -103,6 +95,22 @@ fn default_status_notifier_id() -> String {
         .unwrap_or_else(|| DEFAULT_STATUS_NOTIFIER_ID.to_string())
 }
 
+fn emit_click(callback: &TrayClickCallback, event: TrayIconEvent) {
+    if let Ok(guard) = callback.lock()
+        && let Some(ref callback) = *guard
+    {
+        callback(event);
+    }
+}
+
+fn emit_action(callback: &TrayActionCallback, id: SharedString) {
+    if let Ok(guard) = callback.lock()
+        && let Some(ref callback) = *guard
+    {
+        callback(id);
+    }
+}
+
 fn convert_menu_item(
     item: &TrayMenuItem,
     action_callback: &TrayActionCallback,
@@ -114,11 +122,7 @@ fn convert_menu_item(
             ksni::MenuItem::Standard(ksni::menu::StandardItem {
                 label: label.to_string(),
                 activate: Box::new(move |_tray: &mut GpuiTray| {
-                    if let Ok(guard) = cb.lock() {
-                        if let Some(ref callback) = *guard {
-                            callback(id_clone.clone());
-                        }
-                    }
+                    emit_action(&cb, id_clone.clone());
                 }),
                 ..Default::default()
             })
@@ -143,11 +147,7 @@ fn convert_menu_item(
                     String::new()
                 },
                 activate: Box::new(move |_tray: &mut GpuiTray| {
-                    if let Ok(guard) = cb.lock() {
-                        if let Some(ref callback) = *guard {
-                            callback(id_clone.clone());
-                        }
-                    }
+                    emit_action(&cb, id_clone.clone());
                 }),
                 ..Default::default()
             })
@@ -162,6 +162,12 @@ pub struct LinuxTray {
 }
 
 impl LinuxTray {
+    pub fn with_event_sender(sender: calloop::channel::Sender<LinuxTrayEvent>) -> Self {
+        let tray = Self::new();
+        tray.set_event_sender(sender);
+        tray
+    }
+
     pub fn new() -> Self {
         Self {
             handle: None,
@@ -216,16 +222,27 @@ impl LinuxTray {
         }
     }
 
-    pub fn set_on_menu_action(&self, callback: Box<dyn Fn(SharedString) + Send>) {
+    fn set_on_menu_action(&self, callback: Box<dyn Fn(SharedString) + Send>) {
         if let Ok(mut guard) = self.action_callback.lock() {
             *guard = Some(callback);
         }
     }
 
-    pub fn set_on_click(&self, callback: Box<dyn Fn(TrayIconEvent) + Send>) {
+    fn set_on_click(&self, callback: Box<dyn Fn(TrayIconEvent) + Send>) {
         if let Ok(mut guard) = self.click_callback.lock() {
             *guard = Some(callback);
         }
+    }
+
+    pub fn set_event_sender(&self, sender: calloop::channel::Sender<LinuxTrayEvent>) {
+        let click_sender = sender.clone();
+        self.set_on_click(Box::new(move |event| {
+            let _ = click_sender.send(LinuxTrayEvent::Click(event));
+        }));
+
+        self.set_on_menu_action(Box::new(move |id| {
+            let _ = sender.send(LinuxTrayEvent::MenuAction(id));
+        }));
     }
 
     pub fn shutdown(&mut self) {

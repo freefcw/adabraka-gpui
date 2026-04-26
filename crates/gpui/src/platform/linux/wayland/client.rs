@@ -82,8 +82,12 @@ use crate::{
 use crate::{
     SharedString,
     platform::linux::{
-        LinuxClient, get_xkb_compose_state, is_within_click_distance, open_uri_internal, read_fd,
-        reveal_path_internal,
+        LinuxClient, get_xkb_compose_state, is_within_click_distance, open_uri_internal,
+        platform::{
+            LinuxTrayEventTarget, TrayIconEventCallback, TrayMenuActionCallback,
+            install_linux_tray_event_source,
+        },
+        read_fd, reveal_path_internal,
         wayland::{
             clipboard::{Clipboard, DataOffer, FILE_LIST_MIME_TYPE, TEXT_MIME_TYPES},
             cursor::Cursor,
@@ -238,6 +242,24 @@ pub(crate) struct WaylandClientState {
     event_loop: Option<EventLoop<'static, WaylandClientStatePtr>>,
     common: LinuxCommon,
     tray: crate::platform::linux::tray::LinuxTray,
+}
+
+impl LinuxTrayEventTarget for WaylandClientState {
+    fn take_tray_icon_event_callback(&mut self) -> Option<TrayIconEventCallback> {
+        self.common.callbacks.tray_icon_event.take()
+    }
+
+    fn restore_tray_icon_event_callback(&mut self, callback: TrayIconEventCallback) {
+        self.common.callbacks.tray_icon_event = Some(callback);
+    }
+
+    fn take_tray_menu_action_callback(&mut self) -> Option<TrayMenuActionCallback> {
+        self.common.callbacks.tray_menu_action.take()
+    }
+
+    fn restore_tray_menu_action_callback(&mut self, callback: TrayMenuActionCallback) {
+        self.common.callbacks.tray_menu_action = Some(callback);
+    }
 }
 
 pub struct DragState {
@@ -551,6 +573,13 @@ impl WaylandClient {
             })
             .unwrap();
 
+        let tray_event_sender =
+            install_linux_tray_event_source(&handle, |client: &mut WaylandClientStatePtr| {
+                client.get_client()
+            })
+            .unwrap();
+        let tray = crate::platform::linux::tray::LinuxTray::with_event_sender(tray_event_sender);
+
         let mut state = Rc::new(RefCell::new(WaylandClientState {
             serial_tracker: SerialTracker::new(),
             globals,
@@ -616,7 +645,7 @@ impl WaylandClient {
             cursor,
             pending_activation: None,
             event_loop: Some(event_loop),
-            tray: crate::platform::linux::tray::LinuxTray::new(),
+            tray,
         }));
 
         WaylandSource::new(conn, event_queue)
