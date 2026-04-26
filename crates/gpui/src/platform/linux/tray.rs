@@ -1,6 +1,9 @@
 #![allow(dead_code)]
 
-use std::sync::{Arc, Mutex};
+use std::{
+    path::Path,
+    sync::{Arc, Mutex},
+};
 
 use crate::platform::TrayMenuItem;
 use crate::{SharedString, TrayIconEvent};
@@ -8,7 +11,10 @@ use crate::{SharedString, TrayIconEvent};
 type TrayActionCallback = Arc<Mutex<Option<Box<dyn Fn(SharedString) + Send>>>>;
 type TrayClickCallback = Arc<Mutex<Option<Box<dyn Fn(TrayIconEvent) + Send>>>>;
 
+const DEFAULT_STATUS_NOTIFIER_ID: &str = "gpui-tray";
+
 struct GpuiTray {
+    id: String,
     icon_data: Vec<u8>,
     tooltip: String,
     menu_items: Vec<TrayMenuItem>,
@@ -17,6 +23,10 @@ struct GpuiTray {
 }
 
 impl ksni::Tray for GpuiTray {
+    fn id(&self) -> String {
+        self.id.clone()
+    }
+
     fn icon_pixmap(&self) -> Vec<ksni::Icon> {
         if self.icon_data.is_empty() {
             return vec![];
@@ -76,6 +86,21 @@ impl ksni::Tray for GpuiTray {
             .map(|item| convert_menu_item(item, &self.action_callback))
             .collect()
     }
+}
+
+fn derive_status_notifier_id_from_path(path: &Path) -> Option<String> {
+    path.file_stem()
+        .or_else(|| path.file_name())
+        .map(|name| name.to_string_lossy().trim().to_string())
+        .filter(|name| !name.is_empty())
+}
+
+fn default_status_notifier_id() -> String {
+    // GNOME AppIndicator hosts keep the item hidden until Id is non-empty.
+    std::env::current_exe()
+        .ok()
+        .and_then(|path| derive_status_notifier_id_from_path(&path))
+        .unwrap_or_else(|| DEFAULT_STATUS_NOTIFIER_ID.to_string())
 }
 
 fn convert_menu_item(
@@ -150,6 +175,7 @@ impl LinuxTray {
             return;
         }
         let tray = GpuiTray {
+            id: default_status_notifier_id(),
             icon_data: Vec::new(),
             tooltip: String::new(),
             menu_items: Vec::new(),
@@ -212,5 +238,33 @@ impl LinuxTray {
 impl Drop for LinuxTray {
     fn drop(&mut self) {
         self.shutdown();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::derive_status_notifier_id_from_path;
+
+    #[test]
+    fn derives_status_notifier_id_from_executable_stem() {
+        assert_eq!(
+            derive_status_notifier_id_from_path(Path::new("/opt/BananaTray/bin/bananatray")),
+            Some("bananatray".to_string())
+        );
+    }
+
+    #[test]
+    fn drops_executable_suffix_when_deriving_status_notifier_id() {
+        assert_eq!(
+            derive_status_notifier_id_from_path(Path::new("/opt/BananaTray/bin/BananaTray.exe")),
+            Some("BananaTray".to_string())
+        );
+    }
+
+    #[test]
+    fn returns_none_when_executable_name_is_missing() {
+        assert_eq!(derive_status_notifier_id_from_path(Path::new("/")), None);
     }
 }
