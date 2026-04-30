@@ -60,6 +60,7 @@ x11rb::atom_manager! {
         WM_TRANSIENT_FOR,
         _NET_WM_PID,
         _NET_WM_NAME,
+        _NET_WM_ICON,
         _NET_WM_STATE,
         _NET_WM_STATE_MAXIMIZED_VERT,
         _NET_WM_STATE_MAXIMIZED_HORZ,
@@ -840,9 +841,15 @@ impl X11Window {
         };
 
         let state = ptr.state.borrow_mut();
+        let icon = state.params.icon.clone();
         ptr.set_wm_properties(state)?;
+        
+        let window = Self(ptr);
+        if let Some(icon) = icon {
+            window.set_window_icon(Some(icon));
+        }
 
-        Ok(Self(ptr))
+        Ok(window)
     }
 
     fn set_wm_hints<C: Display + Send + Sync + 'static, F: FnOnce() -> C>(
@@ -1753,6 +1760,40 @@ impl PlatformWindow for X11Window {
             )
             .log_err();
         }
+        xcb_flush(&self.0.xcb);
+    }
+
+    fn set_window_icon(&self, icon: Option<image::RgbaImage>) {
+        let Some(image) = icon else { return };
+        
+        let width = image.width();
+        let height = image.height();
+        let property_size = 2 + (width * height) as usize;
+        let mut property_data: Vec<u32> = Vec::with_capacity(property_size);
+        
+        property_data.push(width);
+        property_data.push(height);
+        
+        // _NET_WM_ICON expects each pixel as a 32-bit ARGB CARDINAL,
+        // i.e. the integer value (A << 24) | (R << 16) | (G << 8) | B,
+        // independent of host endianness.
+        for pixel in image.pixels() {
+            let [r, g, b, a] = pixel.0;
+            property_data
+                .push(((a as u32) << 24) | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32));
+        }
+        
+        check_reply(
+            || "X11 set window icon failed.",
+            self.0.xcb.change_property32(
+                xproto::PropMode::REPLACE,
+                self.0.x_window,
+                self.0.atoms._NET_WM_ICON,
+                xproto::AtomEnum::CARDINAL,
+                &property_data,
+            ),
+        )
+        .log_err();
         xcb_flush(&self.0.xcb);
     }
 }

@@ -804,6 +804,7 @@ impl MacWindow {
             window_min_size,
             tabbing_identifier,
             mouse_passthrough,
+            icon: _,
         }: WindowParams,
         executor: ForegroundExecutor,
         renderer_context: renderer::Context,

@@ -664,6 +664,8 @@ pub(crate) trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
     }
     fn set_mouse_passthrough(&self, _passthrough: bool) {}
     fn set_progress_bar(&self, _state: ProgressBarState) {}
+    #[allow(dead_code)]
+    fn set_window_icon(&self, _icon: Option<image::RgbaImage>) {}
 
     #[cfg(any(test, feature = "test-support"))]
     fn as_test(&mut self) -> Option<&mut TestWindow> {
@@ -1252,6 +1254,9 @@ pub struct WindowOptions {
 
     /// Whether the window should allow mouse events to pass through to windows behind it
     pub mouse_passthrough: bool,
+
+    /// Optional window icon (currently consumed only on X11; ignored elsewhere)
+    pub icon: Option<image::RgbaImage>,
 }
 
 /// The variables that can be configured when creating a new window
@@ -1304,6 +1309,10 @@ pub(crate) struct WindowParams {
 
     #[allow(dead_code)]
     pub mouse_passthrough: bool,
+
+    /// Optional window icon (primarily for X11)
+    #[cfg_attr(not(any(target_os = "linux", target_os = "freebsd")), allow(dead_code))]
+    pub icon: Option<image::RgbaImage>,
 }
 
 /// Represents the status of how a window should be opened.
@@ -1363,6 +1372,7 @@ impl Default for WindowOptions {
             window_decorations: None,
             tabbing_identifier: None,
             mouse_passthrough: false,
+            icon: None,
         }
     }
 }
