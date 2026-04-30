@@ -1,3 +1,14 @@
+## 0.6.2 (2026-04-30)
+
+### Improvements
+
+- **Cursor behavior** — restore cursor to Arrow style when window loses focus
+
+### Documentation
+
+- Added batch 2 evaluation report documenting architectural constraints
+- Added immediate actions completion report
+
 # Changelog
 
 ## 0.6.1 (2026-04-30)

@@ -15,7 +15,7 @@ To trim image decoder footprint for downstream binaries, disable default feature
 platform and image formats you need:
 
 ```toml
-adabraka-gpui = { version = "0.6.1", default-features = false, features = [
+adabraka-gpui = { version = "0.6.2", default-features = false, features = [
     "font-kit",
     "wayland",
     "x11",
