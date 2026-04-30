@@ -68,7 +68,7 @@ mod tests {
     use objc::runtime::Object;
     use std::ptr;
 
-    use crate::platform::mac::ns_string;
+    use crate::platform::mac::{NSRange, ns_string};
 
     type id = *mut Object;
 
@@ -111,13 +111,13 @@ mod tests {
                 NSAttributedString::alloc(nil).init_attributed_string(another_string);
             attr_string.appendAttributedString_(another_attr_string);
 
-            let _len: usize = msg_send![attr_string, length];
+            let len: usize = msg_send![attr_string, length];
 
             ///////////////////////////////////////////////////
             // pasteboard.clearContents();
 
             let rtfd_data = attr_string.RTFDFromRange_documentAttributes_(
-                NSRange::new(0, msg_send![attr_string, length]),
+                NSRange::from(0..len),
                 nil,
             );
             assert_ne!(rtfd_data, nil);
