@@ -1,32 +1,39 @@
-use derive_more::{Deref, DerefMut};
-
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use smol_str::SmolStr;
 use std::{
     borrow::{Borrow, Cow},
+    ops::Deref,
     sync::Arc,
 };
-use util::arc_cow::ArcCow;
 
 /// A shared string is an immutable string that can be cheaply cloned in GPUI
-/// tasks. Essentially an abstraction over an `Arc<str>` and `&'static str`,
-#[derive(Deref, DerefMut, Eq, PartialEq, PartialOrd, Ord, Hash, Clone)]
-pub struct SharedString(ArcCow<'static, str>);
+/// tasks. Uses SmolStr for efficient storage with inline optimization for small strings.
+#[derive(Eq, PartialEq, PartialOrd, Ord, Hash, Clone)]
+pub struct SharedString(SmolStr);
 
 impl SharedString {
     /// Creates a static [`SharedString`] from a `&'static str`.
     pub const fn new_static(str: &'static str) -> Self {
-        Self(ArcCow::Borrowed(str))
+        Self(SmolStr::new_static(str))
     }
 
-    /// Creates a [`SharedString`] from anything that can become an `Arc<str>`
-    pub fn new(str: impl Into<Arc<str>>) -> Self {
-        SharedString(ArcCow::Owned(str.into()))
+    /// Creates a [`SharedString`] from anything that can become a SmolStr
+    pub fn new(str: impl Into<SmolStr>) -> Self {
+        SharedString(str.into())
     }
 
     /// Get a &str from the underlying string.
     pub fn as_str(&self) -> &str {
-        &self.0
+        self.0.as_str()
+    }
+}
+
+impl Deref for SharedString {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_str()
     }
 }
 
@@ -46,7 +53,7 @@ impl JsonSchema for SharedString {
 
 impl Default for SharedString {
     fn default() -> Self {
-        Self(ArcCow::Owned(Arc::default()))
+        Self(SmolStr::default())
     }
 }
 
@@ -70,7 +77,7 @@ impl std::fmt::Debug for SharedString {
 
 impl std::fmt::Display for SharedString {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0.as_ref())
+        write!(f, "{}", self.0.as_str())
     }
 }
 
@@ -106,16 +113,34 @@ impl From<&SharedString> for SharedString {
 
 impl From<SharedString> for Arc<str> {
     fn from(val: SharedString) -> Self {
-        match val.0 {
-            ArcCow::Borrowed(borrowed) => Arc::from(borrowed),
-            ArcCow::Owned(owned) => owned,
-        }
+        // Reuses the underlying Arc when SmolStr is in its Heap variant (zero-copy).
+        Arc::<str>::from(val.0)
     }
 }
 
-impl<T: Into<ArcCow<'static, str>>> From<T> for SharedString {
-    fn from(value: T) -> Self {
-        Self(value.into())
+impl From<&str> for SharedString {
+    fn from(value: &str) -> Self {
+        Self(SmolStr::from(value))
+    }
+}
+
+impl From<String> for SharedString {
+    fn from(value: String) -> Self {
+        Self(SmolStr::from(value))
+    }
+}
+
+impl From<Arc<str>> for SharedString {
+    fn from(value: Arc<str>) -> Self {
+        // SmolStr's `From<Arc<str>>` keeps the original Arc on the heap path,
+        // avoiding an allocation+copy for long strings.
+        Self(SmolStr::from(value))
+    }
+}
+
+impl From<&String> for SharedString {
+    fn from(value: &String) -> Self {
+        Self(SmolStr::from(value))
     }
 }
 
