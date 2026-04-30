@@ -843,7 +843,7 @@ impl X11Window {
         let state = ptr.state.borrow_mut();
         let icon = state.params.icon.clone();
         ptr.set_wm_properties(state)?;
-        
+
         let window = Self(ptr);
         if let Some(icon) = icon {
             window.set_window_icon(Some(icon));
@@ -1765,15 +1765,15 @@ impl PlatformWindow for X11Window {
 
     fn set_window_icon(&self, icon: Option<image::RgbaImage>) {
         let Some(image) = icon else { return };
-        
+
         let width = image.width();
         let height = image.height();
         let property_size = 2 + (width * height) as usize;
         let mut property_data: Vec<u32> = Vec::with_capacity(property_size);
-        
+
         property_data.push(width);
         property_data.push(height);
-        
+
         // _NET_WM_ICON expects each pixel as a 32-bit ARGB CARDINAL,
         // i.e. the integer value (A << 24) | (R << 16) | (G << 8) | B,
         // independent of host endianness.
@@ -1782,7 +1782,7 @@ impl PlatformWindow for X11Window {
             property_data
                 .push(((a as u32) << 24) | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32));
         }
-        
+
         check_reply(
             || "X11 set window icon failed.",
             self.0.xcb.change_property32(

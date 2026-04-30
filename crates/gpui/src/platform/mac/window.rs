@@ -2,7 +2,7 @@ use super::{
     BoolExt, MacDisplay, NSRange, NSStringExt, display_id_for_screen, ns_string, renderer,
 };
 use crate::{
-    AnyWindowHandle, Bounds, Capslock, DisplayLink, ExternalPaths, FileDropEvent,
+    AnyWindowHandle, Bounds, Capslock, CursorStyle, DisplayLink, ExternalPaths, FileDropEvent,
     ForegroundExecutor, KeyDownEvent, Keystroke, Modifiers, ModifiersChangedEvent, MouseButton,
     MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, PlatformAtlas, PlatformDisplay,
     PlatformInput, PlatformWindow, Point, PromptButton, PromptLevel, RequestFrameOptions,
@@ -349,6 +349,10 @@ unsafe fn build_classes() {
                     handle_view_event as extern "C" fn(&Object, Sel, id),
                 );
                 decl.add_method(
+                    sel!(resetCursorRects),
+                    reset_cursor_rects as extern "C" fn(&Object, Sel),
+                );
+                decl.add_method(
                     sel!(mouseExited:),
                     handle_view_event as extern "C" fn(&Object, Sel, id),
                 );
@@ -587,6 +591,8 @@ struct MacWindowState {
     native_window: id,
     native_view: NonNull<Object>,
     blurred_view: Option<id>,
+    cursor_style: CursorStyle,
+    cursor_hidden: bool,
     display_link: Option<DisplayLink>,
     renderer: renderer::Renderer,
     request_frame_callback: Option<Box<dyn FnMut(RequestFrameOptions)>>,
@@ -913,6 +919,8 @@ impl MacWindow {
                     native_window,
                     native_view: NonNull::new_unchecked(native_view),
                     blurred_view: None,
+                    cursor_style: CursorStyle::Arrow,
+                    cursor_hidden: false,
                     display_link: None,
                     renderer: renderer::new_renderer(
                         renderer_context,
@@ -1885,6 +1893,27 @@ impl PlatformWindow for MacWindow {
             }
         }
     }
+
+    fn set_cursor_style(&self, style: CursorStyle) {
+        let mut state = self.0.lock();
+        if state.cursor_style != style {
+            // If transitioning away from hidden cursor, unhide immediately rather than
+            // waiting for resetCursorRects, so other windows/apps aren't affected.
+            if state.cursor_hidden && !matches!(style, CursorStyle::None) {
+                unsafe {
+                    let _: () = msg_send![class!(NSCursor), unhide];
+                }
+                state.cursor_hidden = false;
+            }
+            state.cursor_style = style;
+            let native_window = state.native_window;
+            let native_view = state.native_view.as_ptr();
+            drop(state);
+            unsafe {
+                let _: () = msg_send![native_window, invalidateCursorRectsForView: native_view];
+            }
+        }
+    }
 }
 
 impl rwh::HasWindowHandle for MacWindow {
@@ -1957,8 +1986,90 @@ extern "C" fn dealloc_window(this: &Object, _: Sel) {
 
 extern "C" fn dealloc_view(this: &Object, _: Sel) {
     unsafe {
+        // If the cursor was hidden by this view, restore it before dealloc to prevent
+        // NSCursor's global hide count from leaking.
+        let window_state = get_window_state(this);
+        let mut state = window_state.lock();
+        if state.cursor_hidden {
+            let _: () = msg_send![class!(NSCursor), unhide];
+            state.cursor_hidden = false;
+        }
+        drop(state);
         drop_window_state(this);
         let _: () = msg_send![super(this, class!(NSView)), dealloc];
+    }
+}
+
+extern "C" fn reset_cursor_rects(this: &Object, _: Sel) {
+    // SAFETY: AppKit invokes cursor-rect updates on the main thread for GPUIView instances,
+    // whose WINDOW_STATE_IVAR is initialized when the view is created. The cursor registered
+    // below is a valid NSCursor.
+    unsafe {
+        let _: () = msg_send![super(this, class!(NSView)), resetCursorRects];
+
+        let window_state = get_window_state(this);
+        let cursor_style;
+        let cursor_hidden;
+
+        {
+            let mut window_state = window_state.lock();
+
+            if matches!(window_state.cursor_style, CursorStyle::None) {
+                if !window_state.cursor_hidden {
+                    let _: () = msg_send![class!(NSCursor), hide];
+                    window_state.cursor_hidden = true;
+                }
+                return;
+            }
+
+            cursor_style = window_state.cursor_style;
+            cursor_hidden = window_state.cursor_hidden;
+        };
+
+        let cursor: id = match cursor_style {
+            CursorStyle::Arrow => msg_send![class!(NSCursor), arrowCursor],
+            CursorStyle::IBeam => msg_send![class!(NSCursor), IBeamCursor],
+            CursorStyle::Crosshair => msg_send![class!(NSCursor), crosshairCursor],
+            CursorStyle::ClosedHand => msg_send![class!(NSCursor), closedHandCursor],
+            CursorStyle::OpenHand => msg_send![class!(NSCursor), openHandCursor],
+            CursorStyle::PointingHand => msg_send![class!(NSCursor), pointingHandCursor],
+            CursorStyle::ResizeLeftRight => msg_send![class!(NSCursor), resizeLeftRightCursor],
+            CursorStyle::ResizeUpDown => msg_send![class!(NSCursor), resizeUpDownCursor],
+            CursorStyle::ResizeLeft => msg_send![class!(NSCursor), resizeLeftCursor],
+            CursorStyle::ResizeRight => msg_send![class!(NSCursor), resizeRightCursor],
+            CursorStyle::ResizeColumn => msg_send![class!(NSCursor), resizeLeftRightCursor],
+            CursorStyle::ResizeRow => msg_send![class!(NSCursor), resizeUpDownCursor],
+            CursorStyle::ResizeUp => msg_send![class!(NSCursor), resizeUpCursor],
+            CursorStyle::ResizeDown => msg_send![class!(NSCursor), resizeDownCursor],
+
+            // Undocumented, private class methods:
+            // https://stackoverflow.com/questions/27242353/cocoa-predefined-resize-mouse-cursor
+            CursorStyle::ResizeUpLeftDownRight => {
+                msg_send![class!(NSCursor), _windowResizeNorthWestSouthEastCursor]
+            }
+            CursorStyle::ResizeUpRightDownLeft => {
+                msg_send![class!(NSCursor), _windowResizeNorthEastSouthWestCursor]
+            }
+
+            CursorStyle::IBeamCursorForVerticalLayout => {
+                msg_send![class!(NSCursor), IBeamCursorForVerticalLayout]
+            }
+            CursorStyle::OperationNotAllowed => {
+                msg_send![class!(NSCursor), operationNotAllowedCursor]
+            }
+            CursorStyle::DragLink => msg_send![class!(NSCursor), dragLinkCursor],
+            CursorStyle::DragCopy => msg_send![class!(NSCursor), dragCopyCursor],
+            CursorStyle::ContextualMenu => msg_send![class!(NSCursor), contextualMenuCursor],
+            CursorStyle::None => unreachable!(),
+        };
+
+        if cursor_hidden {
+            let _: () = msg_send![class!(NSCursor), unhide];
+            window_state.lock().cursor_hidden = false;
+        }
+
+        let bounds: NSRect = msg_send![this, bounds];
+        let _: () = msg_send![this, addCursorRect: bounds cursor: cursor];
     }
 }
 

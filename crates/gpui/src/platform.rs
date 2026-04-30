@@ -667,6 +667,8 @@ pub(crate) trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
     #[allow(dead_code)]
     fn set_window_icon(&self, _icon: Option<image::RgbaImage>) {}
 
+    fn set_cursor_style(&self, _style: CursorStyle) {}
+
     #[cfg(any(test, feature = "test-support"))]
     fn as_test(&mut self) -> Option<&mut TestWindow> {
         None
@@ -708,7 +710,7 @@ pub(crate) trait PlatformTextSystem: Send + Sync {
         raster_bounds: Bounds<DevicePixels>,
     ) -> Result<(Size<DevicePixels>, Vec<u8>)>;
     fn layout_line(&self, text: &str, font_size: Pixels, runs: &[FontRun]) -> LineLayout;
-    
+
     fn glyph_dilation_for_color(&self, _color: Hsla) -> u8 {
         0
     }

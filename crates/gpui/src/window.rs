@@ -499,6 +499,21 @@ impl HitboxId {
     ///
     /// See [`Hitbox::is_hovered`] for details.
     pub fn is_hovered(self, window: &Window) -> bool {
+        if window.last_input_was_keyboard() {
+            return false;
+        }
+        self.hit_test(window)
+    }
+
+    /// Checks if the hitbox with this ID is currently hovered, regardless of the last
+    /// input modality used.
+    ///
+    /// See [`HitboxId::is_hovered`] for more details.
+    pub(crate) fn is_hovered_ignoring_last_input(self, window: &Window) -> bool {
+        self.hit_test(window)
+    }
+
+    fn hit_test(self, window: &Window) -> bool {
         let hit_test = &window.mouse_hit_test;
         for id in hit_test.ids.iter().take(hit_test.hover_hitbox_count) {
             if self == *id {
@@ -766,9 +781,11 @@ impl Frame {
             .rev()
             .fold_while(None, |style, request| match request.hitbox_id {
                 None => Done(Some(request.style)),
-                Some(hitbox_id) => Continue(
-                    style.or_else(|| hitbox_id.is_hovered(window).then_some(request.style)),
-                ),
+                Some(hitbox_id) => Continue(style.or_else(|| {
+                    hitbox_id
+                        .is_hovered_ignoring_last_input(window)
+                        .then_some(request.style)
+                })),
             })
             .into_inner()
     }
@@ -1101,6 +1118,9 @@ impl Window {
                 handle
                     .update(&mut cx, |_, window, cx| {
                         if !active {
+                            // macOS: per-window to immediately unhide cursor if hidden.
+                            // Linux/Windows: platform-level handles it.
+                            window.platform_window.set_cursor_style(CursorStyle::Arrow);
                             cx.platform.set_cursor_style(CursorStyle::Arrow);
                         }
 
@@ -3568,6 +3588,12 @@ impl Window {
                 .rendered_frame
                 .cursor_style(self)
                 .unwrap_or(CursorStyle::Arrow);
+            // macOS: per-window call routes to the correct window (including panels/overlays)
+            // without relying on NSApp.mainWindow guessing.
+            // Linux/Windows: platform-level call handles cursor via their own focused-window logic.
+            // TODO: implement PlatformWindow::set_cursor_style on Linux/Windows and remove the
+            // platform-level call.
+            self.platform_window.set_cursor_style(style);
             cx.platform.set_cursor_style(style);
         }
     }
@@ -3713,7 +3739,7 @@ impl Window {
 
     fn dispatch_mouse_event(&mut self, event: &dyn Any, cx: &mut App) {
         self.last_input_was_keyboard.set(false);
-        
+
         let hit_test = self.rendered_frame.hit_test(self.mouse_position());
         if hit_test != self.mouse_hit_test {
             self.mouse_hit_test = hit_test;
@@ -3768,7 +3794,7 @@ impl Window {
 
     fn dispatch_key_event(&mut self, event: &dyn Any, cx: &mut App) {
         self.last_input_was_keyboard.set(true);
-        
+
         if self.invalidator.is_dirty() {
             self.draw(cx).clear();
         }

@@ -183,7 +183,7 @@ impl PlatformTextSystem for MacTextSystem {
     fn layout_line(&self, text: &str, font_size: Pixels, font_runs: &[FontRun]) -> LineLayout {
         self.0.write().layout_line(text, font_size, font_runs)
     }
-    
+
     fn glyph_dilation_for_color(&self, color: Hsla) -> u8 {
         // Rec. 709 luminance calculation on linearized sRGB.
         let rgba = crate::Rgba::from(color);

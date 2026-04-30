@@ -116,10 +116,8 @@ mod tests {
             ///////////////////////////////////////////////////
             // pasteboard.clearContents();
 
-            let rtfd_data = attr_string.RTFDFromRange_documentAttributes_(
-                NSRange::from(0..len),
-                nil,
-            );
+            let rtfd_data =
+                attr_string.RTFDFromRange_documentAttributes_(NSRange::from(0..len), nil);
             assert_ne!(rtfd_data, nil);
             // if rtfd_data != nil {
             //     pasteboard.setData_forType(rtfd_data, NSPasteboardTypeRTFD);
