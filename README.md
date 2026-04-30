@@ -8,14 +8,14 @@ A GPU-accelerated UI framework for Rust, forked from [Zed's GPUI](https://github
 ## Getting Started
 
 ```toml
-adabraka-gpui = "0.6.0"
+adabraka-gpui = "0.6.1"
 ```
 
 To trim image decoder footprint for downstream binaries, disable default features and list only the
 platform and image formats you need:
 
 ```toml
-adabraka-gpui = { version = "0.6.0", default-features = false, features = [
+adabraka-gpui = { version = "0.6.1", default-features = false, features = [
     "font-kit",
     "wayland",
     "x11",

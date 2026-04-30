@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.6.1 (2026-04-30)
+
+### Fixes
+
+- **Anchored element positioning** — fixed size calculation with negative coordinates that caused context menus and popups to appear at wrong locations (synced from Zed `b38194198b`)
+- **GIF rendering stability** — fixed out-of-bounds panic when replacing a GIF with one that has fewer frames (synced from Zed `749fcfdfd8`)
+
+### Documentation
+
+- Added comprehensive Zed sync documentation in `docs/sync/`:
+  - Complete mapping between Zed and Adabraka GPUI repositories
+  - Technical sync guide with code-level instructions
+  - Quick reference for daily sync operations
+  - Analysis of 100+ mergeable updates from Zed (2024-2026)
+
 ## 0.5.1 (2026-02-17)
 
 ### Performance
