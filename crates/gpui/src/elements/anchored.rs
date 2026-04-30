@@ -132,14 +132,13 @@ impl Element for Anchored {
             return;
         }
 
-        let mut child_min = point(Pixels::MAX, Pixels::MAX);
-        let mut child_max = Point::default();
-        for child_layout_id in &request_layout.child_layout_ids {
-            let child_bounds = window.layout_bounds(*child_layout_id);
-            child_min = child_min.min(&child_bounds.origin);
-            child_max = child_max.max(&child_bounds.bottom_right());
-        }
-        let size: Size<Pixels> = (child_max - child_min).into();
+        let children_bounds = request_layout
+            .child_layout_ids
+            .iter()
+            .map(|id| window.layout_bounds(*id))
+            .reduce(|acc, bounds| acc.union(&bounds))
+            .unwrap();
+        let size = children_bounds.size;
 
         let (origin, mut desired) = self.position_mode.get_position_and_bounds(
             self.anchor_position,

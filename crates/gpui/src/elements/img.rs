@@ -342,7 +342,7 @@ impl Element for Img {
                 })
             });
 
-            let frame_index = state.as_ref().map(|state| state.frame_index).unwrap_or(0);
+            let mut frame_index = state.as_ref().map(|state| state.frame_index).unwrap_or(0);
 
             let layout_id = self.interactivity.request_layout(
                 global_id,
@@ -360,8 +360,11 @@ impl Element for Img {
                         cx,
                     ) {
                         Some(Ok(data)) => {
+                            let frame_count = data.frame_count();
+                            let max_frame_index = frame_count.saturating_sub(1);
+
                             if let Some(state) = &mut state {
-                                let frame_count = data.frame_count();
+                                state.frame_index = state.frame_index.min(max_frame_index);
                                 if frame_count > 1 {
                                     let current_time = Instant::now();
                                     if let Some(last_frame_time) = state.last_frame_time {
@@ -378,8 +381,11 @@ impl Element for Img {
                                     } else {
                                         state.last_frame_time = Some(current_time);
                                     }
+                                } else {
+                                    state.last_frame_time = None;
                                 }
                                 state.started_loading = None;
+                                frame_index = state.frame_index;
                             }
 
                             let image_size = data.render_size(frame_index);
