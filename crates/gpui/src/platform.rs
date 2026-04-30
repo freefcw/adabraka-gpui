@@ -42,10 +42,10 @@ pub(crate) mod scap_screen_capture;
 use crate::{
     Action, AnyWindowHandle, App, AsyncWindowContext, BackgroundExecutor, Bounds,
     DEFAULT_WINDOW_SIZE, DevicePixels, DispatchEventResult, Font, FontId, FontMetrics, FontRun,
-    ForegroundExecutor, GlyphId, GpuSpecs, ImageSource, Keymap, LineLayout, Pixels, PlatformInput,
-    Point, RenderGlyphParams, RenderImage, RenderImageParams, RenderSvgParams, Scene, ShapedGlyph,
-    ShapedRun, SharedString, Size, SvgRenderer, SvgSize, SystemWindowTab, Task, TaskLabel, Window,
-    WindowControlArea, hash, point, px, size,
+    ForegroundExecutor, GlyphId, GpuSpecs, Hsla, ImageSource, Keymap, LineLayout, Pixels,
+    PlatformInput, Point, RenderGlyphParams, RenderImage, RenderImageParams, RenderSvgParams,
+    Scene, ShapedGlyph, ShapedRun, SharedString, Size, SvgRenderer, SvgSize, SystemWindowTab, Task,
+    TaskLabel, Window, WindowControlArea, hash, point, px, size,
 };
 use anyhow::Result;
 use async_task::Runnable;
@@ -708,6 +708,10 @@ pub(crate) trait PlatformTextSystem: Send + Sync {
         raster_bounds: Bounds<DevicePixels>,
     ) -> Result<(Size<DevicePixels>, Vec<u8>)>;
     fn layout_line(&self, text: &str, font_size: Pixels, runs: &[FontRun]) -> LineLayout;
+    
+    fn glyph_dilation_for_color(&self, _color: Hsla) -> u8 {
+        0
+    }
 }
 
 pub(crate) struct NoopTextSystem;

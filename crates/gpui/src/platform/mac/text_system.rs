@@ -1,6 +1,6 @@
 use crate::{
     Bounds, DevicePixels, Font, FontFallbacks, FontFeatures, FontId, FontMetrics, FontRun,
-    FontStyle, FontWeight, GlyphId, LineLayout, Pixels, PlatformTextSystem, Point,
+    FontStyle, FontWeight, GlyphId, Hsla, LineLayout, Pixels, PlatformTextSystem, Point,
     RenderGlyphParams, Result, SUBPIXEL_VARIANTS_X, ShapedGlyph, ShapedRun, SharedString, Size,
     point, px, size, swap_rgba_pa_to_bgra,
 };
@@ -182,6 +182,14 @@ impl PlatformTextSystem for MacTextSystem {
 
     fn layout_line(&self, text: &str, font_size: Pixels, font_runs: &[FontRun]) -> LineLayout {
         self.0.write().layout_line(text, font_size, font_runs)
+    }
+    
+    fn glyph_dilation_for_color(&self, color: Hsla) -> u8 {
+        // Rec. 709 luminance calculation on linearized sRGB.
+        let rgba = crate::Rgba::from(color);
+        let luminance = 0.2126 * rgba.r + 0.7152 * rgba.g + 0.0722 * rgba.b;
+        // Simplified 2-level dilation: 0 for dark, 1 for light
+        if luminance > 0.5 { 1 } else { 0 }
     }
 }
 
