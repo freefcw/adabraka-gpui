@@ -864,6 +864,7 @@ pub struct Window {
     hovered: Rc<Cell<bool>>,
     pub(crate) needs_present: Rc<Cell<bool>>,
     pub(crate) last_input_timestamp: Rc<Cell<Instant>>,
+    pub(crate) last_input_was_keyboard: Cell<bool>,
     pub(crate) refreshing: bool,
     pub(crate) activation_observers: SubscriberSet<(), AnyObserver>,
     pub(crate) focus: Option<FocusId>,
@@ -1255,6 +1256,7 @@ impl Window {
             hovered,
             needs_present,
             last_input_timestamp,
+            last_input_was_keyboard: Cell::new(false),
             refreshing: false,
             activation_observers: SubscriberSet::new(),
             focus: None,
@@ -1744,6 +1746,12 @@ impl Window {
         } else {
             self.is_window_active()
         }
+    }
+
+    /// Returns whether the last input was from the keyboard.
+    /// This is useful for determining cursor visibility behavior.
+    pub fn last_input_was_keyboard(&self) -> bool {
+        self.last_input_was_keyboard.get()
     }
 
     /// Toggle zoom on the window.
@@ -3704,6 +3712,8 @@ impl Window {
     }
 
     fn dispatch_mouse_event(&mut self, event: &dyn Any, cx: &mut App) {
+        self.last_input_was_keyboard.set(false);
+        
         let hit_test = self.rendered_frame.hit_test(self.mouse_position());
         if hit_test != self.mouse_hit_test {
             self.mouse_hit_test = hit_test;
@@ -3757,6 +3767,8 @@ impl Window {
     }
 
     fn dispatch_key_event(&mut self, event: &dyn Any, cx: &mut App) {
+        self.last_input_was_keyboard.set(true);
+        
         if self.invalidator.is_dirty() {
             self.draw(cx).clear();
         }
