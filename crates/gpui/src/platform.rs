@@ -993,7 +993,7 @@ impl PlatformInputHandler {
     }
 
     fn mark_keyboard_input(window: &Window) {
-        window.last_input_timestamp.set(Instant::now());
+        window.input_rate_tracker.borrow_mut().record_input();
         window.last_input_was_keyboard.set(true);
     }
 
@@ -1086,7 +1086,9 @@ impl PlatformInputHandler {
     }
 
     pub(crate) fn dispatch_input(&mut self, input: &str, window: &mut Window, cx: &mut App) {
-        Self::mark_keyboard_input(window);
+        // Note: record_input() is already called by dispatch_event for the key event
+        // that triggered this text insertion, so we only update last_input_was_keyboard here.
+        window.last_input_was_keyboard.set(true);
         self.handler.replace_text_in_range(None, input, window, cx);
     }
 

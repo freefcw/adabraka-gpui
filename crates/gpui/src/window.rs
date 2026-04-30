@@ -833,6 +833,46 @@ impl Frame {
     }
 }
 
+/// Tracks input event timestamps to determine if input is arriving at a high rate.
+/// Used to sustain VRR (Variable Refresh Rate) presentation during active input.
+#[derive(Clone, Debug)]
+pub(crate) struct InputRateTracker {
+    timestamps: Vec<Instant>,
+    window: Duration,
+    inputs_per_second: u32,
+    sustain_until: Instant,
+    sustain_duration: Duration,
+}
+
+impl Default for InputRateTracker {
+    fn default() -> Self {
+        Self {
+            timestamps: Vec::new(),
+            window: Duration::from_millis(100),
+            inputs_per_second: 60,
+            sustain_until: Instant::now(),
+            sustain_duration: Duration::from_secs(1),
+        }
+    }
+}
+
+impl InputRateTracker {
+    pub fn record_input(&mut self) {
+        let now = Instant::now();
+        self.timestamps.push(now);
+        self.timestamps
+            .retain(|&t| now.duration_since(t) <= self.window);
+        let min_events = self.inputs_per_second as u128 * self.window.as_millis() / 1000;
+        if self.timestamps.len() as u128 >= min_events {
+            self.sustain_until = now + self.sustain_duration;
+        }
+    }
+
+    pub fn is_high_rate(&self) -> bool {
+        Instant::now() < self.sustain_until
+    }
+}
+
 /// Holds the state for a specific window.
 pub struct Window {
     pub(crate) handle: AnyWindowHandle,
@@ -880,7 +920,9 @@ pub struct Window {
     active: Rc<Cell<bool>>,
     hovered: Rc<Cell<bool>>,
     pub(crate) needs_present: Rc<Cell<bool>>,
-    pub(crate) last_input_timestamp: Rc<Cell<Instant>>,
+    pub(crate) input_rate_tracker: Rc<RefCell<InputRateTracker>>,
+    #[allow(dead_code)]
+    pub(crate) last_frame_time: Rc<Cell<Option<Instant>>>,
     pub(crate) last_input_was_keyboard: Cell<bool>,
     pub(crate) refreshing: bool,
     pub(crate) activation_observers: SubscriberSet<(), AnyObserver>,
@@ -1014,7 +1056,8 @@ impl Window {
         let hovered = Rc::new(Cell::new(platform_window.is_hovered()));
         let needs_present = Rc::new(Cell::new(false));
         let next_frame_callbacks: Rc<RefCell<Vec<FrameCallback>>> = Default::default();
-        let last_input_timestamp = Rc::new(Cell::new(Instant::now()));
+        let input_rate_tracker = Rc::new(RefCell::new(InputRateTracker::default()));
+        let last_frame_time = Rc::new(Cell::new(None::<Instant>));
 
         platform_window
             .request_decorations(window_decorations.unwrap_or(WindowDecorations::Server));
@@ -1044,8 +1087,33 @@ impl Window {
             let active = active.clone();
             let needs_present = needs_present.clone();
             let next_frame_callbacks = next_frame_callbacks.clone();
-            let last_input_timestamp = last_input_timestamp.clone();
+            let input_rate_tracker = input_rate_tracker.clone();
+            let last_frame_time = last_frame_time.clone();
             move |request_frame_options| {
+                // Throttle frame rate for inactive windows to ~30fps to save energy.
+                // force_render and require_presentation always bypass throttling.
+                let min_frame_interval =
+                    if request_frame_options.force_render || request_frame_options.require_presentation {
+                        None
+                    } else if !active.get() {
+                        Some(Duration::from_micros(33333))
+                    } else {
+                        None
+                    };
+
+                let now = Instant::now();
+                if let Some(min_interval) = min_frame_interval {
+                    if let Some(last_frame) = last_frame_time.get() {
+                        if now.duration_since(last_frame) < min_interval {
+                            handle
+                                .update(&mut cx, |_, window, _| window.complete_frame())
+                                .log_err();
+                            return;
+                        }
+                    }
+                }
+                last_frame_time.set(Some(now));
+
                 let next_frame_callbacks = next_frame_callbacks.take();
                 if !next_frame_callbacks.is_empty() {
                     handle
@@ -1057,12 +1125,10 @@ impl Window {
                         .log_err();
                 }
 
-                // Keep presenting the current scene for 1 extra second since the
-                // last input to prevent the display from underclocking the refresh rate.
+                // Keep presenting if input was recently arriving at a high rate (>= 60fps).
                 let needs_present = request_frame_options.require_presentation
                     || needs_present.get()
-                    || (active.get()
-                        && last_input_timestamp.get().elapsed() < Duration::from_secs(1));
+                    || (active.get() && input_rate_tracker.borrow_mut().is_high_rate());
 
                 if invalidator.is_dirty() || request_frame_options.force_render {
                     measure("frame duration", || {
@@ -1275,7 +1341,8 @@ impl Window {
             active,
             hovered,
             needs_present,
-            last_input_timestamp,
+            input_rate_tracker,
+            last_frame_time,
             last_input_was_keyboard: Cell::new(false),
             refreshing: false,
             activation_observers: SubscriberSet::new(),
@@ -3642,7 +3709,6 @@ impl Window {
     /// Dispatch a mouse or keyboard event on the window.
     #[profiling::function]
     pub fn dispatch_event(&mut self, event: PlatformInput, cx: &mut App) -> DispatchEventResult {
-        self.last_input_timestamp.set(Instant::now());
         // Handlers may set this to false by calling `stop_propagation`.
         cx.propagate_event = true;
         // Handlers may set this to true by calling `prevent_default`.
@@ -3730,6 +3796,8 @@ impl Window {
         } else if let Some(any_key_event) = event.keyboard_event() {
             self.dispatch_key_event(any_key_event, cx);
         }
+
+        self.input_rate_tracker.borrow_mut().record_input();
 
         DispatchEventResult {
             propagate: cx.propagate_event,
