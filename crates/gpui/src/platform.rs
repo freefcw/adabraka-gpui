@@ -990,6 +990,11 @@ impl PlatformInputHandler {
         Self { cx, handler }
     }
 
+    fn mark_keyboard_input(window: &Window) {
+        window.last_input_timestamp.set(Instant::now());
+        window.last_input_was_keyboard.set(true);
+    }
+
     fn selected_text_range(&mut self, ignore_disabled_input: bool) -> Option<UTF16Selection> {
         self.cx
             .update(|window, cx| {
@@ -1029,6 +1034,7 @@ impl PlatformInputHandler {
     fn replace_text_in_range(&mut self, replacement_range: Option<Range<usize>>, text: &str) {
         self.cx
             .update(|window, cx| {
+                Self::mark_keyboard_input(window);
                 self.handler
                     .replace_text_in_range(replacement_range, text, window, cx);
             })
@@ -1043,6 +1049,7 @@ impl PlatformInputHandler {
     ) {
         self.cx
             .update(|window, cx| {
+                Self::mark_keyboard_input(window);
                 self.handler.replace_and_mark_text_in_range(
                     range_utf16,
                     new_text,
@@ -1057,7 +1064,10 @@ impl PlatformInputHandler {
     #[cfg_attr(target_os = "windows", allow(dead_code))]
     fn unmark_text(&mut self) {
         self.cx
-            .update(|window, cx| self.handler.unmark_text(window, cx))
+            .update(|window, cx| {
+                Self::mark_keyboard_input(window);
+                self.handler.unmark_text(window, cx)
+            })
             .ok();
     }
 
@@ -1074,6 +1084,7 @@ impl PlatformInputHandler {
     }
 
     pub(crate) fn dispatch_input(&mut self, input: &str, window: &mut Window, cx: &mut App) {
+        Self::mark_keyboard_input(window);
         self.handler.replace_text_in_range(None, input, window, cx);
     }
 
