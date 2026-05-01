@@ -34,6 +34,18 @@ pub mod x11 {
     use x11rb::protocol::xproto::{self, ConnectionExt as _, GrabMode, ModMask};
     use x11rb::xcb_ffi::XCBConnection;
 
+    const LOCK_MODMASK: u16 = 0x0002;
+    const NUM_LOCK_MODMASK: u16 = 0x0010;
+
+    fn modmask_with_lock_variants(modmask: u16) -> [u16; 4] {
+        [
+            modmask,
+            modmask | LOCK_MODMASK,
+            modmask | NUM_LOCK_MODMASK,
+            modmask | LOCK_MODMASK | NUM_LOCK_MODMASK,
+        ]
+    }
+
     fn keystroke_to_x11_modmask(keystroke: &Keystroke) -> u16 {
         let mut mask = 0u16;
         if keystroke.modifiers.control {
@@ -186,15 +198,26 @@ pub mod x11 {
             })?;
             let modmask = keystroke_to_x11_modmask(keystroke);
 
-            xcb.grab_key(
-                false,
-                root_window,
-                modmask.into(),
-                keycode,
-                GrabMode::ASYNC,
-                GrabMode::ASYNC,
-            )?
-            .check()?;
+            let mut registered_modmasks = Vec::new();
+            for modmask_variant in modmask_with_lock_variants(modmask) {
+                if let Err(err) = xcb
+                    .grab_key(
+                        false,
+                        root_window,
+                        modmask_variant.into(),
+                        keycode,
+                        GrabMode::ASYNC,
+                        GrabMode::ASYNC,
+                    )?
+                    .check()
+                {
+                    for registered_modmask in registered_modmasks {
+                        let _ = xcb.ungrab_key(keycode, root_window, registered_modmask.into());
+                    }
+                    return Err(err.into());
+                }
+                registered_modmasks.push(modmask_variant);
+            }
 
             self.keycodes.insert(id, (keycode, modmask));
             self.inner.register(id, keystroke)
@@ -207,7 +230,9 @@ pub mod x11 {
             root_window: xproto::Window,
         ) {
             if let Some((keycode, modmask)) = self.keycodes.remove(&id) {
-                let _ = xcb.ungrab_key(keycode, root_window, modmask.into());
+                for modmask_variant in modmask_with_lock_variants(modmask) {
+                    let _ = xcb.ungrab_key(keycode, root_window, modmask_variant.into());
+                }
             }
             self.inner.unregister(id);
         }
