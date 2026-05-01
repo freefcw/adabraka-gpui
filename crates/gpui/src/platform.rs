@@ -294,7 +294,10 @@ pub(crate) trait Platform: 'static {
     fn get_tray_icon_bounds(&self) -> Option<Bounds<Pixels>> {
         None
     }
-    fn on_tray_icon_event(&self, _callback: Box<dyn FnMut(TrayIconEvent)>) {}
+    fn on_tray_icon_event(&self, mut callback: Box<dyn FnMut(TrayIconEvent)>) {
+        self.on_tray_icon_click_event(Box::new(move |event| callback(event.kind)));
+    }
+    fn on_tray_icon_click_event(&self, _callback: Box<dyn FnMut(TrayIconClickEvent)>) {}
     fn on_tray_menu_action(&self, _callback: Box<dyn FnMut(SharedString)>) {}
 
     fn register_global_hotkey(&self, _id: u32, _keystroke: &Keystroke) -> Result<()> {
@@ -1500,6 +1503,38 @@ pub enum TrayIconEvent {
     RightClick,
     /// The user double-clicked the tray icon.
     DoubleClick,
+}
+
+/// A tray icon click event with optional screen position information.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TrayIconClickEvent {
+    /// The kind of click that occurred.
+    pub kind: TrayIconEvent,
+    /// The click position in GPUI logical screen coordinates, if the platform provides it.
+    ///
+    /// Linux StatusNotifierItem provides a raw screen-coordinate hint; GPUI
+    /// converts that hint through the active display scale before exposing it.
+    /// On Wayland fractional scaling, the hint has no surface association, so
+    /// conversion uses the integer output scale and may remain approximate.
+    pub position: Option<Point<Pixels>>,
+}
+
+impl TrayIconClickEvent {
+    /// Create a tray click event without position information.
+    pub fn new(kind: TrayIconEvent) -> Self {
+        Self {
+            kind,
+            position: None,
+        }
+    }
+
+    /// Create a tray click event with a logical screen-coordinate hint.
+    pub fn with_position(kind: TrayIconEvent, position: Point<Pixels>) -> Self {
+        Self {
+            kind,
+            position: Some(position),
+        }
+    }
 }
 
 #[allow(missing_docs)]

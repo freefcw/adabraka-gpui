@@ -55,8 +55,9 @@ use crate::platform::{
         DEFAULT_CURSOR_ICON_NAME, LinuxClient, get_xkb_compose_state, is_within_click_distance,
         log_cursor_icon_warning, open_uri_internal,
         platform::{
-            DOUBLE_CLICK_INTERVAL, LinuxTrayEventTarget, SCROLL_LINES, TrayIconEventCallback,
-            TrayMenuActionCallback, install_linux_tray_event_source,
+            DOUBLE_CLICK_INTERVAL, LinuxTrayClickEvent, LinuxTrayEventTarget, SCROLL_LINES,
+            TrayIconClickEventCallback, TrayIconEventCallback, TrayMenuActionCallback,
+            install_linux_tray_event_source,
         },
         reveal_path_internal,
         xdg_desktop_portal::{Event as XDPEvent, XDPEventSource},
@@ -66,7 +67,8 @@ use crate::{
     AnyWindowHandle, Bounds, ClipboardItem, CursorStyle, DisplayId, FileDropEvent, Keystroke,
     LinuxKeyboardLayout, Modifiers, ModifiersChangedEvent, MouseButton, Pixels, Platform,
     PlatformDisplay, PlatformInput, PlatformKeyboardLayout, Point, RequestFrameOptions,
-    ScrollDelta, Size, TouchPhase, WindowParams, X11Window, modifiers_from_xinput_info, point, px,
+    ScrollDelta, Size, TouchPhase, TrayIconClickEvent, WindowParams, X11Window,
+    modifiers_from_xinput_info, point, px,
 };
 
 /// Value for DeviceId parameters which selects all devices.
@@ -224,12 +226,31 @@ pub struct X11ClientState {
 }
 
 impl LinuxTrayEventTarget for X11ClientState {
+    fn convert_tray_click_event(&self, event: LinuxTrayClickEvent) -> TrayIconClickEvent {
+        let scale_factor = self.scale_factor;
+        TrayIconClickEvent::with_position(
+            event.kind,
+            point(
+                px(event.position.x.0 as f32 / scale_factor),
+                px(event.position.y.0 as f32 / scale_factor),
+            ),
+        )
+    }
+
     fn take_tray_icon_event_callback(&mut self) -> Option<TrayIconEventCallback> {
         self.common.callbacks.tray_icon_event.take()
     }
 
     fn restore_tray_icon_event_callback(&mut self, callback: TrayIconEventCallback) {
         self.common.callbacks.tray_icon_event = Some(callback);
+    }
+
+    fn take_tray_icon_click_event_callback(&mut self) -> Option<TrayIconClickEventCallback> {
+        self.common.callbacks.tray_icon_click_event.take()
+    }
+
+    fn restore_tray_icon_click_event_callback(&mut self, callback: TrayIconClickEventCallback) {
+        self.common.callbacks.tray_icon_click_event = Some(callback);
     }
 
     fn take_tray_menu_action_callback(&mut self) -> Option<TrayMenuActionCallback> {

@@ -336,6 +336,11 @@ impl TestAppContext {
         self.test_platform.tray_icon_rendering_mode()
     }
 
+    /// Simulates a system tray icon click event.
+    pub fn simulate_tray_icon_click_event(&self, event: crate::TrayIconClickEvent) {
+        self.test_platform.simulate_tray_icon_click_event(event);
+    }
+
     /// Simulates the user resizing the window to the new size.
     pub fn simulate_window_resize(&self, window_handle: AnyWindowHandle, size: Size<Pixels>) {
         self.test_window(window_handle).simulate_resize(size);

@@ -77,15 +77,15 @@ use crate::{
     LinuxKeyboardLayout, Modifiers, ModifiersChangedEvent, MouseButton, MouseDownEvent,
     MouseExitEvent, MouseMoveEvent, MouseUpEvent, NavigationDirection, Pixels, PlatformDisplay,
     PlatformInput, PlatformKeyboardLayout, Point, SCROLL_LINES, ScrollDelta, ScrollWheelEvent,
-    Size, TouchPhase, WindowParams, point, px, size,
+    Size, TouchPhase, TrayIconClickEvent, WindowParams, point, px, size,
 };
 use crate::{
     SharedString,
     platform::linux::{
         LinuxClient, get_xkb_compose_state, is_within_click_distance, open_uri_internal,
         platform::{
-            LinuxTrayEventTarget, TrayIconEventCallback, TrayMenuActionCallback,
-            install_linux_tray_event_source,
+            LinuxTrayClickEvent, LinuxTrayEventTarget, TrayIconClickEventCallback,
+            TrayIconEventCallback, TrayMenuActionCallback, install_linux_tray_event_source,
         },
         read_fd, reveal_path_internal,
         wayland::{
@@ -245,12 +245,40 @@ pub(crate) struct WaylandClientState {
 }
 
 impl LinuxTrayEventTarget for WaylandClientState {
+    fn convert_tray_click_event(&self, event: LinuxTrayClickEvent) -> TrayIconClickEvent {
+        // SNI gives a screen-coordinate hint without an associated Wayland
+        // surface. That lets us use wl_output.scale, but not per-surface
+        // fractional-scale state, so fractional scaling remains approximate.
+        let scale_factor = self
+            .outputs
+            .values()
+            .find(|output| output.bounds.contains(&event.position))
+            .map(|output| output.scale as f32)
+            .unwrap_or(1.0);
+
+        TrayIconClickEvent::with_position(
+            event.kind,
+            point(
+                px(event.position.x.0 as f32 / scale_factor),
+                px(event.position.y.0 as f32 / scale_factor),
+            ),
+        )
+    }
+
     fn take_tray_icon_event_callback(&mut self) -> Option<TrayIconEventCallback> {
         self.common.callbacks.tray_icon_event.take()
     }
 
     fn restore_tray_icon_event_callback(&mut self, callback: TrayIconEventCallback) {
         self.common.callbacks.tray_icon_event = Some(callback);
+    }
+
+    fn take_tray_icon_click_event_callback(&mut self) -> Option<TrayIconClickEventCallback> {
+        self.common.callbacks.tray_icon_click_event.take()
+    }
+
+    fn restore_tray_icon_click_event_callback(&mut self, callback: TrayIconClickEventCallback) {
+        self.common.callbacks.tray_icon_click_event = Some(callback);
     }
 
     fn take_tray_menu_action_callback(&mut self) -> Option<TrayMenuActionCallback> {

@@ -80,6 +80,7 @@ struct PlatformCallbacks {
     validate_app_menu_command: Option<Box<dyn FnMut(&dyn Action) -> bool>>,
     keyboard_layout_change: Option<Box<dyn FnMut()>>,
     tray_icon_event: Option<Box<dyn FnMut(TrayIconEvent)>>,
+    tray_icon_click_event: Option<Box<dyn FnMut(TrayIconClickEvent)>>,
     tray_menu_action: Option<Box<dyn FnMut(SharedString)>>,
     global_hotkey: Option<Box<dyn FnMut(u32)>>,
     system_power: Option<Box<dyn FnMut(SystemPowerEvent)>>,
@@ -742,6 +743,11 @@ impl Platform for WindowsPlatform {
         state.callbacks.tray_icon_event = Some(callback);
     }
 
+    fn on_tray_icon_click_event(&self, callback: Box<dyn FnMut(TrayIconClickEvent)>) {
+        let mut state = self.inner.state.borrow_mut();
+        state.callbacks.tray_icon_click_event = Some(callback);
+    }
+
     fn on_tray_menu_action(&self, callback: Box<dyn FnMut(SharedString)>) {
         let mut state = self.inner.state.borrow_mut();
         state.callbacks.tray_menu_action = Some(callback);
@@ -1079,11 +1085,22 @@ impl WindowsPlatformInner {
                 }
                 self.state.borrow_mut().tray = tray;
             }
-            let mut callback = self.state.borrow_mut().callbacks.tray_icon_event.take();
-            if let Some(ref mut cb) = callback {
-                cb(event);
+            let mut state = self.state.borrow_mut();
+            let mut event_callback = state.callbacks.tray_icon_event.take();
+            let mut click_callback = state.callbacks.tray_icon_click_event.take();
+            drop(state);
+
+            let click_event = TrayIconClickEvent::new(event);
+            if let Some(ref mut callback) = event_callback {
+                callback(click_event.kind.clone());
             }
-            self.state.borrow_mut().callbacks.tray_icon_event = callback;
+            if let Some(ref mut callback) = click_callback {
+                callback(click_event);
+            }
+
+            let mut state = self.state.borrow_mut();
+            state.callbacks.tray_icon_event = event_callback;
+            state.callbacks.tray_icon_click_event = click_callback;
         }
         Some(0)
     }

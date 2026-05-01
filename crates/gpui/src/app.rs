@@ -43,10 +43,10 @@ use crate::{
     PlatformKeyboardMapper, Point, PowerSaveBlockerKind, PromptBuilder, PromptButton, PromptHandle,
     PromptLevel, Render, RenderImage, RenderablePromptHandle, Reservation, ScreenCaptureSource,
     SharedString, Size, SubscriberSet, Subscription, SvgRenderer, SystemPowerEvent, Task,
-    TextSystem, TrayAnchor, TrayIconEvent, TrayIconRenderingMode, TrayMenuItem, Window,
-    WindowAppearance, WindowHandle, WindowId, WindowInvalidator, WindowPosition,
+    TextSystem, TrayAnchor, TrayIconClickEvent, TrayIconEvent, TrayIconRenderingMode, TrayMenuItem,
+    Window, WindowAppearance, WindowHandle, WindowId, WindowInvalidator, WindowPosition,
     colors::{Colors, GlobalColors},
-    current_platform, hash, init_app_menus,
+    current_platform, hash, init_app_menus, point, px, size,
 };
 
 mod async_context;
@@ -1037,6 +1037,37 @@ impl App {
         self.platform.get_tray_icon_bounds()
     }
 
+    /// Build an approximate tray anchor from a screen position.
+    ///
+    /// This is useful on Linux StatusNotifierItem hosts, where click events
+    /// provide a logical screen-coordinate hint but not the actual tray icon
+    /// bounds. If the hint falls outside known displays, the primary display is
+    /// used as a best-effort fallback so callers can still fall back from
+    /// `WindowPosition::TrayAnchored` to a corner position if needed.
+    pub fn tray_anchor_for_position(&self, position: Point<Pixels>) -> Option<TrayAnchor> {
+        // This is a logical-size approximation of a tray icon, not a measured
+        // host icon size. Linux SNI does not expose the actual icon bounds.
+        const APPROXIMATE_TRAY_ICON_SIZE: Pixels = px(24.0);
+
+        let displays = self.displays();
+        let display = displays
+            .iter()
+            .find(|display| display.bounds().contains(&position))
+            .cloned()
+            .or_else(|| self.primary_display())?;
+        let display_bounds = display.bounds();
+        let half_size = APPROXIMATE_TRAY_ICON_SIZE * 0.5;
+        let local_position = position - display_bounds.origin;
+
+        Some(TrayAnchor {
+            display_id: display.id(),
+            bounds: Bounds::new(
+                point(local_position.x - half_size, local_position.y - half_size),
+                size(APPROXIMATE_TRAY_ICON_SIZE, APPROXIMATE_TRAY_ICON_SIZE),
+            ),
+        })
+    }
+
     /// Register a callback for system tray icon events.
     pub fn on_tray_icon_event(&self, mut callback: impl FnMut(TrayIconEvent, &mut App) + 'static) {
         let this = self.this.clone();
@@ -1045,6 +1076,20 @@ impl App {
                 callback(event, &mut app.borrow_mut());
             }
         }));
+    }
+
+    /// Register a callback for system tray icon click events with optional position information.
+    pub fn on_tray_icon_click_event(
+        &self,
+        mut callback: impl FnMut(TrayIconClickEvent, &mut App) + 'static,
+    ) {
+        let this = self.this.clone();
+        self.platform
+            .on_tray_icon_click_event(Box::new(move |event| {
+                if let Some(app) = this.upgrade() {
+                    callback(event, &mut app.borrow_mut());
+                }
+            }));
     }
 
     /// Register a callback for when a tray menu item is clicked.
@@ -2721,7 +2766,10 @@ impl<'a, T> Drop for GpuiBorrow<'a, T> {
 mod test {
     use std::{cell::RefCell, rc::Rc};
 
-    use crate::{AppContext, TestAppContext, TrayIconRenderingMode};
+    use crate::{
+        AppContext, TestAppContext, TrayIconClickEvent, TrayIconEvent, TrayIconRenderingMode,
+        point, px,
+    };
 
     #[test]
     fn test_gpui_borrow() {
@@ -2814,5 +2862,54 @@ mod test {
             second.tray_icon_rendering_mode(),
             TrayIconRenderingMode::Original
         );
+    }
+
+    #[test]
+    fn test_tray_icon_click_event_keeps_legacy_callback_compatible() {
+        let cx = TestAppContext::single();
+        let legacy_event = Rc::new(RefCell::new(None));
+        let click_event = Rc::new(RefCell::new(None));
+
+        cx.update({
+            let legacy_event = legacy_event.clone();
+            let click_event = click_event.clone();
+            |cx| {
+                cx.on_tray_icon_event(move |event, _| {
+                    *legacy_event.borrow_mut() = Some(event);
+                });
+                cx.on_tray_icon_click_event(move |event, _| {
+                    *click_event.borrow_mut() = Some(event);
+                });
+            }
+        });
+
+        let event =
+            TrayIconClickEvent::with_position(TrayIconEvent::LeftClick, point(px(120.0), px(24.0)));
+        cx.simulate_tray_icon_click_event(event.clone());
+
+        assert_eq!(*legacy_event.borrow(), Some(TrayIconEvent::LeftClick));
+        assert_eq!(*click_event.borrow(), Some(event));
+    }
+
+    #[test]
+    fn test_tray_anchor_for_position_uses_display_local_bounds() {
+        let cx = TestAppContext::single();
+        let anchor = cx.update(|cx| cx.tray_anchor_for_position(point(px(120.0), px(24.0))));
+        let anchor = anchor.expect("expected tray anchor");
+
+        assert_eq!(anchor.display_id.0, 1);
+        assert_eq!(anchor.bounds.origin, point(px(108.0), px(12.0)));
+        assert_eq!(anchor.bounds.size.width, px(24.0));
+        assert_eq!(anchor.bounds.size.height, px(24.0));
+    }
+
+    #[test]
+    fn test_tray_anchor_for_position_keeps_out_of_display_hint() {
+        let cx = TestAppContext::single();
+        let anchor = cx.update(|cx| cx.tray_anchor_for_position(point(px(-20.0), px(10.0))));
+        let anchor = anchor.expect("expected tray anchor");
+
+        assert_eq!(anchor.display_id.0, 1);
+        assert_eq!(anchor.bounds.origin, point(px(-32.0), px(-2.0)));
     }
 }

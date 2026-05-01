@@ -48,6 +48,8 @@
 - **v0.6.0**: 图标渲染模式控制（Adaptive/Original）
 - **v0.6.0**: GNOME AppIndicator 显示修复（设置 SNI id）
 - **v0.6.0**: 升级 ksni 0.2→0.3.4，修复 GNOME 点击行为
+- Linux 托盘定位使用 StatusNotifierItem `activate(x, y)` 的屏幕坐标 hint 近似生成 `TrayAnchor`；该 hint 不是托盘图标真实 bounds。
+- HiDPI 下会按显示器 scale 将 Linux 原始坐标转换为 GPUI 逻辑 `Pixels`；Wayland fractional scaling 因缺少关联 surface，只能使用 `wl_output.scale` 近似转换。
 
 ### 全局热键 (v0.4.0)
 - **Commit**: 3be75a6, bea2896, 72c044d, 7746069

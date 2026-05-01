@@ -32,6 +32,11 @@
 - Linux: ksni (DBus StatusNotifierItem)
 - Windows: Shell_NotifyIconW
 
+**Linux 定位限制**:
+- StatusNotifierItem 的 `activate(x, y)` 坐标是托盘宿主提供的屏幕坐标 hint，不是图标真实 bounds。
+- GPUI 会把 Linux 原始坐标按显示器 scale 转换为逻辑 `Pixels`，再用于 `TrayAnchor` 近似定位。
+- Wayland fractional scaling 下，SNI hint 没有关联的 Wayland surface，只能使用 `wl_output.scale` 做近似转换，不能精确使用 per-surface fractional scale。
+
 ### 3. 全局热键 (v0.4.0)
 **状态**: ✅ Adabraka 独有
 
