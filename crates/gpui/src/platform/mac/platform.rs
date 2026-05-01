@@ -3,6 +3,7 @@ use super::{
     MacKeyboardLayout, MacKeyboardMapper, NSRange as PlatformNSRange,
     attributed_string::{NSAttributedString, NSMutableAttributedString},
     events::key_to_native,
+    global_hotkey::NativeHotkeyMapper,
     global_point_to_native_screen_point, renderer,
 };
 use crate::{
@@ -234,6 +235,7 @@ pub(crate) struct MacPlatformState {
     dock_menu: Option<id>,
     menus: Option<Vec<OwnedMenu>>,
     keyboard_mapper: Rc<MacKeyboardMapper>,
+    global_hotkey_mapper: NativeHotkeyMapper,
     keep_alive_without_windows: bool,
     tray: Option<MacTray>,
     tray_icon_rendering_mode: TrayIconRenderingMode,
@@ -274,6 +276,7 @@ impl MacPlatform {
 
         let keyboard_layout = MacKeyboardLayout::new();
         let keyboard_mapper = Rc::new(MacKeyboardMapper::new(keyboard_layout.id()));
+        let global_hotkey_mapper = NativeHotkeyMapper::new();
         #[allow(unused_unsafe)]
         let pasteboard = unsafe { Objc2NSPasteboard::generalPasteboard() };
 
@@ -298,6 +301,7 @@ impl MacPlatform {
             on_keyboard_layout_change: None,
             menus: None,
             keyboard_mapper,
+            global_hotkey_mapper,
             keep_alive_without_windows: false,
             tray: None,
             tray_icon_rendering_mode: TrayIconRenderingMode::default(),
@@ -1868,6 +1872,7 @@ extern "C" fn on_keyboard_layout_change(this: &mut Object, _: Sel, _: id) {
     let mut lock = platform.0.lock();
     let keyboard_layout = MacKeyboardLayout::new();
     lock.keyboard_mapper = Rc::new(MacKeyboardMapper::new(keyboard_layout.id()));
+    lock.global_hotkey_mapper = NativeHotkeyMapper::new();
     if !lock.global_hotkey_registrations.is_empty() {
         reregister_global_hotkeys_for_current_layout(&mut lock);
     }
@@ -2146,7 +2151,7 @@ fn replace_global_hotkey_registration(
         unsafe { unregister_hotkey_ref(previous_registration.hotkey_ref) };
     }
 
-    match register_hotkey_ref(id, keystroke) {
+    match register_hotkey_ref(state, id, keystroke) {
         Ok(hotkey_ref) => {
             state.global_hotkey_registrations.insert(
                 id,
@@ -2159,7 +2164,7 @@ fn replace_global_hotkey_registration(
         }
         Err(err) => {
             if let Some(mut previous_registration) = previous_registration {
-                match register_hotkey_ref(id, &previous_registration.keystroke) {
+                match register_hotkey_ref(state, id, &previous_registration.keystroke) {
                     Ok(hotkey_ref) => {
                         previous_registration.hotkey_ref = hotkey_ref;
                         state
@@ -2190,7 +2195,7 @@ fn reregister_global_hotkeys_for_current_layout(state: &mut MacPlatformState) {
     }
 
     for (id, mut registration) in registrations {
-        match register_hotkey_ref(id, &registration.keystroke) {
+        match register_hotkey_ref(state, id, &registration.keystroke) {
             Ok(hotkey_ref) => {
                 registration.hotkey_ref = hotkey_ref;
                 state.global_hotkey_registrations.insert(id, registration);
@@ -2207,8 +2212,12 @@ fn reregister_global_hotkeys_for_current_layout(state: &mut MacPlatformState) {
     }
 }
 
-fn register_hotkey_ref(id: u32, keystroke: &crate::Keystroke) -> Result<EventHotKeyRef> {
-    let native_hotkey = super::global_hotkey::hotkey_to_native(keystroke)?;
+fn register_hotkey_ref(
+    state: &MacPlatformState,
+    id: u32,
+    keystroke: &crate::Keystroke,
+) -> Result<EventHotKeyRef> {
+    let native_hotkey = state.global_hotkey_mapper.hotkey_to_native(keystroke)?;
     let hotkey_id = EventHotKeyID {
         signature: GPUI_HOTKEY_SIGNATURE,
         id,

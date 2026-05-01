@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::{Keystroke, Modifiers};
 use anyhow::{Result, anyhow};
 use core_graphics::event::CGKeyCode;
@@ -19,38 +21,52 @@ pub(crate) struct NativeHotkey {
     pub(crate) modifiers: u32,
 }
 
-pub(crate) fn hotkey_to_native(keystroke: &Keystroke) -> Result<NativeHotkey> {
-    let shift_candidates: &[bool] = if keystroke.modifiers.shift {
-        &[true]
-    } else {
-        &[false, true]
-    };
+pub(crate) struct NativeHotkeyMapper {
+    key_codes_by_keystroke: HashMap<Keystroke, NativeHotkey>,
+}
 
-    for &actual_shift in shift_candidates {
-        let actual_modifiers = Modifiers {
-            shift: actual_shift,
-            ..keystroke.modifiers
-        };
+impl NativeHotkeyMapper {
+    pub(crate) fn new() -> Self {
+        let mut key_codes_by_keystroke = HashMap::new();
 
         for key_code in 0..=MAX_VIRTUAL_KEY_CODE {
-            let candidate = semantic_hotkey_for_key_code(key_code, actual_modifiers);
-            if hotkeys_match(&candidate, keystroke) {
-                return Ok(NativeHotkey {
-                    key_code: key_code as u32,
-                    modifiers: carbon_modifiers(actual_modifiers),
-                });
+            for actual_modifiers in hotkey_modifier_variants() {
+                let candidate = semantic_hotkey_for_key_code(key_code, actual_modifiers);
+                key_codes_by_keystroke
+                    .entry(candidate)
+                    .or_insert_with(|| NativeHotkey {
+                        key_code: key_code as u32,
+                        modifiers: carbon_modifiers(actual_modifiers),
+                    });
             }
+        }
+
+        Self {
+            key_codes_by_keystroke,
         }
     }
 
-    Err(anyhow!(
-        "unsupported global hotkey key {} on macOS keyboard layout",
-        keystroke.key
-    ))
+    pub(crate) fn hotkey_to_native(&self, keystroke: &Keystroke) -> Result<NativeHotkey> {
+        self.key_codes_by_keystroke
+            .get(keystroke)
+            .copied()
+            .ok_or_else(|| {
+                anyhow!(
+                    "unsupported global hotkey key {} on macOS keyboard layout",
+                    keystroke.key
+                )
+            })
+    }
 }
 
-fn hotkeys_match(candidate: &Keystroke, desired: &Keystroke) -> bool {
-    candidate.modifiers == desired.modifiers && candidate.key == desired.key
+fn hotkey_modifier_variants() -> impl Iterator<Item = Modifiers> {
+    (0..32).map(|bits| Modifiers {
+        control: bits & 1 != 0,
+        alt: bits & 2 != 0,
+        shift: bits & 4 != 0,
+        platform: bits & 8 != 0,
+        function: bits & 16 != 0,
+    })
 }
 
 fn carbon_modifiers(modifiers: Modifiers) -> u32 {
@@ -323,5 +339,19 @@ mod tests {
                 .modifiers
                 .function
         );
+    }
+
+    #[test]
+    fn mapper_uses_cached_key_code_lookup() {
+        let mapper = NativeHotkeyMapper::new();
+        let native = mapper
+            .hotkey_to_native(&Keystroke {
+                modifiers: Modifiers::default(),
+                key: "backspace".into(),
+                key_char: None,
+            })
+            .unwrap();
+
+        assert_eq!(native.key_code, 0x33);
     }
 }
