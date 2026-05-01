@@ -1109,6 +1109,10 @@ impl Window {
                 if let Some(min_interval) = min_frame_interval {
                     if let Some(last_frame) = last_frame_time.get() {
                         if now.duration_since(last_frame) < min_interval {
+                            // Must still complete the frame on platforms that require it.
+                            // On Wayland, `surface.frame()` was already called to request the
+                            // next frame callback, so we must call `surface.commit()` (via
+                            // `complete_frame`) or the compositor won't send another callback.
                             handle
                                 .update(&mut cx, |_, window, _| window.complete_frame())
                                 .log_err();
