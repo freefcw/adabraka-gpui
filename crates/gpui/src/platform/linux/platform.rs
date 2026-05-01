@@ -61,9 +61,9 @@ pub(crate) type TrayMenuActionCallback = Box<dyn FnMut(SharedString)>;
 
 pub(crate) trait LinuxTrayEventTarget {
     fn take_tray_icon_event_callback(&mut self) -> Option<TrayIconEventCallback>;
-    fn restore_tray_icon_event_callback(&mut self, callback: TrayIconEventCallback);
+    fn restore_tray_icon_event_callback_if_empty(&mut self, callback: TrayIconEventCallback);
     fn take_tray_menu_action_callback(&mut self) -> Option<TrayMenuActionCallback>;
-    fn restore_tray_menu_action_callback(&mut self, callback: TrayMenuActionCallback);
+    fn restore_tray_menu_action_callback_if_empty(&mut self, callback: TrayMenuActionCallback);
 }
 
 fn dispatch_tray_icon_event<State: LinuxTrayEventTarget>(
@@ -81,7 +81,7 @@ fn dispatch_tray_icon_event<State: LinuxTrayEventTarget>(
     if let Some(callback) = callback {
         state
             .borrow_mut()
-            .restore_tray_icon_event_callback(callback);
+            .restore_tray_icon_event_callback_if_empty(callback);
     }
 }
 
@@ -100,7 +100,7 @@ fn dispatch_tray_menu_action<State: LinuxTrayEventTarget>(
     if let Some(callback) = callback {
         state
             .borrow_mut()
-            .restore_tray_menu_action_callback(callback);
+            .restore_tray_menu_action_callback_if_empty(callback);
     }
 }
 

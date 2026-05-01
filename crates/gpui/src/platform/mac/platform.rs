@@ -1523,7 +1523,10 @@ impl Platform for MacPlatform {
                     if let Some(mut callback) = lock.network_change_callback.take() {
                         drop(lock);
                         callback(ctx.status);
-                        platform_state.lock().network_change_callback = Some(callback);
+                        platform_state
+                            .lock()
+                            .network_change_callback
+                            .get_or_insert(callback);
                     }
                 }
 
@@ -1585,7 +1588,10 @@ impl Platform for MacPlatform {
                 if let Some(mut callback) = lock.media_key_callback.take() {
                     drop(lock);
                     callback(media_event);
-                    platform_state.lock().media_key_callback = Some(callback);
+                    platform_state
+                        .lock()
+                        .media_key_callback
+                        .get_or_insert(callback);
                 }
             });
             let block = block.copy();
@@ -1963,7 +1969,7 @@ extern "C" fn handle_tray_menu_item(this: &mut Object, _: Sel, item: id) {
             if let Some(mut callback) = lock.tray_menu_callback.take() {
                 drop(lock);
                 callback(ctx.id);
-                platform.0.lock().tray_menu_callback = Some(callback);
+                platform.0.lock().tray_menu_callback.get_or_insert(callback);
             }
         }
 
@@ -1984,7 +1990,7 @@ extern "C" fn handle_tray_panel_click(this: &mut Object, _: Sel, _sender: id) {
             if let Some(mut callback) = lock.tray_icon_callback.take() {
                 drop(lock);
                 callback(TrayIconEvent::LeftClick);
-                platform.0.lock().tray_icon_callback = Some(callback);
+                platform.0.lock().tray_icon_callback.get_or_insert(callback);
             }
         }
 
@@ -2019,7 +2025,11 @@ extern "C" fn handle_system_power_event(this: &mut Object, _: Sel, notification:
         if let Some(mut callback) = lock.system_power_callback.take() {
             drop(lock);
             callback(event);
-            platform.0.lock().system_power_callback = Some(callback);
+            platform
+                .0
+                .lock()
+                .system_power_callback
+                .get_or_insert(callback);
         }
     }
 }
@@ -2040,7 +2050,11 @@ extern "C" fn handle_context_menu_item(this: &mut Object, _: Sel, item: id) {
         if let Some(mut callback) = lock.context_menu_callback.take() {
             drop(lock);
             callback(shared_id);
-            platform.0.lock().context_menu_callback = Some(callback);
+            platform
+                .0
+                .lock()
+                .context_menu_callback
+                .get_or_insert(callback);
         }
     }
 }
@@ -2260,7 +2274,10 @@ unsafe extern "C" fn hotkey_event_handler(
     if let Some(mut callback) = lock.global_hotkey_callback.take() {
         drop(lock);
         callback(hotkey_id.id);
-        platform_state.lock().global_hotkey_callback = Some(callback);
+        platform_state
+            .lock()
+            .global_hotkey_callback
+            .get_or_insert(callback);
     }
 
     NO_ERR

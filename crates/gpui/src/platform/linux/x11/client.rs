@@ -228,16 +228,22 @@ impl LinuxTrayEventTarget for X11ClientState {
         self.common.callbacks.tray_icon_event.take()
     }
 
-    fn restore_tray_icon_event_callback(&mut self, callback: TrayIconEventCallback) {
-        self.common.callbacks.tray_icon_event = Some(callback);
+    fn restore_tray_icon_event_callback_if_empty(&mut self, callback: TrayIconEventCallback) {
+        self.common
+            .callbacks
+            .tray_icon_event
+            .get_or_insert(callback);
     }
 
     fn take_tray_menu_action_callback(&mut self) -> Option<TrayMenuActionCallback> {
         self.common.callbacks.tray_menu_action.take()
     }
 
-    fn restore_tray_menu_action_callback(&mut self, callback: TrayMenuActionCallback) {
-        self.common.callbacks.tray_menu_action = Some(callback);
+    fn restore_tray_menu_action_callback_if_empty(&mut self, callback: TrayMenuActionCallback) {
+        self.common
+            .callbacks
+            .tray_menu_action
+            .get_or_insert(callback);
     }
 }
 

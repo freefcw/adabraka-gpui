@@ -1048,7 +1048,11 @@ impl WindowsPlatformInner {
         };
         drop(lock);
         callback(&*action);
-        self.state.borrow_mut().callbacks.app_menu_action = Some(callback);
+        self.state
+            .borrow_mut()
+            .callbacks
+            .app_menu_action
+            .get_or_insert(callback);
         Some(0)
     }
 
@@ -1060,7 +1064,11 @@ impl WindowsPlatformInner {
             .keyboard_layout_change
             .take()?;
         callback();
-        self.state.borrow_mut().callbacks.keyboard_layout_change = Some(callback);
+        self.state
+            .borrow_mut()
+            .callbacks
+            .keyboard_layout_change
+            .get_or_insert(callback);
         Some(0)
     }
 
@@ -1083,7 +1091,13 @@ impl WindowsPlatformInner {
             if let Some(ref mut cb) = callback {
                 cb(event);
             }
-            self.state.borrow_mut().callbacks.tray_icon_event = callback;
+            if let Some(callback) = callback {
+                self.state
+                    .borrow_mut()
+                    .callbacks
+                    .tray_icon_event
+                    .get_or_insert(callback);
+            }
         }
         Some(0)
     }
@@ -1104,7 +1118,13 @@ impl WindowsPlatformInner {
         if let Some(ref mut cb) = callback {
             cb(item_id);
         }
-        self.state.borrow_mut().callbacks.tray_menu_action = callback;
+        if let Some(callback) = callback {
+            self.state
+                .borrow_mut()
+                .callbacks
+                .tray_menu_action
+                .get_or_insert(callback);
+        }
         Some(0)
     }
 
@@ -1114,7 +1134,13 @@ impl WindowsPlatformInner {
         if let Some(ref mut cb) = callback {
             cb(hotkey_id);
         }
-        self.state.borrow_mut().callbacks.global_hotkey = callback;
+        if let Some(callback) = callback {
+            self.state
+                .borrow_mut()
+                .callbacks
+                .global_hotkey
+                .get_or_insert(callback);
+        }
         Some(0)
     }
 
@@ -1146,7 +1172,13 @@ impl WindowsPlatformInner {
             if let Some(ref mut cb) = callback {
                 cb(event);
             }
-            self.state.borrow_mut().callbacks.system_power = callback;
+            if let Some(callback) = callback {
+                self.state
+                    .borrow_mut()
+                    .callbacks
+                    .system_power
+                    .get_or_insert(callback);
+            }
         }
         Some(1)
     }
@@ -1167,7 +1199,13 @@ impl WindowsPlatformInner {
             if let Some(ref mut cb) = callback {
                 cb(event);
             }
-            self.state.borrow_mut().callbacks.system_power = callback;
+            if let Some(callback) = callback {
+                self.state
+                    .borrow_mut()
+                    .callbacks
+                    .system_power
+                    .get_or_insert(callback);
+            }
         }
         Some(0)
     }
@@ -1180,7 +1218,13 @@ impl WindowsPlatformInner {
         if let Some(ref mut cb) = callback {
             cb(status);
         }
-        self.state.borrow_mut().callbacks.network_status_change = callback;
+        if let Some(callback) = callback {
+            self.state
+                .borrow_mut()
+                .callbacks
+                .network_status_change
+                .get_or_insert(callback);
+        }
         Some(0)
     }
 
@@ -1211,7 +1255,13 @@ impl WindowsPlatformInner {
         if let Some(ref mut cb) = callback {
             cb(event);
         }
-        self.state.borrow_mut().callbacks.media_key = callback;
+        if let Some(callback) = callback {
+            self.state
+                .borrow_mut()
+                .callbacks
+                .media_key
+                .get_or_insert(callback);
+        }
         Some(0)
     }
 
@@ -1235,7 +1285,13 @@ impl WindowsPlatformInner {
         if let Some(ref mut cb) = callback {
             cb(item_id);
         }
-        self.state.borrow_mut().callbacks.context_menu = callback;
+        if let Some(callback) = callback {
+            self.state
+                .borrow_mut()
+                .callbacks
+                .context_menu
+                .get_or_insert(callback);
+        }
         Some(0)
     }
 }
