@@ -46,6 +46,18 @@ The crate now exposes `image-format-*` features that map directly to `image` cra
 | Permission queries | Yes (Accessibility, Mic) | No | No | No |
 | Daemon mode (no dock icon) | Yes | Yes | Yes | Yes |
 
+### Rendering Backends
+
+Linux X11 and Wayland now use the internal wgpu renderer ported from Zed's current GPUI stack.
+The old Blade renderer is no longer enabled for Linux builds. `macos-blade` remains available as a
+macOS-only compatibility feature, while the default macOS path continues to use Metal and Windows
+continues to use DirectX.
+
+This migration is internal to the `adabraka-gpui` crate. Downstream applications should keep using
+`gpui::Application::new()` and the existing `x11`/`wayland` features. See
+[`docs/wgpu-migration.md`](docs/wgpu-migration.md) for implementation notes and verification
+status.
+
 ## Features
 
 ### Core UI Framework
@@ -114,6 +126,7 @@ See [`crates/gpui/examples/daemon_app.rs`](crates/gpui/examples/daemon_app.rs) f
 ### Linux
 - For X11: `libxcb`, `libxkbcommon`
 - For Wayland: `libwayland-client`, `libxkbcommon`
+- GPU backend: wgpu with Vulkan/OpenGL support
 - D-Bus (for system tray via StatusNotifierItem)
 
 ### Windows

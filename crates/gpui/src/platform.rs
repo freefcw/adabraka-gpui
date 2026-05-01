@@ -12,14 +12,14 @@ mod linux;
 #[cfg(target_os = "macos")]
 mod mac;
 
-#[cfg(any(
-    all(
-        any(target_os = "linux", target_os = "freebsd"),
-        any(feature = "x11", feature = "wayland")
-    ),
-    all(target_os = "macos", feature = "macos-blade")
-))]
+#[cfg(any(all(target_os = "macos", feature = "macos-blade")))]
 mod blade;
+
+#[cfg(all(
+    any(target_os = "linux", target_os = "freebsd"),
+    any(feature = "x11", feature = "wayland")
+))]
+mod wgpu;
 
 #[cfg(any(test, feature = "test-support"))]
 mod test;
@@ -893,7 +893,7 @@ pub(crate) trait PlatformAtlas: Send + Sync {
     fn remove(&self, key: &AtlasKey);
 }
 
-struct AtlasTextureList<T> {
+pub(crate) struct AtlasTextureList<T> {
     textures: Vec<Option<T>>,
     free_list: Vec<usize>,
 }
@@ -917,7 +917,7 @@ impl<T> ops::Index<usize> for AtlasTextureList<T> {
 
 impl<T> AtlasTextureList<T> {
     #[allow(unused)]
-    fn drain(&mut self) -> std::vec::Drain<'_, Option<T>> {
+    pub(crate) fn drain(&mut self) -> std::vec::Drain<'_, Option<T>> {
         self.free_list.clear();
         self.textures.drain(..)
     }
@@ -928,7 +928,7 @@ impl<T> AtlasTextureList<T> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(C)]
 pub(crate) struct AtlasTile {
     pub(crate) texture_id: AtlasTextureId,

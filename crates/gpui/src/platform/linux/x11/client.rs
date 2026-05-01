@@ -48,9 +48,9 @@ use super::{
     pressed_button_from_mask,
 };
 
+use crate::platform::wgpu::GpuContext;
 use crate::platform::{
     LinuxCommon, PlatformWindow,
-    blade::BladeContext,
     linux::{
         DEFAULT_CURSOR_ICON_NAME, LinuxClient, get_xkb_compose_state, is_within_click_distance,
         log_cursor_icon_warning, open_uri_internal,
@@ -180,7 +180,7 @@ pub struct X11ClientState {
     pub(crate) last_location: Point<Pixels>,
     pub(crate) current_count: usize,
 
-    gpu_context: BladeContext,
+    gpu_context: GpuContext,
 
     pub(crate) scale_factor: f32,
 
@@ -434,7 +434,7 @@ impl X11Client {
             .to_string();
         let keyboard_layout = LinuxKeyboardLayout::new(layout_name.into());
 
-        let gpu_context = BladeContext::new().context("Unable to init GPU context")?;
+        let gpu_context = Rc::new(RefCell::new(None));
 
         let resource_database = x11rb::resource_manager::new_from_default(&xcb_connection)
             .context("Failed to create resource database")?;
@@ -1498,7 +1498,7 @@ impl LinuxClient for X11Client {
             handle,
             X11ClientStatePtr(Rc::downgrade(&self.0)),
             state.common.foreground_executor.clone(),
-            &state.gpu_context,
+            state.gpu_context.clone(),
             params,
             &state.xcb_connection,
             state.client_side_decorations_supported,

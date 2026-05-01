@@ -10,10 +10,7 @@ fn main() {
     let target = env::var("CARGO_CFG_TARGET_OS");
     println!("cargo::rustc-check-cfg=cfg(gles)");
 
-    #[cfg(any(
-        not(any(target_os = "macos", target_os = "windows")),
-        all(target_os = "macos", feature = "macos-blade")
-    ))]
+    #[cfg(all(target_os = "macos", feature = "macos-blade"))]
     check_wgsl_shaders();
 
     match target.as_deref() {
@@ -29,10 +26,7 @@ fn main() {
     };
 }
 
-#[cfg(any(
-    not(any(target_os = "macos", target_os = "windows")),
-    all(target_os = "macos", feature = "macos-blade")
-))]
+#[cfg(all(target_os = "macos", feature = "macos-blade"))]
 fn check_wgsl_shaders() {
     use std::path::PathBuf;
     use std::process;

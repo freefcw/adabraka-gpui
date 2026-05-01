@@ -45,6 +45,16 @@ re-enables parallel decoding. SVG support is handled separately through `resvg`.
 | Permission queries | Yes (Accessibility, Mic) | No | No | No |
 | Daemon mode (no dock icon) | Yes (Accessory policy) | Yes | Yes | Yes |
 
+### Rendering Backends
+
+Linux X11 and Wayland use the internal wgpu renderer ported from Zed's current GPUI backend. Blade is
+no longer part of Linux builds. `macos-blade` remains available only for macOS compatibility; the
+default macOS renderer is Metal and Windows uses DirectX.
+
+This does not introduce a public `gpui_wgpu` crate or change the `Application::new()` entry point.
+The renderer protocol stays crate-internal so downstream application APIs remain stable. See
+[`../../docs/wgpu-migration.md`](../../docs/wgpu-migration.md) for details.
+
 ## Features
 
 ### Core UI Framework (inherited from GPUI)
@@ -114,6 +124,7 @@ fn main() {
 - Standard development packages for your distro
 - For X11: `libxcb`, `libxkbcommon`
 - For Wayland: `libwayland-client`, `libxkbcommon`
+- GPU backend: wgpu with Vulkan/OpenGL support
 - D-Bus (for system tray via StatusNotifierItem)
 
 ### Windows
