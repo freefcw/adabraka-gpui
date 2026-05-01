@@ -167,6 +167,8 @@ pub trait LinuxClient {
     }
 
     fn set_tray_icon(&self, _icon: Option<&[u8]>) {}
+    // Reserved for Linux tray backends that can distinguish template/original icons.
+    #[allow(dead_code)]
     fn set_tray_icon_rendering_mode(&self, _rendering_mode: TrayIconRenderingMode) {}
     fn set_tray_menu(&self, _menu: Vec<TrayMenuItem>) {}
     fn set_tray_tooltip(&self, _tooltip: &str) {}
@@ -209,6 +211,8 @@ pub(crate) struct PlatformHandlers {
     pub(crate) system_power: Option<Box<dyn FnMut(SystemPowerEvent)>>,
     pub(crate) network_status_change: Option<Box<dyn FnMut(NetworkStatus)>>,
     pub(crate) media_key: Option<Box<dyn FnMut(MediaKeyEvent)>>,
+    // Reserved for a future Linux context menu implementation.
+    #[allow(dead_code)]
     pub(crate) context_menu: Option<Box<dyn FnMut(SharedString)>>,
 }
 
@@ -229,6 +233,8 @@ pub(crate) struct LinuxCommon {
     pub(crate) keep_alive_without_windows: bool,
     pub(crate) power_save_blockers: HashMap<u32, PowerSaveHandle>,
     pub(crate) next_blocker_id: u32,
+    // Reserved for future Linux network change monitoring.
+    #[allow(dead_code)]
     pub(crate) last_network_status: NetworkStatus,
     pub(crate) attention_window: Option<AnyWindowHandle>,
 }
@@ -741,7 +747,9 @@ impl<P: LinuxClient + 'static> Platform for P {
         LinuxClient::set_tray_icon(self, icon);
     }
 
-    fn set_tray_icon_rendering_mode(&self, _rendering_mode: TrayIconRenderingMode) {}
+    fn set_tray_icon_rendering_mode(&self, rendering_mode: TrayIconRenderingMode) {
+        LinuxClient::set_tray_icon_rendering_mode(self, rendering_mode);
+    }
 
     fn set_tray_menu(&self, menu: Vec<TrayMenuItem>) {
         LinuxClient::set_tray_menu(self, menu);

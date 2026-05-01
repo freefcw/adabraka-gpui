@@ -502,6 +502,8 @@ pub(crate) enum PrimitiveBatch<'a> {
         texture_id: AtlasTextureId,
         sprites: &'a [PolychromeSprite],
     },
+    // Consumed by native renderers; wgpu currently keeps this as an ignored batch.
+    #[allow(dead_code)]
     Surfaces(&'a [PaintSurface]),
 }
 

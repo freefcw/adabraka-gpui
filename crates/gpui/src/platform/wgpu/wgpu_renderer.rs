@@ -973,6 +973,7 @@ impl WgpuRenderer {
         &self.atlas
     }
 
+    #[allow(dead_code)]
     pub fn supports_dual_source_blending(&self) -> bool {
         self.dual_source_blending
     }
@@ -986,6 +987,7 @@ impl WgpuRenderer {
         }
     }
 
+    #[allow(dead_code)]
     pub fn max_texture_size(&self) -> u32 {
         self.max_texture_size
     }
@@ -1565,6 +1567,7 @@ impl WgpuRenderer {
     /// pipelines stay alive.  Use this when the native window is destroyed
     /// (e.g. Android `TerminateWindow`) but you intend to re-create the
     /// surface later without losing cached atlas textures.
+    #[allow(dead_code)]
     pub fn unconfigure_surface(&mut self) {
         self.surface_configured = false;
         // Drop intermediate textures since they reference the old surface size.
@@ -1582,6 +1585,7 @@ impl WgpuRenderer {
     /// different instance will cause a "Device does not exist" panic because
     /// the wgpu device is bound to its originating instance.
     #[cfg(not(target_family = "wasm"))]
+    #[allow(dead_code)]
     pub fn replace_surface<W: HasWindowHandle>(
         &mut self,
         window: &W,
