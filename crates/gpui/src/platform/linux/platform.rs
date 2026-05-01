@@ -6,6 +6,7 @@ use std::{
     process::Command,
     rc::Rc,
     sync::Arc,
+    time::Duration,
 };
 #[cfg(any(feature = "wayland", feature = "x11"))]
 use std::{
@@ -13,7 +14,6 @@ use std::{
     fs::File,
     io::Read as _,
     os::fd::{AsFd, AsRawFd, FromRawFd},
-    time::Duration,
 };
 
 use anyhow::{Context as _, anyhow};

@@ -152,7 +152,7 @@ impl WaylandWindowState {
                     .cast::<c_void>(),
             };
             let config = WgpuSurfaceConfig {
-                size: options.bounds.size,
+                size: options.bounds.to_device_pixels(1.0).size,
                 transparent: true,
                 preferred_present_mode: None,
             };

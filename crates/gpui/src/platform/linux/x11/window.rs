@@ -611,7 +611,7 @@ impl X11WindowState {
             }
 
             if params.mouse_passthrough {
-                use x11rb::protocol::shape::{self, ConnectionExt as _};
+                use x11rb::protocol::shape;
                 check_reply(
                     || "X11 shape::rectangles for mouse passthrough failed.",
                     shape::rectangles(
@@ -828,6 +828,7 @@ impl X11Window {
         appearance: WindowAppearance,
         parent_window: Option<xproto::Window>,
     ) -> anyhow::Result<Self> {
+        let icon = params.icon.clone();
         let ptr = X11WindowStatePtr {
             state: Rc::new(RefCell::new(X11WindowState::new(
                 handle,
@@ -850,7 +851,6 @@ impl X11Window {
         };
 
         let state = ptr.state.borrow_mut();
-        let icon = state.params.icon.clone();
         ptr.set_wm_properties(state)?;
 
         let window = Self(ptr);
@@ -1777,7 +1777,7 @@ impl PlatformWindow for X11Window {
     }
 
     fn set_mouse_passthrough(&self, passthrough: bool) {
-        use x11rb::protocol::shape::{self, ConnectionExt as _};
+        use x11rb::protocol::shape;
         if passthrough {
             shape::rectangles(
                 self.0.xcb.as_ref(),
@@ -1830,7 +1830,7 @@ impl PlatformWindow for X11Window {
             self.0.xcb.change_property32(
                 xproto::PropMode::REPLACE,
                 self.0.x_window,
-                self.0.atoms._NET_WM_ICON,
+                self.0.state.borrow().atoms._NET_WM_ICON,
                 xproto::AtomEnum::CARDINAL,
                 &property_data,
             ),
