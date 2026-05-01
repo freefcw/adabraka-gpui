@@ -57,6 +57,7 @@ impl Toast {
 }
 
 struct ToastEntry {
+    id: u64,
     toast: Toast,
 }
 
@@ -66,6 +67,7 @@ struct ToastEntry {
 /// window's view tree. Use [`ToastStack::push`] to add new toasts.
 pub struct ToastStack {
     toasts: Vec<ToastEntry>,
+    next_toast_id: u64,
     position: ToastPosition,
 }
 
@@ -74,6 +76,7 @@ impl ToastStack {
     pub fn new() -> Self {
         Self {
             toasts: Vec::new(),
+            next_toast_id: 0,
             position: ToastPosition::default(),
         }
     }
@@ -87,15 +90,17 @@ impl ToastStack {
     /// Push a new toast onto the stack and schedule its auto-dismissal.
     pub fn push(&mut self, toast: Toast, window: &Window, cx: &mut Context<Self>) {
         let duration = toast.duration;
-        self.toasts.push(ToastEntry { toast });
+        let id = self.next_toast_id;
+        self.next_toast_id += 1;
+        self.toasts.push(ToastEntry { id, toast });
         cx.notify();
 
-        let index = self.toasts.len() - 1;
         cx.spawn_in(window, async move |this: WeakEntity<Self>, cx| {
             Timer::after(duration).await;
             this.update(cx, |stack, cx| {
-                if index < stack.toasts.len() {
-                    stack.toasts.remove(index);
+                let len = stack.toasts.len();
+                stack.toasts.retain(|entry| entry.id != id);
+                if stack.toasts.len() != len {
                     cx.notify();
                 }
             })
