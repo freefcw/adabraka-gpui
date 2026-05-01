@@ -237,6 +237,10 @@ impl Drop for WindowsTray {
 }
 
 fn create_hicon_from_bytes(data: &[u8]) -> Option<HICON> {
+    if !is_valid_ico(data) {
+        return None;
+    }
+
     unsafe {
         let offset = LookupIconIdFromDirectoryEx(data.as_ptr(), true, 0, 0, LR_DEFAULTCOLOR);
         if offset <= 0 {
@@ -248,5 +252,87 @@ fn create_hicon_from_bytes(data: &[u8]) -> Option<HICON> {
         let icon_data = &data[offset as usize..];
         let hicon = CreateIconFromResourceEx(icon_data, true, 0x00030000, 0, 0, LR_DEFAULTCOLOR);
         hicon.ok()
+    }
+}
+
+fn is_valid_ico(data: &[u8]) -> bool {
+    const ICONDIR_SIZE: usize = 6;
+    const ICONDIRENTRY_SIZE: usize = 16;
+    const ICO_RESERVED: [u8; 2] = [0, 0];
+    const ICO_TYPE_ICON: [u8; 2] = [1, 0];
+
+    if data.len() < ICONDIR_SIZE || data[0..2] != ICO_RESERVED || data[2..4] != ICO_TYPE_ICON {
+        return false;
+    }
+
+    let image_count = u16::from_le_bytes([data[4], data[5]]) as usize;
+    let directory_size = ICONDIR_SIZE + image_count.saturating_mul(ICONDIRENTRY_SIZE);
+    if image_count == 0 || directory_size > data.len() {
+        return false;
+    }
+
+    for entry_index in 0..image_count {
+        let entry_start = ICONDIR_SIZE + entry_index * ICONDIRENTRY_SIZE;
+        let entry = &data[entry_start..entry_start + ICONDIRENTRY_SIZE];
+        let image_size = u32::from_le_bytes([entry[8], entry[9], entry[10], entry[11]]) as usize;
+        let image_offset =
+            u32::from_le_bytes([entry[12], entry[13], entry[14], entry[15]]) as usize;
+
+        if image_size == 0
+            || image_offset < directory_size
+            || image_offset
+                .checked_add(image_size)
+                .is_none_or(|end| end > data.len())
+        {
+            return false;
+        }
+    }
+
+    true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn minimal_ico() -> Vec<u8> {
+        let mut data = vec![
+            0, 0, // reserved
+            1, 0, // icon type
+            1, 0, // image count
+            1, 1, // width, height
+            0, // color count
+            0, // reserved
+            1, 0, // color planes
+            32, 0, // bits per pixel
+            4, 0, 0, 0, // image size
+            22, 0, 0, 0, // image offset
+        ];
+        data.extend_from_slice(&[1, 2, 3, 4]);
+        data
+    }
+
+    #[test]
+    fn rejects_non_ico_data() {
+        assert!(!is_valid_ico(b"\x89PNG\r\n\x1a\n"));
+    }
+
+    #[test]
+    fn rejects_truncated_ico_directory() {
+        let mut data = minimal_ico();
+        data.truncate(10);
+        assert!(!is_valid_ico(&data));
+    }
+
+    #[test]
+    fn rejects_ico_entry_outside_input() {
+        let mut data = minimal_ico();
+        data[14..18].copy_from_slice(&100_u32.to_le_bytes());
+        assert!(!is_valid_ico(&data));
+    }
+
+    #[test]
+    fn accepts_ico_with_valid_directory_entry() {
+        assert!(is_valid_ico(&minimal_ico()));
     }
 }
