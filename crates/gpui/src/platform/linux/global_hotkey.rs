@@ -198,7 +198,7 @@ pub mod x11 {
             })?;
             let modmask = keystroke_to_x11_modmask(keystroke);
 
-            let mut registered_modmasks = Vec::new();
+            let mut registered_modmasks: Vec<u16> = Vec::with_capacity(4);
             for modmask_variant in modmask_with_lock_variants(modmask) {
                 if let Err(err) = xcb
                     .grab_key(
