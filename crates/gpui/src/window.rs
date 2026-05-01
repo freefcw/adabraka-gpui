@@ -1092,14 +1092,15 @@ impl Window {
             move |request_frame_options| {
                 // Throttle frame rate for inactive windows to ~30fps to save energy.
                 // force_render and require_presentation always bypass throttling.
-                let min_frame_interval =
-                    if request_frame_options.force_render || request_frame_options.require_presentation {
-                        None
-                    } else if !active.get() {
-                        Some(Duration::from_micros(33333))
-                    } else {
-                        None
-                    };
+                let min_frame_interval = if request_frame_options.force_render
+                    || request_frame_options.require_presentation
+                {
+                    None
+                } else if !active.get() {
+                    Some(Duration::from_micros(33333))
+                } else {
+                    None
+                };
 
                 let now = Instant::now();
                 if let Some(min_interval) = min_frame_interval {

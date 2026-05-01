@@ -6,6 +6,7 @@ use std::{
     process::Command,
     rc::Rc,
     sync::Arc,
+    time::Duration,
 };
 #[cfg(any(feature = "wayland", feature = "x11"))]
 use std::{
@@ -13,7 +14,6 @@ use std::{
     fs::File,
     io::Read as _,
     os::fd::{AsFd, AsRawFd, FromRawFd},
-    time::Duration,
 };
 
 use anyhow::{Context as _, anyhow};
@@ -29,12 +29,12 @@ use xkbcommon::xkb::{self, Keycode, Keysym, State};
 
 use crate::{
     Action, AnyWindowHandle, AttentionType, BackgroundExecutor, BiometricStatus, ClipboardItem,
-    CursorStyle, DialogOptions, DisplayId, FocusedWindowInfo, ForegroundExecutor, Keymap,
-    Keystroke, LinuxDispatcher, MediaKeyEvent, Menu, MenuItem, NetworkStatus, OsInfo, OwnedMenu,
-    PathPromptOptions, Pixels, Platform, PlatformDisplay, PlatformKeyboardLayout,
+    CursorStyle, DevicePixels, DialogOptions, DisplayId, FocusedWindowInfo, ForegroundExecutor,
+    Keymap, Keystroke, LinuxDispatcher, MediaKeyEvent, Menu, MenuItem, NetworkStatus, OsInfo,
+    OwnedMenu, PathPromptOptions, Pixels, Platform, PlatformDisplay, PlatformKeyboardLayout,
     PlatformKeyboardMapper, PlatformTextSystem, PlatformWindow, Point, PowerSaveBlockerKind,
-    Result, SharedString, SystemPowerEvent, Task, TrayIconEvent, TrayIconRenderingMode,
-    TrayMenuItem, WindowAppearance, WindowParams, px,
+    Result, SharedString, SystemPowerEvent, Task, TrayIconClickEvent, TrayIconEvent,
+    TrayIconRenderingMode, TrayMenuItem, WindowAppearance, WindowParams, px,
 };
 
 #[cfg(any(feature = "wayland", feature = "x11"))]
@@ -52,36 +52,61 @@ const FILE_PICKER_PORTAL_MISSING: &str =
     "Couldn't open file picker due to missing xdg-desktop-portal implementation.";
 
 pub(crate) enum LinuxTrayEvent {
-    Click(TrayIconEvent),
+    Click(LinuxTrayClickEvent),
     MenuAction(SharedString),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LinuxTrayClickEvent {
+    pub(crate) kind: TrayIconEvent,
+    /// Raw screen-coordinate hint from StatusNotifierItem.
+    ///
+    /// SNI reports this in compositor/device pixels. Platform clients convert
+    /// it to GPUI logical [`Pixels`] before exposing it publicly.
+    pub(crate) position: Point<DevicePixels>,
+}
+
 pub(crate) type TrayIconEventCallback = Box<dyn FnMut(TrayIconEvent)>;
+pub(crate) type TrayIconClickEventCallback = Box<dyn FnMut(TrayIconClickEvent)>;
 pub(crate) type TrayMenuActionCallback = Box<dyn FnMut(SharedString)>;
 
 pub(crate) trait LinuxTrayEventTarget {
+    fn convert_tray_click_event(&self, event: LinuxTrayClickEvent) -> TrayIconClickEvent;
     fn take_tray_icon_event_callback(&mut self) -> Option<TrayIconEventCallback>;
     fn restore_tray_icon_event_callback_if_empty(&mut self, callback: TrayIconEventCallback);
+    fn take_tray_icon_click_event_callback(&mut self) -> Option<TrayIconClickEventCallback>;
+    fn restore_tray_icon_click_event_callback_if_empty(
+        &mut self,
+        callback: TrayIconClickEventCallback,
+    );
     fn take_tray_menu_action_callback(&mut self) -> Option<TrayMenuActionCallback>;
     fn restore_tray_menu_action_callback_if_empty(&mut self, callback: TrayMenuActionCallback);
 }
 
 fn dispatch_tray_icon_event<State: LinuxTrayEventTarget>(
     state: &Rc<RefCell<State>>,
-    event: TrayIconEvent,
+    event: LinuxTrayClickEvent,
 ) {
     let mut state_ref = state.borrow_mut();
-    let mut callback = state_ref.take_tray_icon_event_callback();
+    let event = state_ref.convert_tray_click_event(event);
+    let mut event_callback = state_ref.take_tray_icon_event_callback();
+    let mut click_callback = state_ref.take_tray_icon_click_event_callback();
     drop(state_ref);
 
-    if let Some(ref mut callback) = callback {
-        callback(event);
+    if let Some(ref mut callback) = event_callback {
+        callback(event.kind.clone());
     }
 
-    if let Some(callback) = callback {
-        state
-            .borrow_mut()
-            .restore_tray_icon_event_callback_if_empty(callback);
+    if let Some(ref mut callback) = click_callback {
+        callback(event.clone());
+    }
+
+    let mut state_ref = state.borrow_mut();
+    if let Some(callback) = event_callback {
+        state_ref.restore_tray_icon_event_callback_if_empty(callback);
+    }
+    if let Some(callback) = click_callback {
+        state_ref.restore_tray_icon_click_event_callback_if_empty(callback);
     }
 }
 
@@ -167,6 +192,8 @@ pub trait LinuxClient {
     }
 
     fn set_tray_icon(&self, _icon: Option<&[u8]>) {}
+    // Reserved for Linux tray backends that can distinguish template/original icons.
+    #[allow(dead_code)]
     fn set_tray_icon_rendering_mode(&self, _rendering_mode: TrayIconRenderingMode) {}
     fn set_tray_menu(&self, _menu: Vec<TrayMenuItem>) {}
     fn set_tray_tooltip(&self, _tooltip: &str) {}
@@ -204,11 +231,14 @@ pub(crate) struct PlatformHandlers {
     pub(crate) validate_app_menu_command: Option<Box<dyn FnMut(&dyn Action) -> bool>>,
     pub(crate) keyboard_layout_change: Option<Box<dyn FnMut()>>,
     pub(crate) tray_icon_event: Option<TrayIconEventCallback>,
+    pub(crate) tray_icon_click_event: Option<TrayIconClickEventCallback>,
     pub(crate) tray_menu_action: Option<TrayMenuActionCallback>,
     pub(crate) global_hotkey: Option<Box<dyn FnMut(u32)>>,
     pub(crate) system_power: Option<Box<dyn FnMut(SystemPowerEvent)>>,
     pub(crate) network_status_change: Option<Box<dyn FnMut(NetworkStatus)>>,
     pub(crate) media_key: Option<Box<dyn FnMut(MediaKeyEvent)>>,
+    // Reserved for a future Linux context menu implementation.
+    #[allow(dead_code)]
     pub(crate) context_menu: Option<Box<dyn FnMut(SharedString)>>,
 }
 
@@ -229,6 +259,8 @@ pub(crate) struct LinuxCommon {
     pub(crate) keep_alive_without_windows: bool,
     pub(crate) power_save_blockers: HashMap<u32, PowerSaveHandle>,
     pub(crate) next_blocker_id: u32,
+    // Reserved for future Linux network change monitoring.
+    #[allow(dead_code)]
     pub(crate) last_network_status: NetworkStatus,
     pub(crate) attention_window: Option<AnyWindowHandle>,
 }
@@ -741,7 +773,9 @@ impl<P: LinuxClient + 'static> Platform for P {
         LinuxClient::set_tray_icon(self, icon);
     }
 
-    fn set_tray_icon_rendering_mode(&self, _rendering_mode: TrayIconRenderingMode) {}
+    fn set_tray_icon_rendering_mode(&self, rendering_mode: TrayIconRenderingMode) {
+        LinuxClient::set_tray_icon_rendering_mode(self, rendering_mode);
+    }
 
     fn set_tray_menu(&self, menu: Vec<TrayMenuItem>) {
         LinuxClient::set_tray_menu(self, menu);
@@ -757,6 +791,10 @@ impl<P: LinuxClient + 'static> Platform for P {
 
     fn on_tray_icon_event(&self, callback: Box<dyn FnMut(TrayIconEvent)>) {
         self.with_common(|common| common.callbacks.tray_icon_event = Some(callback));
+    }
+
+    fn on_tray_icon_click_event(&self, callback: Box<dyn FnMut(TrayIconClickEvent)>) {
+        self.with_common(|common| common.callbacks.tray_icon_click_event = Some(callback));
     }
 
     fn on_tray_menu_action(&self, callback: Box<dyn FnMut(SharedString)>) {

@@ -48,15 +48,16 @@ use super::{
     pressed_button_from_mask,
 };
 
+use crate::platform::wgpu::GpuContext;
 use crate::platform::{
     LinuxCommon, PlatformWindow,
-    blade::BladeContext,
     linux::{
         DEFAULT_CURSOR_ICON_NAME, LinuxClient, get_xkb_compose_state, is_within_click_distance,
         log_cursor_icon_warning, open_uri_internal,
         platform::{
-            DOUBLE_CLICK_INTERVAL, LinuxTrayEventTarget, SCROLL_LINES, TrayIconEventCallback,
-            TrayMenuActionCallback, install_linux_tray_event_source,
+            DOUBLE_CLICK_INTERVAL, LinuxTrayClickEvent, LinuxTrayEventTarget, SCROLL_LINES,
+            TrayIconClickEventCallback, TrayIconEventCallback, TrayMenuActionCallback,
+            install_linux_tray_event_source,
         },
         reveal_path_internal,
         xdg_desktop_portal::{Event as XDPEvent, XDPEventSource},
@@ -66,7 +67,8 @@ use crate::{
     AnyWindowHandle, Bounds, ClipboardItem, CursorStyle, DisplayId, FileDropEvent, Keystroke,
     LinuxKeyboardLayout, Modifiers, ModifiersChangedEvent, MouseButton, Pixels, Platform,
     PlatformDisplay, PlatformInput, PlatformKeyboardLayout, Point, RequestFrameOptions,
-    ScrollDelta, Size, TouchPhase, WindowParams, X11Window, modifiers_from_xinput_info, point, px,
+    ScrollDelta, Size, TouchPhase, TrayIconClickEvent, WindowParams, X11Window,
+    modifiers_from_xinput_info, point, px,
 };
 
 /// Value for DeviceId parameters which selects all devices.
@@ -180,7 +182,7 @@ pub struct X11ClientState {
     pub(crate) last_location: Point<Pixels>,
     pub(crate) current_count: usize,
 
-    gpu_context: BladeContext,
+    gpu_context: GpuContext,
 
     pub(crate) scale_factor: f32,
 
@@ -224,6 +226,17 @@ pub struct X11ClientState {
 }
 
 impl LinuxTrayEventTarget for X11ClientState {
+    fn convert_tray_click_event(&self, event: LinuxTrayClickEvent) -> TrayIconClickEvent {
+        let scale_factor = self.scale_factor;
+        TrayIconClickEvent::with_position(
+            event.kind,
+            point(
+                px(event.position.x.0 as f32 / scale_factor),
+                px(event.position.y.0 as f32 / scale_factor),
+            ),
+        )
+    }
+
     fn take_tray_icon_event_callback(&mut self) -> Option<TrayIconEventCallback> {
         self.common.callbacks.tray_icon_event.take()
     }
@@ -232,6 +245,20 @@ impl LinuxTrayEventTarget for X11ClientState {
         self.common
             .callbacks
             .tray_icon_event
+            .get_or_insert(callback);
+    }
+
+    fn take_tray_icon_click_event_callback(&mut self) -> Option<TrayIconClickEventCallback> {
+        self.common.callbacks.tray_icon_click_event.take()
+    }
+
+    fn restore_tray_icon_click_event_callback_if_empty(
+        &mut self,
+        callback: TrayIconClickEventCallback,
+    ) {
+        self.common
+            .callbacks
+            .tray_icon_click_event
             .get_or_insert(callback);
     }
 
@@ -440,7 +467,7 @@ impl X11Client {
             .to_string();
         let keyboard_layout = LinuxKeyboardLayout::new(layout_name.into());
 
-        let gpu_context = BladeContext::new().context("Unable to init GPU context")?;
+        let gpu_context = Rc::new(RefCell::new(None));
 
         let resource_database = x11rb::resource_manager::new_from_default(&xcb_connection)
             .context("Failed to create resource database")?;
@@ -1504,7 +1531,7 @@ impl LinuxClient for X11Client {
             handle,
             X11ClientStatePtr(Rc::downgrade(&self.0)),
             state.common.foreground_executor.clone(),
-            &state.gpu_context,
+            state.gpu_context.clone(),
             params,
             &state.xcb_connection,
             state.client_side_decorations_supported,

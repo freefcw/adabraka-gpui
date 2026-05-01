@@ -12,7 +12,8 @@ use crate::{
     MacDisplay, MacWindow, Menu, MenuItem, OsMenu, OwnedMenu, PathPromptOptions, Platform,
     PlatformDisplay, PlatformKeyboardLayout, PlatformKeyboardMapper, PlatformTextSystem,
     PlatformWindow, Result, SemanticVersion, SharedString, SystemMenuType, Task, TrayAnchor,
-    TrayIconEvent, TrayIconRenderingMode, TrayMenuItem, WindowAppearance, WindowParams, hash,
+    TrayIconClickEvent, TrayIconEvent, TrayIconRenderingMode, TrayMenuItem, WindowAppearance,
+    WindowParams, hash,
 };
 use anyhow::{Context as _, anyhow};
 use block::ConcreteBlock;
@@ -240,6 +241,7 @@ pub(crate) struct MacPlatformState {
     tray: Option<MacTray>,
     tray_icon_rendering_mode: TrayIconRenderingMode,
     tray_icon_callback: Option<Box<dyn FnMut(TrayIconEvent)>>,
+    tray_icon_click_callback: Option<Box<dyn FnMut(TrayIconClickEvent)>>,
     tray_menu_callback: Option<Box<dyn FnMut(SharedString)>>,
     global_hotkey_callback: Option<Box<dyn FnMut(u32)>>,
     global_hotkey_handler: Option<EventHandlerRef>,
@@ -306,6 +308,7 @@ impl MacPlatform {
             tray: None,
             tray_icon_rendering_mode: TrayIconRenderingMode::default(),
             tray_icon_callback: None,
+            tray_icon_click_callback: None,
             tray_menu_callback: None,
             global_hotkey_callback: None,
             global_hotkey_handler: None,
@@ -1367,6 +1370,10 @@ impl Platform for MacPlatform {
         self.0.lock().tray_icon_callback = Some(callback);
     }
 
+    fn on_tray_icon_click_event(&self, callback: Box<dyn FnMut(TrayIconClickEvent)>) {
+        self.0.lock().tray_icon_click_callback = Some(callback);
+    }
+
     fn on_tray_menu_action(&self, callback: Box<dyn FnMut(SharedString)>) {
         self.0.lock().tray_menu_callback = Some(callback);
     }
@@ -1992,10 +1999,24 @@ extern "C" fn handle_tray_panel_click(this: &mut Object, _: Sel, _sender: id) {
         unsafe extern "C" fn invoke(ctx_ptr: *mut c_void) {
             let platform = unsafe { &*(ctx_ptr as *const MacPlatform) };
             let mut lock = platform.0.lock();
-            if let Some(mut callback) = lock.tray_icon_callback.take() {
-                drop(lock);
-                callback(TrayIconEvent::LeftClick);
-                platform.0.lock().tray_icon_callback.get_or_insert(callback);
+            let mut event_callback = lock.tray_icon_callback.take();
+            let mut click_callback = lock.tray_icon_click_callback.take();
+            drop(lock);
+
+            let event = TrayIconClickEvent::new(TrayIconEvent::LeftClick);
+            if let Some(ref mut callback) = event_callback {
+                callback(event.kind.clone());
+            }
+            if let Some(ref mut callback) = click_callback {
+                callback(event);
+            }
+
+            let mut lock = platform.0.lock();
+            if let Some(callback) = event_callback {
+                lock.tray_icon_callback.get_or_insert(callback);
+            }
+            if let Some(callback) = click_callback {
+                lock.tray_icon_click_callback.get_or_insert(callback);
             }
         }
 

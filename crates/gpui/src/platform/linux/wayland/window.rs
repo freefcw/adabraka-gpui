@@ -6,7 +6,6 @@ use std::{
     sync::Arc,
 };
 
-use blade_graphics as gpu;
 use collections::HashMap;
 use futures::channel::oneshot::Receiver;
 
@@ -34,8 +33,8 @@ use crate::{
     Capslock,
     platform::{
         PlatformAtlas, PlatformInputHandler, PlatformWindow,
-        blade::{BladeContext, BladeRenderer, BladeSurfaceConfig},
         linux::wayland::{display::WaylandDisplay, serial::SerialKind},
+        wgpu::{GpuContext, WgpuRenderer, WgpuSurfaceConfig},
     },
 };
 use crate::{WindowKind, scene::Scene};
@@ -53,10 +52,14 @@ pub(crate) struct Callbacks {
     appearance_changed: Option<Box<dyn FnMut()>>,
 }
 
+#[derive(Clone, Debug)]
 struct RawWindow {
     window: *mut c_void,
     display: *mut c_void,
 }
+
+unsafe impl Send for RawWindow {}
+unsafe impl Sync for RawWindow {}
 
 impl rwh::HasWindowHandle for RawWindow {
     fn window_handle(&self) -> Result<rwh::WindowHandle<'_>, rwh::HandleError> {
@@ -95,7 +98,7 @@ pub struct WaylandWindowState {
     outputs: HashMap<ObjectId, Output>,
     display: Option<(ObjectId, Output)>,
     globals: Globals,
-    renderer: BladeRenderer,
+    renderer: WgpuRenderer,
     bounds: Bounds<Pixels>,
     scale: f32,
     input_handler: Option<PlatformInputHandler>,
@@ -109,6 +112,7 @@ pub struct WaylandWindowState {
     handle: AnyWindowHandle,
     active: bool,
     hovered: bool,
+    force_render_after_recovery: bool,
     in_progress_configure: Option<InProgressConfigure>,
     resize_throttle: bool,
     in_progress_window_controls: Option<WindowControls>,
@@ -134,7 +138,7 @@ impl WaylandWindowState {
         viewport: Option<wp_viewport::WpViewport>,
         client: WaylandClientStatePtr,
         globals: Globals,
-        gpu_context: &BladeContext,
+        gpu_context: GpuContext,
         options: WindowParams,
     ) -> anyhow::Result<Self> {
         let renderer = {
@@ -147,15 +151,12 @@ impl WaylandWindowState {
                     .display_ptr()
                     .cast::<c_void>(),
             };
-            let config = BladeSurfaceConfig {
-                size: gpu::Extent {
-                    width: options.bounds.size.width.0 as u32,
-                    height: options.bounds.size.height.0 as u32,
-                    depth: 1,
-                },
+            let config = WgpuSurfaceConfig {
+                size: options.bounds.to_device_pixels(1.0).size,
                 transparent: true,
+                preferred_present_mode: None,
             };
-            BladeRenderer::new(gpu_context, &raw_window, config)?
+            WgpuRenderer::new(gpu_context, &raw_window, config, None)?
         };
 
         Ok(Self {
@@ -187,6 +188,7 @@ impl WaylandWindowState {
             handle,
             active: false,
             hovered: false,
+            force_render_after_recovery: false,
             in_progress_window_controls: None,
             window_controls: WindowControls::default(),
             client_inset: None,
@@ -277,7 +279,7 @@ impl WaylandWindow {
     pub fn new(
         handle: AnyWindowHandle,
         globals: Globals,
-        gpu_context: &BladeContext,
+        gpu_context: GpuContext,
         client: WaylandClientStatePtr,
         params: WindowParams,
         appearance: WindowAppearance,
@@ -372,11 +374,16 @@ impl WaylandWindowStatePtr {
         let mut state = self.state.borrow_mut();
         state.surface.frame(&state.globals.qh, state.surface.id());
         state.resize_throttle = false;
+        let force_render = state.force_render_after_recovery;
+        state.force_render_after_recovery = false;
         drop(state);
 
         let mut cb = self.callbacks.borrow_mut();
         if let Some(fun) = cb.request_frame.as_mut() {
-            fun(Default::default());
+            fun(RequestFrameOptions {
+                force_render,
+                ..Default::default()
+            });
         }
     }
 
@@ -1034,7 +1041,37 @@ impl PlatformWindow for WaylandWindow {
 
     fn draw(&self, scene: &Scene) {
         let mut state = self.borrow_mut();
+
+        if state.renderer.device_lost() {
+            let raw_window = RawWindow {
+                window: state.surface.id().as_ptr().cast::<c_void>(),
+                display: state
+                    .surface
+                    .backend()
+                    .upgrade()
+                    .unwrap()
+                    .display_ptr()
+                    .cast::<c_void>(),
+            };
+            state.renderer.recover(&raw_window).unwrap_or_else(|err| {
+                panic!(
+                    "GPU device lost and recovery failed. \
+                        This may happen after system suspend/resume. \
+                        Please restart the application.\n\nError: {err}"
+                )
+            });
+
+            // The current scene references atlas textures that were cleared during recovery.
+            // Skip this frame and let the next frame rebuild the scene with fresh textures.
+            state.force_render_after_recovery = true;
+            return;
+        }
+
         state.renderer.draw(scene);
+
+        if state.renderer.needs_redraw() {
+            state.force_render_after_recovery = true;
+        }
     }
 
     fn completed_frame(&self) {

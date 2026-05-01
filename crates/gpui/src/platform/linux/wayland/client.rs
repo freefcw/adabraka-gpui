@@ -70,22 +70,22 @@ use super::{
     window::{ImeInput, WaylandWindowStatePtr},
 };
 
-use crate::platform::{PlatformWindow, blade::BladeContext};
+use crate::platform::{PlatformWindow, wgpu::GpuContext};
 use crate::{
     AnyWindowHandle, Bounds, Capslock, CursorStyle, DOUBLE_CLICK_INTERVAL, DevicePixels, DisplayId,
     FileDropEvent, ForegroundExecutor, KeyDownEvent, KeyUpEvent, Keystroke, LinuxCommon,
     LinuxKeyboardLayout, Modifiers, ModifiersChangedEvent, MouseButton, MouseDownEvent,
     MouseExitEvent, MouseMoveEvent, MouseUpEvent, NavigationDirection, Pixels, PlatformDisplay,
     PlatformInput, PlatformKeyboardLayout, Point, SCROLL_LINES, ScrollDelta, ScrollWheelEvent,
-    Size, TouchPhase, WindowParams, point, px, size,
+    Size, TouchPhase, TrayIconClickEvent, WindowParams, point, px, size,
 };
 use crate::{
     SharedString,
     platform::linux::{
         LinuxClient, get_xkb_compose_state, is_within_click_distance, open_uri_internal,
         platform::{
-            LinuxTrayEventTarget, TrayIconEventCallback, TrayMenuActionCallback,
-            install_linux_tray_event_source,
+            LinuxTrayClickEvent, LinuxTrayEventTarget, TrayIconClickEventCallback,
+            TrayIconEventCallback, TrayMenuActionCallback, install_linux_tray_event_source,
         },
         read_fd, reveal_path_internal,
         wayland::{
@@ -197,7 +197,7 @@ pub struct Output {
 pub(crate) struct WaylandClientState {
     serial_tracker: SerialTracker,
     globals: Globals,
-    gpu_context: BladeContext,
+    gpu_context: GpuContext,
     wl_seat: wl_seat::WlSeat, // TODO: Multi seat support
     wl_pointer: Option<wl_pointer::WlPointer>,
     wl_keyboard: Option<wl_keyboard::WlKeyboard>,
@@ -245,6 +245,26 @@ pub(crate) struct WaylandClientState {
 }
 
 impl LinuxTrayEventTarget for WaylandClientState {
+    fn convert_tray_click_event(&self, event: LinuxTrayClickEvent) -> TrayIconClickEvent {
+        // SNI gives a screen-coordinate hint without an associated Wayland
+        // surface. That lets us use wl_output.scale, but not per-surface
+        // fractional-scale state, so fractional scaling remains approximate.
+        let scale_factor = self
+            .outputs
+            .values()
+            .find(|output| output.bounds.contains(&event.position))
+            .map(|output| output.scale as f32)
+            .unwrap_or(1.0);
+
+        TrayIconClickEvent::with_position(
+            event.kind,
+            point(
+                px(event.position.x.0 as f32 / scale_factor),
+                px(event.position.y.0 as f32 / scale_factor),
+            ),
+        )
+    }
+
     fn take_tray_icon_event_callback(&mut self) -> Option<TrayIconEventCallback> {
         self.common.callbacks.tray_icon_event.take()
     }
@@ -253,6 +273,20 @@ impl LinuxTrayEventTarget for WaylandClientState {
         self.common
             .callbacks
             .tray_icon_event
+            .get_or_insert(callback);
+    }
+
+    fn take_tray_icon_click_event_callback(&mut self) -> Option<TrayIconClickEventCallback> {
+        self.common.callbacks.tray_icon_click_event.take()
+    }
+
+    fn restore_tray_icon_click_event_callback_if_empty(
+        &mut self,
+        callback: TrayIconClickEventCallback,
+    ) {
+        self.common
+            .callbacks
+            .tray_icon_click_event
             .get_or_insert(callback);
     }
 
@@ -527,7 +561,7 @@ impl WaylandClient {
             })
             .unwrap();
 
-        let gpu_context = BladeContext::new().expect("Unable to init GPU context");
+        let gpu_context = Rc::new(RefCell::new(None));
 
         let seat = seat.unwrap();
         let globals = Globals::new(
@@ -737,7 +771,7 @@ impl LinuxClient for WaylandClient {
         let (window, surface_id) = WaylandWindow::new(
             handle,
             state.globals.clone(),
-            &state.gpu_context,
+            state.gpu_context.clone(),
             WaylandClientStatePtr(Rc::downgrade(&self.0)),
             params,
             state.common.appearance,

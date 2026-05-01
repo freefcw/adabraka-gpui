@@ -1,7 +1,7 @@
 use anyhow::{Context as _, anyhow};
 use x11rb::connection::RequestConnection;
 
-use crate::platform::blade::{BladeContext, BladeRenderer, BladeSurfaceConfig};
+use crate::platform::wgpu::{GpuContext, WgpuRenderer, WgpuSurfaceConfig};
 use crate::{
     AnyWindowHandle, Bounds, Decorations, DevicePixels, ForegroundExecutor, GpuSpecs, Modifiers,
     Pixels, PlatformAtlas, PlatformDisplay, PlatformInput, PlatformInputHandler, PlatformWindow,
@@ -10,7 +10,6 @@ use crate::{
     WindowDecorations, WindowKind, WindowParams, X11ClientStatePtr, px, size,
 };
 
-use blade_graphics as gpu;
 use raw_window_handle as rwh;
 use util::{ResultExt, maybe};
 use x11rb::{
@@ -91,13 +90,12 @@ x11rb::atom_manager! {
 fn query_render_extent(
     xcb: &Rc<XCBConnection>,
     x_window: xproto::Window,
-) -> anyhow::Result<gpu::Extent> {
+) -> anyhow::Result<Size<DevicePixels>> {
     let reply = get_reply(|| "X11 GetGeometry failed.", xcb.get_geometry(x_window))?;
-    Ok(gpu::Extent {
-        width: reply.width as u32,
-        height: reply.height as u32,
-        depth: 1,
-    })
+    Ok(size(
+        DevicePixels(reply.width as i32),
+        DevicePixels(reply.height as i32),
+    ))
 }
 
 impl ResizeEdge {
@@ -231,12 +229,16 @@ fn find_visuals(xcb: &XCBConnection, screen_index: usize) -> VisualSet {
     set
 }
 
+#[derive(Clone, Debug)]
 struct RawWindow {
     connection: *mut c_void,
     screen_id: usize,
     window_id: u32,
     visual_id: u32,
 }
+
+unsafe impl Send for RawWindow {}
+unsafe impl Sync for RawWindow {}
 
 #[derive(Default)]
 pub struct Callbacks {
@@ -257,11 +259,13 @@ pub struct X11WindowState {
     executor: ForegroundExecutor,
     atoms: XcbAtoms,
     x_root_window: xproto::Window,
+    x_screen_index: usize,
+    visual_id: u32,
     pub(crate) counter_id: sync::Counter,
     pub(crate) last_sync_counter: Option<sync::Int64>,
     bounds: Bounds<Pixels>,
     scale_factor: f32,
-    renderer: BladeRenderer,
+    renderer: WgpuRenderer,
     display: Rc<dyn PlatformDisplay>,
     input_handler: Option<PlatformInputHandler>,
     appearance: WindowAppearance,
@@ -271,6 +275,7 @@ pub struct X11WindowState {
     hidden: bool,
     active: bool,
     hovered: bool,
+    force_render_after_recovery: bool,
     fullscreen: bool,
     client_side_decorations_supported: bool,
     decorations: WindowDecorations,
@@ -389,7 +394,7 @@ impl X11WindowState {
         handle: AnyWindowHandle,
         client: X11ClientStatePtr,
         executor: ForegroundExecutor,
-        gpu_context: &BladeContext,
+        gpu_context: GpuContext,
         params: WindowParams,
         xcb: &Rc<XCBConnection>,
         client_side_decorations_supported: bool,
@@ -606,7 +611,7 @@ impl X11WindowState {
             }
 
             if params.mouse_passthrough {
-                use x11rb::protocol::shape::{self, ConnectionExt as _};
+                use x11rb::protocol::shape;
                 check_reply(
                     || "X11 shape::rectangles for mouse passthrough failed.",
                     shape::rectangles(
@@ -695,7 +700,7 @@ impl X11WindowState {
                     window_id: x_window,
                     visual_id: visual.id,
                 };
-                let config = BladeSurfaceConfig {
+                let config = WgpuSurfaceConfig {
                     // Note: this has to be done after the GPU init, or otherwise
                     // the sizes are immediately invalidated.
                     size: query_render_extent(xcb, x_window)?,
@@ -704,8 +709,9 @@ impl X11WindowState {
                     // If the window appearance changes, then the renderer will get updated
                     // too
                     transparent: false,
+                    preferred_present_mode: None,
                 };
-                BladeRenderer::new(gpu_context, &raw_window, config)?
+                WgpuRenderer::new(gpu_context, &raw_window, config, None)?
             };
 
             let display = Rc::new(X11Display::new(xcb, scale_factor, x_screen_index)?);
@@ -715,6 +721,8 @@ impl X11WindowState {
                 executor,
                 display,
                 x_root_window: visual_set.root,
+                x_screen_index,
+                visual_id: visual.id,
                 bounds: bounds.to_pixels(scale_factor),
                 scale_factor,
                 renderer,
@@ -722,6 +730,7 @@ impl X11WindowState {
                 input_handler: None,
                 active: false,
                 hovered: false,
+                force_render_after_recovery: false,
                 fullscreen: false,
                 maximized_vertical: false,
                 maximized_horizontal: false,
@@ -753,8 +762,8 @@ impl X11WindowState {
     fn content_size(&self) -> Size<Pixels> {
         let size = self.renderer.viewport_size();
         Size {
-            width: size.width.into(),
-            height: size.height.into(),
+            width: Pixels(size.width.0 as f32),
+            height: Pixels(size.height.0 as f32),
         }
     }
 }
@@ -808,7 +817,7 @@ impl X11Window {
         handle: AnyWindowHandle,
         client: X11ClientStatePtr,
         executor: ForegroundExecutor,
-        gpu_context: &BladeContext,
+        gpu_context: GpuContext,
         params: WindowParams,
         xcb: &Rc<XCBConnection>,
         client_side_decorations_supported: bool,
@@ -819,6 +828,7 @@ impl X11Window {
         appearance: WindowAppearance,
         parent_window: Option<xproto::Window>,
     ) -> anyhow::Result<Self> {
+        let icon = params.icon.clone();
         let ptr = X11WindowStatePtr {
             state: Rc::new(RefCell::new(X11WindowState::new(
                 handle,
@@ -841,7 +851,6 @@ impl X11Window {
         };
 
         let state = ptr.state.borrow_mut();
-        let icon = state.params.icon.clone();
         ptr.set_wm_properties(state)?;
 
         let window = Self(ptr);
@@ -1037,9 +1046,17 @@ impl X11WindowStatePtr {
     }
 
     pub fn refresh(&self, request_frame_options: RequestFrameOptions) {
+        let force_render_after_recovery = {
+            let mut state = self.state.borrow_mut();
+            std::mem::take(&mut state.force_render_after_recovery)
+        };
+
         let mut cb = self.callbacks.borrow_mut();
         if let Some(ref mut fun) = cb.request_frame {
-            fun(request_frame_options);
+            fun(RequestFrameOptions {
+                force_render: request_frame_options.force_render || force_render_after_recovery,
+                ..request_frame_options
+            });
         }
     }
 
@@ -1142,10 +1159,7 @@ impl X11WindowStatePtr {
 
             let gpu_size = query_render_extent(&self.xcb, self.x_window)?;
             if true {
-                state.renderer.update_drawable_size(size(
-                    DevicePixels(gpu_size.width as i32),
-                    DevicePixels(gpu_size.height as i32),
-                ));
+                state.renderer.update_drawable_size(gpu_size);
                 resize_args = Some((state.content_size(), state.scale_factor));
             }
             if let Some(value) = state.last_sync_counter.take() {
@@ -1522,7 +1536,35 @@ impl PlatformWindow for X11Window {
 
     fn draw(&self, scene: &Scene) {
         let mut inner = self.0.state.borrow_mut();
+
+        if inner.renderer.device_lost() {
+            let raw_window = RawWindow {
+                connection: as_raw_xcb_connection::AsRawXcbConnection::as_raw_xcb_connection(
+                    &*self.0.xcb,
+                ) as *mut _,
+                screen_id: inner.x_screen_index,
+                window_id: self.0.x_window,
+                visual_id: inner.visual_id,
+            };
+            inner.renderer.recover(&raw_window).unwrap_or_else(|err| {
+                panic!(
+                    "GPU device lost and recovery failed. \
+                        This may happen after system suspend/resume. \
+                        Please restart the application.\n\nError: {err}"
+                )
+            });
+
+            // The current scene references atlas textures that were cleared during recovery.
+            // Skip this frame and let the next frame rebuild the scene with fresh textures.
+            inner.force_render_after_recovery = true;
+            return;
+        }
+
         inner.renderer.draw(scene);
+
+        if inner.renderer.needs_redraw() {
+            inner.force_render_after_recovery = true;
+        }
     }
 
     fn sprite_atlas(&self) -> Arc<dyn PlatformAtlas> {
@@ -1735,7 +1777,7 @@ impl PlatformWindow for X11Window {
     }
 
     fn set_mouse_passthrough(&self, passthrough: bool) {
-        use x11rb::protocol::shape::{self, ConnectionExt as _};
+        use x11rb::protocol::shape;
         if passthrough {
             shape::rectangles(
                 self.0.xcb.as_ref(),
@@ -1788,7 +1830,7 @@ impl PlatformWindow for X11Window {
             self.0.xcb.change_property32(
                 xproto::PropMode::REPLACE,
                 self.0.x_window,
-                self.0.atoms._NET_WM_ICON,
+                self.0.state.borrow().atoms._NET_WM_ICON,
                 xproto::AtomEnum::CARDINAL,
                 &property_data,
             ),

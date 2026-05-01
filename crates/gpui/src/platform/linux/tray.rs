@@ -7,11 +7,14 @@ use std::{
 
 use ksni::blocking::TrayMethods as _;
 
-use crate::platform::{TrayMenuItem, linux::platform::LinuxTrayEvent};
-use crate::{SharedString, TrayIconEvent};
+use crate::platform::{
+    TrayMenuItem,
+    linux::platform::{LinuxTrayClickEvent, LinuxTrayEvent},
+};
+use crate::{DevicePixels, SharedString, TrayIconEvent, point};
 
 type TrayActionCallback = Arc<Mutex<Option<Box<dyn Fn(SharedString) + Send>>>>;
-type TrayClickCallback = Arc<Mutex<Option<Box<dyn Fn(TrayIconEvent) + Send>>>>;
+type TrayClickCallback = Arc<Mutex<Option<Box<dyn Fn(LinuxTrayClickEvent) + Send>>>>;
 
 const DEFAULT_STATUS_NOTIFIER_ID: &str = "gpui-tray";
 
@@ -69,12 +72,21 @@ impl ksni::Tray for GpuiTray {
         }
     }
 
-    fn activate(&mut self, _x: i32, _y: i32) {
-        emit_click(&self.click_callback, TrayIconEvent::LeftClick);
+    fn activate(&mut self, x: i32, y: i32) {
+        emit_click(
+            &self.click_callback,
+            click_event_with_position(TrayIconEvent::LeftClick, x, y),
+        );
     }
 
-    fn secondary_activate(&mut self, _x: i32, _y: i32) {
-        emit_click(&self.click_callback, TrayIconEvent::RightClick);
+    fn secondary_activate(&mut self, x: i32, y: i32) {
+        // SNI "secondary activate" is an auxiliary activation, commonly
+        // triggered by middle or alternate click depending on the host.
+        // GPUI maps it to RightClick for compatibility with the existing API.
+        emit_click(
+            &self.click_callback,
+            click_event_with_position(TrayIconEvent::RightClick, x, y),
+        );
     }
 
     fn menu(&self) -> Vec<ksni::MenuItem<Self>> {
@@ -100,7 +112,14 @@ fn default_status_notifier_id() -> String {
         .unwrap_or_else(|| DEFAULT_STATUS_NOTIFIER_ID.to_string())
 }
 
-fn emit_click(callback: &TrayClickCallback, event: TrayIconEvent) {
+fn click_event_with_position(kind: TrayIconEvent, x: i32, y: i32) -> LinuxTrayClickEvent {
+    LinuxTrayClickEvent {
+        kind,
+        position: point(DevicePixels(x), DevicePixels(y)),
+    }
+}
+
+fn emit_click(callback: &TrayClickCallback, event: LinuxTrayClickEvent) {
     if let Ok(guard) = callback.lock()
         && let Some(ref callback) = *guard
     {
@@ -256,7 +275,7 @@ impl LinuxTray {
         }
     }
 
-    fn set_on_click(&self, callback: Box<dyn Fn(TrayIconEvent) + Send>) {
+    fn set_on_click(&self, callback: Box<dyn Fn(LinuxTrayClickEvent) + Send>) {
         if let Ok(mut guard) = self.click_callback.lock() {
             *guard = Some(callback);
         }

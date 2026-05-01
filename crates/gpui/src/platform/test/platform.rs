@@ -3,7 +3,8 @@ use crate::{
     DummyKeyboardMapper, ForegroundExecutor, Keymap, NoopTextSystem, Platform, PlatformDisplay,
     PlatformKeyboardLayout, PlatformKeyboardMapper, PlatformTextSystem, PromptButton,
     ScreenCaptureFrame, ScreenCaptureSource, ScreenCaptureStream, SourceMetadata, Task,
-    TestDisplay, TestWindow, TrayIconRenderingMode, WindowAppearance, WindowParams, size,
+    TestDisplay, TestWindow, TrayIconClickEvent, TrayIconEvent, TrayIconRenderingMode,
+    WindowAppearance, WindowParams, size,
 };
 use anyhow::Result;
 use collections::VecDeque;
@@ -36,6 +37,8 @@ pub(crate) struct TestPlatform {
     screen_capture_sources: RefCell<Vec<TestScreenCaptureSource>>,
     tray_icon: Mutex<Option<Vec<u8>>>,
     tray_icon_rendering_mode: Mutex<TrayIconRenderingMode>,
+    tray_icon_event_callback: RefCell<Option<Box<dyn FnMut(TrayIconEvent)>>>,
+    tray_icon_click_event_callback: RefCell<Option<Box<dyn FnMut(TrayIconClickEvent)>>>,
     pub opened_url: RefCell<Option<String>>,
     pub text_system: Arc<dyn PlatformTextSystem>,
     #[cfg(target_os = "windows")]
@@ -120,6 +123,8 @@ impl TestPlatform {
             weak: weak.clone(),
             tray_icon: Mutex::new(None),
             tray_icon_rendering_mode: Mutex::new(TrayIconRenderingMode::default()),
+            tray_icon_event_callback: Default::default(),
+            tray_icon_click_event_callback: Default::default(),
             opened_url: Default::default(),
             #[cfg(target_os = "windows")]
             bitmap_factory,
@@ -231,6 +236,30 @@ impl TestPlatform {
     pub(crate) fn tray_icon_rendering_mode(&self) -> TrayIconRenderingMode {
         *self.tray_icon_rendering_mode.lock()
     }
+
+    pub(crate) fn simulate_tray_icon_click_event(&self, event: TrayIconClickEvent) {
+        let mut event_callback = self.tray_icon_event_callback.borrow_mut().take();
+        let mut click_callback = self.tray_icon_click_event_callback.borrow_mut().take();
+
+        if let Some(callback) = event_callback.as_mut() {
+            callback(event.kind.clone());
+        }
+
+        if let Some(callback) = click_callback.as_mut() {
+            callback(event);
+        }
+
+        if let Some(callback) = event_callback {
+            self.tray_icon_event_callback
+                .borrow_mut()
+                .get_or_insert(callback);
+        }
+        if let Some(callback) = click_callback {
+            self.tray_icon_click_event_callback
+                .borrow_mut()
+                .get_or_insert(callback);
+        }
+    }
 }
 
 impl Platform for TestPlatform {
@@ -341,6 +370,14 @@ impl Platform for TestPlatform {
 
     fn set_tray_icon_rendering_mode(&self, rendering_mode: TrayIconRenderingMode) {
         *self.tray_icon_rendering_mode.lock() = rendering_mode;
+    }
+
+    fn on_tray_icon_event(&self, callback: Box<dyn FnMut(TrayIconEvent)>) {
+        *self.tray_icon_event_callback.borrow_mut() = Some(callback);
+    }
+
+    fn on_tray_icon_click_event(&self, callback: Box<dyn FnMut(TrayIconClickEvent)>) {
+        *self.tray_icon_click_event_callback.borrow_mut() = Some(callback);
     }
 
     fn open_url(&self, url: &str) {
