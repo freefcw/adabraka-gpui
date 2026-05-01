@@ -12,6 +12,9 @@ use core_foundation::{
     number::CFNumber,
     string::CFString,
 };
+use core_foundation_sys::preferences::{
+    CFPreferencesCopyAppValue, kCFPreferencesCurrentApplication,
+};
 use core_graphics::{
     base::{CGFloat, CGGlyph, kCGImageAlphaPremultipliedLast},
     color_space::CGColorSpace,
@@ -42,7 +45,12 @@ use pathfinder_geometry::{
     vector::{Vector2F, Vector2I},
 };
 use smallvec::SmallVec;
-use std::{borrow::Cow, char, convert::TryFrom, sync::Arc};
+use std::{
+    borrow::Cow,
+    char,
+    convert::TryFrom,
+    sync::{Arc, OnceLock},
+};
 
 use super::open_type::apply_features_and_fallbacks;
 
@@ -185,12 +193,34 @@ impl PlatformTextSystem for MacTextSystem {
     }
 
     fn glyph_dilation_for_color(&self, color: Hsla) -> u8 {
-        // Rec. 709 luminance calculation on linearized sRGB.
-        let rgba = crate::Rgba::from(color);
+        if !font_smoothing_allowed_by_user() {
+            return 0;
+        }
+
+        // CoreGraphics selects one of five font smoothing dilation levels from
+        // the foreground color's Rec. 709 luminance.
+        let rgba: crate::Rgba = color.into();
         let luminance = 0.2126 * rgba.r + 0.7152 * rgba.g + 0.0722 * rgba.b;
-        // Simplified 2-level dilation: 0 for dark, 1 for light
-        if luminance > 0.5 { 1 } else { 0 }
+        let level = ((4.0 * luminance) + 0.5).floor() as i32;
+        level.clamp(0, 4) as u8
     }
+}
+
+fn font_smoothing_allowed_by_user() -> bool {
+    static ALLOWED: OnceLock<bool> = OnceLock::new();
+    *ALLOWED.get_or_init(|| {
+        let key = CFString::new("AppleFontSmoothing");
+        let value_ref = unsafe {
+            CFPreferencesCopyAppValue(key.as_concrete_TypeRef(), kCFPreferencesCurrentApplication)
+        };
+        if value_ref.is_null() {
+            return true;
+        }
+
+        let number = unsafe { CFNumber::wrap_under_create_rule(value_ref as _) };
+        // Only an explicit value of 0 means font smoothing is disabled.
+        number.to_i64() != Some(0)
+    })
 }
 
 impl MacTextSystemState {
@@ -336,7 +366,7 @@ impl MacTextSystemState {
     fn raster_bounds(&self, params: &RenderGlyphParams) -> Result<Bounds<DevicePixels>> {
         let font = &self.fonts[params.font_id.0];
         let scale = Transform2F::from_scale(params.scale_factor);
-        Ok(font
+        let bounds: Bounds<DevicePixels> = font
             .raster_bounds(
                 params.glyph_id.0,
                 params.font_size.into(),
@@ -344,7 +374,10 @@ impl MacTextSystemState {
                 HintingOptions::None,
                 font_kit::canvas::RasterizationOptions::GrayscaleAa,
             )?
-            .into())
+            .into();
+
+        // Give CoreGraphics room for antialiasing and dilation at glyph edges.
+        Ok(bounds.dilate(DevicePixels(1)))
     }
 
     fn rasterize_glyph(
@@ -406,13 +439,21 @@ impl MacTextSystemState {
                 .subpixel_variant
                 .map(|v| v as f32 / SUBPIXEL_VARIANTS_X as f32);
             cx.set_text_drawing_mode(CGTextDrawingMode::CGTextFill);
-            cx.set_gray_fill_color(0.0, 1.0);
             cx.set_allows_antialiasing(true);
             cx.set_should_antialias(true);
             cx.set_allows_font_subpixel_positioning(true);
             cx.set_should_subpixel_position_fonts(true);
             cx.set_allows_font_subpixel_quantization(false);
             cx.set_should_subpixel_quantize_fonts(false);
+
+            if params.dilation > 0 {
+                let luminance = params.dilation as f64 * 0.25;
+                cx.set_should_smooth_fonts(true);
+                cx.set_gray_fill_color(luminance, 1.0);
+            } else {
+                cx.set_gray_fill_color(0.0, 1.0);
+            }
+
             self.fonts[params.font_id.0]
                 .native_font()
                 .clone_with_font_size(f32::from(params.font_size) as CGFloat)
