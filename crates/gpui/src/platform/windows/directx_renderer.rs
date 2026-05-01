@@ -70,6 +70,10 @@ struct DirectXResources {
     path_intermediate_msaa_texture: ID3D11Texture2D,
     path_intermediate_msaa_view: [Option<ID3D11RenderTargetView>; 1],
 
+    // Copy of the current render target used by non-normal quad blend modes.
+    framebuffer_copy_texture: ID3D11Texture2D,
+    framebuffer_copy_srv: [Option<ID3D11ShaderResourceView>; 1],
+
     // Cached window size and viewport
     width: u32,
     height: u32,
@@ -372,6 +376,8 @@ impl DirectXRenderer {
         )?;
         self.pipelines.shadow_pipeline.draw(
             &self.devices.device_context,
+            &[None::<ID3D11ShaderResourceView>],
+            &self.globals.sampler,
             &self.resources.viewport,
             &self.globals.global_params_buffer,
             D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP,
@@ -385,6 +391,9 @@ impl DirectXRenderer {
         if quads.is_empty() {
             return Ok(());
         }
+        if quads.len() == 1 && quads[0].blend_mode != 0 {
+            self.copy_framebuffer_to_texture()?;
+        }
         self.pipelines.quad_pipeline.update_buffer(
             &self.devices.device,
             &self.devices.device_context,
@@ -393,6 +402,8 @@ impl DirectXRenderer {
         )?;
         self.pipelines.quad_pipeline.draw(
             &self.devices.device_context,
+            &self.resources.framebuffer_copy_srv,
+            &self.globals.sampler,
             &self.resources.viewport,
             &self.globals.global_params_buffer,
             D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP,
@@ -400,6 +411,20 @@ impl DirectXRenderer {
             quads.len() as u32,
             &mut self.last_pipeline,
         )
+    }
+
+    fn copy_framebuffer_to_texture(&mut self) -> Result<()> {
+        self.last_pipeline = None;
+        unsafe {
+            self.devices
+                .device_context
+                .PSSetShaderResources(2, Some(&[None::<ID3D11ShaderResourceView>]));
+            self.devices.device_context.CopyResource(
+                &self.resources.framebuffer_copy_texture,
+                &*self.resources.render_target,
+            );
+        }
+        Ok(())
     }
 
     fn draw_paths_to_intermediate(&mut self, paths: &[Path<ScaledPixels>]) -> Result<()> {
@@ -444,6 +469,8 @@ impl DirectXRenderer {
         )?;
         self.pipelines.path_rasterization_pipeline.draw(
             &self.devices.device_context,
+            &[None::<ID3D11ShaderResourceView>],
+            &self.globals.sampler,
             &self.resources.viewport,
             &self.globals.global_params_buffer,
             D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST,
@@ -529,6 +556,8 @@ impl DirectXRenderer {
         )?;
         self.pipelines.underline_pipeline.draw(
             &self.devices.device_context,
+            &[None::<ID3D11ShaderResourceView>],
+            &self.globals.sampler,
             &self.resources.viewport,
             &self.globals.global_params_buffer,
             D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP,
@@ -699,6 +728,8 @@ impl DirectXResources {
             path_intermediate_srv,
             path_intermediate_msaa_texture,
             path_intermediate_msaa_view,
+            framebuffer_copy_texture,
+            framebuffer_copy_srv,
             viewport,
         ) = create_resources(devices, &swap_chain, width, height)?;
         set_rasterizer_state(&devices.device, &devices.device_context)?;
@@ -711,6 +742,8 @@ impl DirectXResources {
             path_intermediate_msaa_texture,
             path_intermediate_msaa_view,
             path_intermediate_srv,
+            framebuffer_copy_texture,
+            framebuffer_copy_srv,
             viewport,
             width,
             height,
@@ -731,6 +764,8 @@ impl DirectXResources {
             path_intermediate_srv,
             path_intermediate_msaa_texture,
             path_intermediate_msaa_view,
+            framebuffer_copy_texture,
+            framebuffer_copy_srv,
             viewport,
         ) = create_resources(devices, &self.swap_chain, width, height)?;
         self.render_target = render_target;
@@ -739,6 +774,8 @@ impl DirectXResources {
         self.path_intermediate_msaa_texture = path_intermediate_msaa_texture;
         self.path_intermediate_msaa_view = path_intermediate_msaa_view;
         self.path_intermediate_srv = path_intermediate_srv;
+        self.framebuffer_copy_texture = framebuffer_copy_texture;
+        self.framebuffer_copy_srv = framebuffer_copy_srv;
         self.viewport = viewport;
         Ok(())
     }
@@ -951,6 +988,8 @@ impl<T> PipelineState<T> {
     fn draw(
         &self,
         device_context: &ID3D11DeviceContext,
+        texture: &[Option<ID3D11ShaderResourceView>],
+        sampler: &[Option<ID3D11SamplerState>],
         viewport: &[D3D11_VIEWPORT],
         global_params: &[Option<ID3D11Buffer>],
         topology: D3D_PRIMITIVE_TOPOLOGY,
@@ -973,6 +1012,8 @@ impl<T> PipelineState<T> {
             *last_pipeline = Some(self_ptr);
         }
         unsafe {
+            device_context.PSSetSamplers(2, Some(sampler));
+            device_context.PSSetShaderResources(2, Some(texture));
             device_context.DrawInstanced(vertex_count, instance_count, 0, 0);
         }
         Ok(())
@@ -1005,6 +1046,7 @@ impl<T> PipelineState<T> {
         unsafe {
             // Always set texture SRV — it changes per batch for different atlas textures
             device_context.PSSetSamplers(0, Some(sampler));
+            device_context.PSSetShaderResources(2, Some(&[None::<ID3D11ShaderResourceView>]));
             device_context.VSSetShaderResources(0, Some(texture));
             device_context.PSSetShaderResources(0, Some(texture));
 
@@ -1123,6 +1165,8 @@ fn create_resources(
     [Option<ID3D11ShaderResourceView>; 1],
     ID3D11Texture2D,
     [Option<ID3D11RenderTargetView>; 1],
+    ID3D11Texture2D,
+    [Option<ID3D11ShaderResourceView>; 1],
     [D3D11_VIEWPORT; 1],
 )> {
     let (render_target, render_target_view) =
@@ -1131,6 +1175,8 @@ fn create_resources(
         create_path_intermediate_texture(&devices.device, width, height)?;
     let (path_intermediate_msaa_texture, path_intermediate_msaa_view) =
         create_path_intermediate_msaa_texture_and_view(&devices.device, width, height)?;
+    let (framebuffer_copy_texture, framebuffer_copy_srv) =
+        create_shader_readable_texture(&devices.device, width, height)?;
     let viewport = set_viewport(&devices.device_context, width as f32, height as f32);
     Ok((
         render_target,
@@ -1139,6 +1185,8 @@ fn create_resources(
         path_intermediate_srv,
         path_intermediate_msaa_texture,
         path_intermediate_msaa_view,
+        framebuffer_copy_texture,
+        framebuffer_copy_srv,
         viewport,
     ))
 }
@@ -1162,6 +1210,15 @@ fn create_render_target_and_its_view(
 
 #[inline]
 fn create_path_intermediate_texture(
+    device: &ID3D11Device,
+    width: u32,
+    height: u32,
+) -> Result<(ID3D11Texture2D, [Option<ID3D11ShaderResourceView>; 1])> {
+    create_shader_readable_texture(device, width, height)
+}
+
+#[inline]
+fn create_shader_readable_texture(
     device: &ID3D11Device,
     width: u32,
     height: u32,
@@ -1402,6 +1459,8 @@ fn set_pipeline_state(
     unsafe {
         device_context.VSSetShaderResources(1, Some(buffer_view));
         device_context.PSSetShaderResources(1, Some(buffer_view));
+        device_context.VSSetShaderResources(0, Some(&[None::<ID3D11ShaderResourceView>]));
+        device_context.PSSetShaderResources(0, Some(&[None::<ID3D11ShaderResourceView>]));
         device_context.IASetPrimitiveTopology(topology);
         device_context.RSSetViewports(Some(viewport));
         device_context.VSSetShader(vertex_shader, None);

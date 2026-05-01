@@ -62,6 +62,7 @@ struct QuadVertexOutput {
   float4 background_color3 [[flat]];
   float clip_distance [[clip_distance]][4];
   uint blend_mode [[flat]];
+  float2 framebuffer_position;
 };
 
 struct QuadFragmentInput {
@@ -74,6 +75,7 @@ struct QuadFragmentInput {
   float4 background_color2 [[flat]];
   float4 background_color3 [[flat]];
   uint blend_mode [[flat]];
+  float2 framebuffer_position;
 };
 
 vertex QuadVertexOutput quad_vertex(uint unit_vertex_id [[vertex_id]],
@@ -91,6 +93,18 @@ vertex QuadVertexOutput quad_vertex(uint unit_vertex_id [[vertex_id]],
   float4 clip_distance = distance_from_clip_rect_transformed(unit_vertex, quad.bounds,
                                                  quad.content_mask.bounds, quad.transform);
   float4 border_color = hsla_to_rgba(quad.border_color);
+  float2 position =
+      unit_vertex * float2(quad.bounds.size.width, quad.bounds.size.height) +
+      float2(quad.bounds.origin.x, quad.bounds.origin.y);
+  float2 framebuffer_position = float2(0.0);
+  framebuffer_position[0] =
+      position[0] * quad.transform.rotation_scale[0][0] +
+      position[1] * quad.transform.rotation_scale[0][1] +
+      quad.transform.translation[0];
+  framebuffer_position[1] =
+      position[0] * quad.transform.rotation_scale[1][0] +
+      position[1] * quad.transform.rotation_scale[1][1] +
+      quad.transform.translation[1];
 
   GradientColor gradient = prepare_fill_color(
     quad.background.tag,
@@ -113,37 +127,79 @@ vertex QuadVertexOutput quad_vertex(uint unit_vertex_id [[vertex_id]],
       gradient.color2,
       gradient.color3,
       {clip_distance.x, clip_distance.y, clip_distance.z, clip_distance.w},
-      quad.blend_mode};
+      quad.blend_mode,
+      framebuffer_position};
 }
 
-float4 apply_blend_mode(float4 src, uint mode) {
+float4 apply_blend_mode(float4 src, float4 dst, uint mode) {
   switch (mode) {
     case 0u: return src;
-    case 1u: return float4(src.rgb * src.rgb, src.a);
-    case 2u: return float4(1.0 - (1.0 - src.rgb) * (1.0 - src.rgb), src.a);
+    case 1u: return float4(src.rgb * dst.rgb, src.a);
+    case 2u: return float4(1.0 - (1.0 - src.rgb) * (1.0 - dst.rgb), src.a);
     case 3u: {
-      float3 mid = float3(0.5);
       float3 r = select(
-        1.0 - 2.0 * (1.0 - src.rgb) * (1.0 - mid),
-        2.0 * src.rgb * mid,
-        src.rgb < float3(0.5)
+        1.0 - 2.0 * (1.0 - src.rgb) * (1.0 - dst.rgb),
+        2.0 * src.rgb * dst.rgb,
+        dst.rgb < float3(0.5)
       );
       return float4(r, src.a);
     }
-    case 4u: return float4(src.rgb * src.rgb + 2.0 * src.rgb * (1.0 - src.rgb), src.a);
-    case 5u: return float4(abs(src.rgb - 0.5), src.a);
+    case 4u: {
+      float3 d = select(
+        sqrt(dst.rgb),
+        ((16.0 * dst.rgb - 12.0) * dst.rgb + 4.0) * dst.rgb,
+        dst.rgb <= float3(0.25)
+      );
+      float3 r = select(
+        dst.rgb + (2.0 * src.rgb - 1.0) * (d - dst.rgb),
+        dst.rgb - (1.0 - 2.0 * src.rgb) * dst.rgb * (1.0 - dst.rgb),
+        src.rgb <= float3(0.5)
+      );
+      return float4(r, src.a);
+    }
+    case 5u: return float4(abs(src.rgb - dst.rgb), src.a);
     default: return src;
   }
 }
 
+float4 read_framebuffer(float2 position,
+                        texture2d<float, access::sample> framebuffer_texture,
+                        uint mode) {
+  if (mode == 0u || framebuffer_texture.get_width() == 0) {
+    return float4(0.0);
+  }
+  constexpr sampler framebuffer_sampler(coord::normalized, address::clamp_to_edge,
+                                        filter::linear);
+  float2 texture_coords =
+      position / float2(framebuffer_texture.get_width(), framebuffer_texture.get_height());
+  return framebuffer_texture.sample(framebuffer_sampler, texture_coords);
+}
+
+float3 unpremultiply_framebuffer_rgb(float4 dst) {
+  if (dst.a > 0.0) {
+    return saturate(dst.rgb / dst.a);
+  }
+  return float3(0.0);
+}
+
+float4 blend_quad_color(float4 src, float4 dst, uint mode) {
+  float4 dst_color = float4(unpremultiply_framebuffer_rgb(dst), dst.a);
+  float4 blended = apply_blend_mode(src, dst_color, mode);
+  blended.rgb = mix(src.rgb, blended.rgb, dst.a);
+  return blended;
+}
+
 fragment float4 quad_fragment(QuadFragmentInput input [[stage_in]],
                               constant Quad *quads
-                              [[buffer(QuadInputIndex_Quads)]]) {
+                              [[buffer(QuadInputIndex_Quads)]],
+                              texture2d<float, access::sample> framebuffer_texture
+                              [[texture(QuadInputIndex_FramebufferTexture)]]) {
   Quad quad = quads[input.quad_id];
   float4 background_color = fill_color(quad.background, input.position.xy, quad.bounds,
     input.background_solid, input.background_color0, input.background_color1,
     input.background_color2, input.background_color3);
-  background_color = apply_blend_mode(background_color, input.blend_mode);
+  float4 framebuffer_color =
+      read_framebuffer(input.framebuffer_position, framebuffer_texture, input.blend_mode);
 
   bool unrounded = quad.corner_radii.top_left == 0.0 &&
     quad.corner_radii.bottom_left == 0.0 &&
@@ -156,6 +212,9 @@ fragment float4 quad_fragment(QuadFragmentInput input [[stage_in]],
       quad.border_widths.right == 0.0 &&
       quad.border_widths.bottom == 0.0 &&
       unrounded) {
+    if (input.blend_mode != 0u) {
+      return blend_quad_color(background_color, framebuffer_color, input.blend_mode);
+    }
     return background_color;
   }
 
@@ -216,6 +275,9 @@ fragment float4 quad_fragment(QuadFragmentInput input [[stage_in]],
 
   // Fast path for points that must be part of the background
   if (is_within_inner_straight_border && !is_near_rounded_corner) {
+    if (input.blend_mode != 0u) {
+      return blend_quad_color(background_color, framebuffer_color, input.blend_mode);
+    }
     return background_color;
   }
 
@@ -428,7 +490,12 @@ fragment float4 quad_fragment(QuadFragmentInput input [[stage_in]],
                 saturate(antialias_threshold - inner_sdf));
   }
 
-  return color * float4(1.0, 1.0, 1.0, saturate(antialias_threshold - outer_sdf));
+  float alpha_factor = saturate(antialias_threshold - outer_sdf);
+  if (input.blend_mode != 0u) {
+    color.a *= alpha_factor;
+    return blend_quad_color(color, framebuffer_color, input.blend_mode);
+  }
+  return color * float4(1.0, 1.0, 1.0, alpha_factor);
 }
 
 // Returns the dash velocity of a corner given the dash velocity of the two

@@ -51,6 +51,8 @@ struct SurfaceParams {
 #[derive(blade_macros::ShaderData)]
 struct ShaderQuadsData {
     globals: GlobalParams,
+    t_framebuffer: gpu::TextureView,
+    s_framebuffer: gpu::Sampler,
     b_quads: gpu::BufferPiece,
 }
 
@@ -340,6 +342,8 @@ pub struct BladeRenderer {
     path_intermediate_texture_view: gpu::TextureView,
     path_intermediate_msaa_texture: Option<gpu::Texture>,
     path_intermediate_msaa_texture_view: Option<gpu::TextureView>,
+    framebuffer_copy_texture: gpu::Texture,
+    framebuffer_copy_texture_view: gpu::TextureView,
     rendering_parameters: RenderingParameters,
 }
 
@@ -351,7 +355,7 @@ impl BladeRenderer {
     ) -> anyhow::Result<Self> {
         let surface_config = gpu::SurfaceConfig {
             size: config.size,
-            usage: gpu::TextureUsage::TARGET,
+            usage: gpu::TextureUsage::COPY | gpu::TextureUsage::TARGET,
             display_sync: gpu::DisplaySync::Recent,
             color_space: gpu::ColorSpace::Srgb,
             allow_exclusive_full_screen: false,
@@ -401,6 +405,13 @@ impl BladeRenderer {
                 rendering_parameters.path_sample_count,
             )
             .unzip();
+        let (framebuffer_copy_texture, framebuffer_copy_texture_view) =
+            create_framebuffer_copy_texture(
+                &context.gpu,
+                surface.info().format,
+                config.size.width,
+                config.size.height,
+            );
 
         #[cfg(target_os = "macos")]
         let core_video_texture_cache = unsafe {
@@ -426,6 +437,8 @@ impl BladeRenderer {
             path_intermediate_texture_view,
             path_intermediate_msaa_texture,
             path_intermediate_msaa_texture_view,
+            framebuffer_copy_texture,
+            framebuffer_copy_texture_view,
             rendering_parameters,
         })
     }
@@ -488,6 +501,9 @@ impl BladeRenderer {
             if let Some(msaa_view) = self.path_intermediate_msaa_texture_view {
                 self.gpu.destroy_texture_view(msaa_view);
             }
+            self.gpu.destroy_texture(self.framebuffer_copy_texture);
+            self.gpu
+                .destroy_texture_view(self.framebuffer_copy_texture_view);
             let (path_intermediate_texture, path_intermediate_texture_view) =
                 create_path_intermediate_texture(
                     &self.gpu,
@@ -508,6 +524,15 @@ impl BladeRenderer {
                 .unzip();
             self.path_intermediate_msaa_texture = path_intermediate_msaa_texture;
             self.path_intermediate_msaa_texture_view = path_intermediate_msaa_texture_view;
+            let (framebuffer_copy_texture, framebuffer_copy_texture_view) =
+                create_framebuffer_copy_texture(
+                    &self.gpu,
+                    self.surface.info().format,
+                    gpu_size.width,
+                    gpu_size.height,
+                );
+            self.framebuffer_copy_texture = framebuffer_copy_texture;
+            self.framebuffer_copy_texture_view = framebuffer_copy_texture_view;
         }
     }
 
@@ -638,6 +663,9 @@ impl BladeRenderer {
         if let Some(msaa_view) = self.path_intermediate_msaa_texture_view {
             self.gpu.destroy_texture_view(msaa_view);
         }
+        self.gpu.destroy_texture(self.framebuffer_copy_texture);
+        self.gpu
+            .destroy_texture_view(self.framebuffer_copy_texture_view);
     }
 
     pub fn draw(&mut self, scene: &Scene) {
@@ -678,12 +706,35 @@ impl BladeRenderer {
         for batch in scene.batches() {
             match batch {
                 PrimitiveBatch::Quads(quads) => {
+                    if quads.len() == 1 && quads[0].blend_mode != 0 {
+                        drop(pass);
+                        let mut transfers = self.command_encoder.transfer("copy framebuffer");
+                        transfers.copy_texture_to_texture(
+                            frame.texture().into(),
+                            self.framebuffer_copy_texture.into(),
+                            self.surface_config.size,
+                        );
+                        drop(transfers);
+                        pass = self.command_encoder.render(
+                            "main",
+                            gpu::RenderTargetSet {
+                                colors: &[gpu::RenderTarget {
+                                    view: frame.texture_view(),
+                                    init_op: gpu::InitOp::Load,
+                                    finish_op: gpu::FinishOp::Store,
+                                }],
+                                depth_stencil: None,
+                            },
+                        );
+                    }
                     let instance_buf = unsafe { self.instance_belt.alloc_typed(quads, &self.gpu) };
                     let mut encoder = pass.with(&self.pipelines.quads);
                     encoder.bind(
                         0,
                         &ShaderQuadsData {
                             globals,
+                            t_framebuffer: self.framebuffer_copy_texture_view,
+                            s_framebuffer: self.atlas_sampler,
                             b_quads: instance_buf,
                         },
                     );
@@ -943,6 +994,39 @@ fn create_path_intermediate_texture(
         texture,
         gpu::TextureViewDesc {
             name: "path intermediate view",
+            format,
+            dimension: gpu::ViewDimension::D2,
+            subresources: &Default::default(),
+        },
+    );
+    (texture, texture_view)
+}
+
+fn create_framebuffer_copy_texture(
+    gpu: &gpu::Context,
+    format: gpu::TextureFormat,
+    width: u32,
+    height: u32,
+) -> (gpu::Texture, gpu::TextureView) {
+    let texture = gpu.create_texture(gpu::TextureDesc {
+        name: "framebuffer copy",
+        format,
+        size: gpu::Extent {
+            width,
+            height,
+            depth: 1,
+        },
+        array_layer_count: 1,
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: gpu::TextureDimension::D2,
+        usage: gpu::TextureUsage::COPY | gpu::TextureUsage::RESOURCE,
+        external: None,
+    });
+    let texture_view = gpu.create_texture_view(
+        texture,
+        gpu::TextureViewDesc {
+            name: "framebuffer copy view",
             format,
             dimension: gpu::ViewDimension::D2,
             subresources: &Default::default(),

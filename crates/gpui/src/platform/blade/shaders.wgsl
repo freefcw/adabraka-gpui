@@ -68,6 +68,8 @@ var<uniform> gamma_ratios: vec4<f32>;
 var<uniform> grayscale_enhanced_contrast: f32;
 var t_sprite: texture_2d<f32>;
 var s_sprite: sampler;
+var t_framebuffer: texture_2d<f32>;
+var s_framebuffer: sampler;
 
 const M_PI_F: f32 = 3.1415926;
 const GRAYSCALE_FACTORS: vec3<f32> = vec3<f32>(0.2126, 0.7152, 0.0722);
@@ -552,6 +554,7 @@ struct QuadVarying {
     @location(6) @interpolate(flat) background_color2: vec4<f32>,
     @location(7) @interpolate(flat) background_color3: vec4<f32>,
     @location(8) @interpolate(flat) blend_mode: u32,
+    @location(9) framebuffer_position: vec2<f32>,
 }
 
 @vertex
@@ -578,35 +581,67 @@ fn vs_quad(@builtin(vertex_index) vertex_id: u32, @builtin(instance_index) insta
     out.quad_id = instance_id;
     out.blend_mode = quad.blend_mode;
     out.clip_distances = distance_from_clip_rect_transformed(unit_vertex, quad.bounds, quad.content_mask, quad.transform);
+    let position = unit_vertex * quad.bounds.size + quad.bounds.origin;
+    out.framebuffer_position = transpose(quad.transform.rotation_scale) * position + quad.transform.translation;
     return out;
 }
 
-fn apply_blend_mode(src: vec4<f32>, mode: u32) -> vec4<f32> {
+fn apply_blend_mode(src: vec4<f32>, dst: vec4<f32>, mode: u32) -> vec4<f32> {
     switch mode {
         case 0u: { return src; }
         case 1u: {
-            return vec4<f32>(src.rgb * src.rgb, src.a);
+            return vec4<f32>(src.rgb * dst.rgb, src.a);
         }
         case 2u: {
-            return vec4<f32>(1.0 - (1.0 - src.rgb) * (1.0 - src.rgb), src.a);
+            return vec4<f32>(1.0 - (1.0 - src.rgb) * (1.0 - dst.rgb), src.a);
         }
         case 3u: {
-            let mid = vec3<f32>(0.5);
             let r = select(
-                1.0 - 2.0 * (1.0 - src.rgb) * (1.0 - mid),
-                2.0 * src.rgb * mid,
-                src.rgb < vec3<f32>(0.5)
+                1.0 - 2.0 * (1.0 - src.rgb) * (1.0 - dst.rgb),
+                2.0 * src.rgb * dst.rgb,
+                dst.rgb < vec3<f32>(0.5)
             );
             return vec4<f32>(r, src.a);
         }
         case 4u: {
-            return vec4<f32>(src.rgb * src.rgb + 2.0 * src.rgb * (1.0 - src.rgb), src.a);
+            let d = select(
+                sqrt(dst.rgb),
+                ((16.0 * dst.rgb - 12.0) * dst.rgb + 4.0) * dst.rgb,
+                dst.rgb <= vec3<f32>(0.25)
+            );
+            let r = select(
+                dst.rgb + (2.0 * src.rgb - 1.0) * (d - dst.rgb),
+                dst.rgb - (1.0 - 2.0 * src.rgb) * dst.rgb * (1.0 - dst.rgb),
+                src.rgb <= vec3<f32>(0.5)
+            );
+            return vec4<f32>(r, src.a);
         }
         case 5u: {
-            return vec4<f32>(abs(src.rgb - 0.5), src.a);
+            return vec4<f32>(abs(src.rgb - dst.rgb), src.a);
         }
         default: { return src; }
     }
+}
+
+fn read_framebuffer(position: vec2<f32>, mode: u32) -> vec4<f32> {
+    if (mode == 0u) {
+        return vec4<f32>(0.0);
+    }
+    let texture_coords = position / globals.viewport_size;
+    return textureSampleLevel(t_framebuffer, s_framebuffer, texture_coords, 0.0);
+}
+
+fn unpremultiply_framebuffer_rgb(dst: vec4<f32>) -> vec3<f32> {
+    if (dst.a > 0.0) {
+        return saturate(dst.rgb / dst.a);
+    }
+    return vec3<f32>(0.0);
+}
+
+fn blend_quad_color(src: vec4<f32>, dst: vec4<f32>, mode: u32) -> vec4<f32> {
+    let dst_color = vec4<f32>(unpremultiply_framebuffer_rgb(dst), dst.a);
+    let blended = apply_blend_mode(src, dst_color, mode);
+    return blend_color(vec4<f32>(mix(src.rgb, blended.rgb, dst.a), blended.a), 1.0);
 }
 
 @fragment
@@ -621,7 +656,7 @@ fn fs_quad(input: QuadVarying) -> @location(0) vec4<f32> {
     var background_color = gradient_color(quad.background, input.position.xy, quad.bounds,
         input.background_solid, input.background_color0, input.background_color1,
         input.background_color2, input.background_color3);
-    background_color = apply_blend_mode(background_color, input.blend_mode);
+    let framebuffer_color = read_framebuffer(input.framebuffer_position, input.blend_mode);
 
     let unrounded = quad.corner_radii.top_left == 0.0 &&
         quad.corner_radii.bottom_left == 0.0 &&
@@ -634,6 +669,9 @@ fn fs_quad(input: QuadVarying) -> @location(0) vec4<f32> {
             quad.border_widths.right == 0.0 &&
             quad.border_widths.bottom == 0.0 &&
             unrounded) {
+        if (input.blend_mode != 0u) {
+            return blend_quad_color(background_color, framebuffer_color, input.blend_mode);
+        }
         return blend_color(background_color, 1.0);
     }
 
@@ -700,6 +738,9 @@ fn fs_quad(input: QuadVarying) -> @location(0) vec4<f32> {
     // However, that might negatively impact performance in the case of
     // reasonable sizes for rounded corners.
     if (is_within_inner_straight_border && !is_near_rounded_corner) {
+        if (input.blend_mode != 0u) {
+            return blend_quad_color(background_color, framebuffer_color, input.blend_mode);
+        }
         return blend_color(background_color, 1.0);
     }
 
@@ -942,7 +983,12 @@ fn fs_quad(input: QuadVarying) -> @location(0) vec4<f32> {
                     saturate(antialias_threshold - inner_sdf));
     }
 
-    return blend_color(color, saturate(antialias_threshold - outer_sdf));
+    let alpha_factor = saturate(antialias_threshold - outer_sdf);
+    if (input.blend_mode != 0u) {
+        color.a *= alpha_factor;
+        return blend_quad_color(color, framebuffer_color, input.blend_mode);
+    }
+    return blend_color(color, alpha_factor);
 }
 
 // Returns the dash velocity of a corner given the dash velocity of the two

@@ -13,7 +13,7 @@ use core_video::{
 };
 use foreign_types::{ForeignType, ForeignTypeRef};
 use metal::{
-    CAMetalLayer, CommandQueue, MTLPixelFormat, MTLResourceOptions, NSRange,
+    CAMetalLayer, CommandQueue, MTLOrigin, MTLPixelFormat, MTLResourceOptions, MTLSize, NSRange,
     RenderPassColorAttachmentDescriptorRef,
 };
 use objc::{
@@ -116,6 +116,7 @@ pub(crate) struct MetalRenderer {
     core_video_texture_cache: core_video::metal_texture_cache::CVMetalTextureCache,
     path_intermediate_texture: Option<metal::Texture>,
     path_intermediate_msaa_texture: Option<metal::Texture>,
+    framebuffer_copy_texture: Option<metal::Texture>,
     path_sample_count: u32,
 }
 
@@ -142,6 +143,7 @@ impl MetalRenderer {
         let layer = metal::MetalLayer::new();
         layer.set_device(&device);
         layer.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
+        layer.set_framebuffer_only(false);
         layer.set_opaque(false);
         layer.set_maximum_drawable_count(3);
         unsafe {
@@ -269,6 +271,7 @@ impl MetalRenderer {
             core_video_texture_cache,
             path_intermediate_texture: None,
             path_intermediate_msaa_texture: None,
+            framebuffer_copy_texture: None,
             path_sample_count: PATH_SAMPLE_COUNT,
         }
     }
@@ -310,6 +313,7 @@ impl MetalRenderer {
         if size.width.0 <= 0 || size.height.0 <= 0 {
             self.path_intermediate_texture = None;
             self.path_intermediate_msaa_texture = None;
+            self.framebuffer_copy_texture = None;
             return;
         }
 
@@ -330,6 +334,14 @@ impl MetalRenderer {
         } else {
             self.path_intermediate_msaa_texture = None;
         }
+
+        let framebuffer_descriptor = metal::TextureDescriptor::new();
+        framebuffer_descriptor.set_width(size.width.0 as u64);
+        framebuffer_descriptor.set_height(size.height.0 as u64);
+        framebuffer_descriptor.set_pixel_format(metal::MTLPixelFormat::BGRA8Unorm);
+        framebuffer_descriptor.set_usage(metal::MTLTextureUsage::ShaderRead);
+        framebuffer_descriptor.set_storage_mode(metal::MTLStorageMode::Private);
+        self.framebuffer_copy_texture = Some(self.device.new_texture(&framebuffer_descriptor));
     }
 
     pub fn update_transparency(&self, _transparent: bool) {
@@ -467,13 +479,27 @@ impl MetalRenderer {
                     viewport_size,
                     command_encoder,
                 ),
-                PrimitiveBatch::Quads(quads) => self.draw_quads(
-                    quads,
-                    instance_buffer,
-                    &mut instance_offset,
-                    viewport_size,
-                    command_encoder,
-                ),
+                PrimitiveBatch::Quads(quads) => {
+                    if quads.len() == 1 && quads[0].blend_mode != 0 {
+                        command_encoder.end_encoding();
+                        self.copy_framebuffer_to_texture(drawable, command_buffer);
+                        command_encoder = new_command_encoder(
+                            command_buffer,
+                            drawable,
+                            viewport_size,
+                            |color_attachment| {
+                                color_attachment.set_load_action(metal::MTLLoadAction::Load);
+                            },
+                        );
+                    }
+                    self.draw_quads(
+                        quads,
+                        instance_buffer,
+                        &mut instance_offset,
+                        viewport_size,
+                        command_encoder,
+                    )
+                }
                 PrimitiveBatch::Paths(paths) => {
                     command_encoder.end_encoding();
 
@@ -730,6 +756,12 @@ impl MetalRenderer {
         align_offset(instance_offset);
 
         command_encoder.set_render_pipeline_state(&self.quads_pipeline_state);
+        if let Some(framebuffer_copy_texture) = &self.framebuffer_copy_texture {
+            command_encoder.set_fragment_texture(
+                QuadInputIndex::FramebufferTexture as u64,
+                Some(framebuffer_copy_texture),
+            );
+        }
         command_encoder.set_vertex_buffer(
             QuadInputIndex::Vertices as u64,
             Some(&self.unit_vertices),
@@ -772,6 +804,45 @@ impl MetalRenderer {
             quads.len() as u64,
         );
         *instance_offset = next_offset;
+        true
+    }
+
+    fn copy_framebuffer_to_texture(
+        &self,
+        drawable: &metal::MetalDrawableRef,
+        command_buffer: &metal::CommandBufferRef,
+    ) -> bool {
+        let Some(framebuffer_copy_texture) = &self.framebuffer_copy_texture else {
+            return false;
+        };
+        let drawable_texture = drawable.texture();
+        let width = drawable_texture
+            .width()
+            .min(framebuffer_copy_texture.width());
+        let height = drawable_texture
+            .height()
+            .min(framebuffer_copy_texture.height());
+        if width == 0 || height == 0 {
+            return false;
+        }
+
+        let blit_encoder = command_buffer.new_blit_command_encoder();
+        blit_encoder.copy_from_texture(
+            drawable_texture,
+            0,
+            0,
+            MTLOrigin { x: 0, y: 0, z: 0 },
+            MTLSize {
+                width,
+                height,
+                depth: 1,
+            },
+            framebuffer_copy_texture,
+            0,
+            0,
+            MTLOrigin { x: 0, y: 0, z: 0 },
+        );
+        blit_encoder.end_encoding();
         true
     }
 
@@ -1327,6 +1398,7 @@ enum QuadInputIndex {
     Vertices = 0,
     Quads = 1,
     ViewportSize = 2,
+    FramebufferTexture = 3,
 }
 
 #[repr(C)]

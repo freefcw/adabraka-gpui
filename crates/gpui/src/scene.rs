@@ -378,10 +378,14 @@ impl<'a> Iterator for BatchIterator<'a> {
             PrimitiveKind::Quad => {
                 let quads_start = self.quads_start;
                 let mut quads_end = quads_start + 1;
-                self.quads_iter.next();
+                let first = self.quads_iter.next().unwrap();
                 while self
                     .quads_iter
-                    .next_if(|quad| (quad.order, batch_kind) < max_order_and_kind)
+                    .next_if(|quad| {
+                        first.blend_mode == 0
+                            && quad.blend_mode == 0
+                            && (quad.order, batch_kind) < max_order_and_kind
+                    })
                     .is_some()
                 {
                     quads_end += 1;
@@ -573,11 +577,11 @@ pub enum BlendMode {
     /// Standard alpha blending (source over destination).
     #[default]
     Normal = 0,
-    /// Darkens by multiplying source color with itself.
+    /// Darkens by multiplying source and destination colors.
     Multiply = 1,
-    /// Lightens by applying the screen formula to the source color.
+    /// Lightens by applying the screen formula to source and destination colors.
     Screen = 2,
-    /// Combines multiply and screen based on source luminance.
+    /// Combines multiply and screen based on destination luminance.
     Overlay = 3,
     /// A softer version of overlay that produces gentler contrast.
     SoftLight = 4,
@@ -748,6 +752,47 @@ pub(crate) struct PaintSurface {
 impl From<PaintSurface> for Primitive {
     fn from(surface: PaintSurface) -> Self {
         Primitive::Surface(surface)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{bounds, point, size, transparent_black};
+
+    fn test_quad(blend_mode: BlendMode) -> Quad {
+        let bounds = bounds(
+            point(0.0.into(), 0.0.into()),
+            size(10.0.into(), 10.0.into()),
+        );
+        Quad {
+            bounds: bounds.clone(),
+            content_mask: ContentMask { bounds },
+            background: transparent_black().into(),
+            blend_mode: blend_mode as u32,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn non_normal_blend_mode_quads_are_not_batched() {
+        let mut scene = Scene::default();
+        scene.insert_primitive(test_quad(BlendMode::Normal));
+        scene.insert_primitive(test_quad(BlendMode::Normal));
+        scene.insert_primitive(test_quad(BlendMode::Multiply));
+        scene.insert_primitive(test_quad(BlendMode::Normal));
+        scene.insert_primitive(test_quad(BlendMode::Screen));
+        scene.finish();
+
+        let batch_lengths = scene
+            .batches()
+            .filter_map(|batch| match batch {
+                PrimitiveBatch::Quads(quads) => Some(quads.len()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(batch_lengths, vec![2, 1, 1, 1]);
     }
 }
 
