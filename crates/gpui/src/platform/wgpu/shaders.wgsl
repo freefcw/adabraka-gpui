@@ -465,25 +465,35 @@ fn prepare_gradient_color(tag: u32, color_space: u32,
 
 fn interpolate_multi_stop(t_raw: f32, background: Background, color_space: u32,
     color0: vec4<f32>, color1: vec4<f32>, color2: vec4<f32>, color3: vec4<f32>) -> vec4<f32> {
-    let count = select(background.stop_count, 2u, background.stop_count == 0u);
+    // Clamp `stop_count` to [2, 4]: 0/1 stops are degenerate and would let the
+    // count<=2 branch read uninitialized `colors[1].percentage`; >4 would index
+    // past the array (Rust API also clamps to 4).
+    let count = clamp(background.stop_count, 2u, 4u);
     let t = clamp(t_raw, 0.0, 1.0);
+    // Smallest gap allowed between adjacent stop percentages; protects every
+    // `(p_high - p_low)` divisor from producing NaN/Inf when stops collapse.
+    let stop_eps = 1e-6;
     var mixed = color0;
 
     if (count <= 2u) {
         let stop0_percentage = background.colors[0].percentage;
         let stop1_percentage = background.colors[1].percentage;
-        let local_t = clamp((t - stop0_percentage) / (stop1_percentage - stop0_percentage), 0.0, 1.0);
+        let denom = max(stop1_percentage - stop0_percentage, stop_eps);
+        let local_t = clamp((t - stop0_percentage) / denom, 0.0, 1.0);
         mixed = mix(color0, color1, local_t);
     } else if (t <= background.colors[0].percentage) {
         mixed = color0;
     } else if (t <= background.colors[1].percentage) {
-        let local_t = (t - background.colors[0].percentage) / (background.colors[1].percentage - background.colors[0].percentage);
+        let denom = max(background.colors[1].percentage - background.colors[0].percentage, stop_eps);
+        let local_t = (t - background.colors[0].percentage) / denom;
         mixed = mix(color0, color1, local_t);
     } else if (count > 2u && t <= background.colors[2].percentage) {
-        let local_t = (t - background.colors[1].percentage) / (background.colors[2].percentage - background.colors[1].percentage);
+        let denom = max(background.colors[2].percentage - background.colors[1].percentage, stop_eps);
+        let local_t = (t - background.colors[1].percentage) / denom;
         mixed = mix(color1, color2, local_t);
     } else if (count > 3u && t <= background.colors[3].percentage) {
-        let local_t = (t - background.colors[2].percentage) / (background.colors[3].percentage - background.colors[2].percentage);
+        let denom = max(background.colors[3].percentage - background.colors[2].percentage, stop_eps);
+        let local_t = (t - background.colors[2].percentage) / denom;
         mixed = mix(color2, color3, local_t);
     } else if (count == 3u) {
         mixed = color2;

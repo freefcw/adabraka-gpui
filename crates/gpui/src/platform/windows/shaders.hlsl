@@ -348,26 +348,36 @@ float2x2 rotate2d(float angle) {
 
 float4 interpolate_multi_stop_hlsl(float t_raw, Background background, uint color_space,
     float4 c0, float4 c1, float4 c2, float4 c3) {
-    uint count = background.stop_count > 0 ? background.stop_count : 2;
+    // Clamp stop_count to [2, 4]: 0/1 stops are degenerate (would read
+    // uninitialized colors[1].percentage); >4 would index past the array
+    // (Rust API also clamps to 4).
+    uint count = clamp(background.stop_count, 2u, 4u);
     float t = clamp(t_raw, 0.0, 1.0);
+    // Smallest gap allowed between adjacent stop percentages; protects every
+    // `(p_high - p_low)` divisor from producing NaN/Inf when stops collapse.
+    const float stop_eps = 1e-6;
 
     float4 mixed;
     if (count <= 2) {
         float s0 = background.colors[0].percentage;
         float s1 = background.colors[1].percentage;
-        float local_t = clamp((t - s0) / (s1 - s0), 0.0, 1.0);
+        float denom = max(s1 - s0, stop_eps);
+        float local_t = clamp((t - s0) / denom, 0.0, 1.0);
         mixed = lerp(c0, c1, local_t);
     } else {
         if (t <= background.colors[0].percentage) {
             mixed = c0;
         } else if (t <= background.colors[1].percentage) {
-            float local_t = (t - background.colors[0].percentage) / (background.colors[1].percentage - background.colors[0].percentage);
+            float denom = max(background.colors[1].percentage - background.colors[0].percentage, stop_eps);
+            float local_t = (t - background.colors[0].percentage) / denom;
             mixed = lerp(c0, c1, local_t);
         } else if (count > 2 && t <= background.colors[2].percentage) {
-            float local_t = (t - background.colors[1].percentage) / (background.colors[2].percentage - background.colors[1].percentage);
+            float denom = max(background.colors[2].percentage - background.colors[1].percentage, stop_eps);
+            float local_t = (t - background.colors[1].percentage) / denom;
             mixed = lerp(c1, c2, local_t);
         } else if (count > 3 && t <= background.colors[3].percentage) {
-            float local_t = (t - background.colors[2].percentage) / (background.colors[3].percentage - background.colors[2].percentage);
+            float denom = max(background.colors[3].percentage - background.colors[2].percentage, stop_eps);
+            float local_t = (t - background.colors[2].percentage) / denom;
             mixed = lerp(c2, c3, local_t);
         } else {
             mixed = (count == 3) ? c2 : c3;
