@@ -157,6 +157,10 @@ name = "input"
 path = "examples/input.rs"
 
 [[example]]
+name = "linux_rendering_probe"
+path = "examples/linux_rendering_probe.rs"
+
+[[example]]
 name = "on_window_close_quit"
 path = "examples/on_window_close_quit.rs"
 
