@@ -189,7 +189,7 @@ impl LineLayout {
             if width > wrap_width && boundary > last_boundary {
                 // When used line_clamp, we should limit the number of lines.
                 if let Some(max_lines) = max_lines
-                    && boundaries.len() >= max_lines - 1
+                    && boundaries.len() >= max_lines.saturating_sub(1)
                 {
                     break;
                 }
@@ -722,15 +722,7 @@ impl LineLayoutCache {
             .layout_line(&text, font_size, runs);
 
         if let Some(force_width) = force_width {
-            let mut glyph_pos = 0;
-            for run in layout.runs.iter_mut() {
-                for glyph in run.glyphs.iter_mut() {
-                    if (glyph.position.x - glyph_pos * force_width).abs() > px(1.) {
-                        glyph.position.x = glyph_pos * force_width;
-                    }
-                    glyph_pos += 1;
-                }
-            }
+            apply_force_width_to_layout(&mut layout, force_width);
         }
 
         if let Some(spacing) = letter_spacing {
@@ -760,6 +752,32 @@ impl LineLayoutCache {
         current_frame.used_lines.push(key.clone());
         self.global_cache.insert_line(key, layout.clone());
         layout
+    }
+}
+
+// Combining marks are shaped at the same x position as their base character.
+// Forced monospace layout must keep them anchored instead of advancing a cell.
+fn apply_force_width_to_layout(layout: &mut LineLayout, force_width: Pixels) {
+    let mut glyph_pos: usize = 0;
+    let mut last_base_shaped_x = px(f32::NEG_INFINITY);
+    let mut last_base_actual_x = px(0.);
+
+    for run in layout.runs.iter_mut() {
+        for glyph in run.glyphs.iter_mut() {
+            let shaped_x = glyph.position.x;
+
+            if shaped_x > last_base_shaped_x + force_width * 0.5 {
+                let forced_x = glyph_pos * force_width;
+                if (shaped_x - forced_x).abs() > px(1.) {
+                    glyph.position.x = forced_x;
+                }
+                last_base_shaped_x = shaped_x;
+                last_base_actual_x = glyph.position.x;
+                glyph_pos += 1;
+            } else {
+                glyph.position.x = last_base_actual_x + (shaped_x - last_base_shaped_x);
+            }
+        }
     }
 }
 

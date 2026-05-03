@@ -180,8 +180,8 @@ impl LineWrapper {
         // https://en.wikipedia.org/wiki/Cyrillic_script_in_Unicode
         matches!(c, '\u{0400}'..='\u{04FF}') ||
         // Some other known special characters that should be treated as word characters,
-        // e.g. `a-b`, `var_name`, `I'm`, '@mention`, `#hashtag`, `100%`, `3.1415`, `2^3`, `a~b`, etc.
-        matches!(c, '-' | '_' | '.' | '\'' | '$' | '%' | '@' | '#' | '^' | '~' | ',' | '!' | ';' | '*') ||
+        // e.g. `a-b`, `var_name`, `I'm`/`won't`, '@mention`, `#hashtag`, `100%`, `3.1415`, `2^3`, `a~b`, etc.
+        matches!(c, '-' | '_' | '.' | '\'' | '’' | '‘' | '$' | '%' | '@' | '#' | '^' | '~' | ',' | '!' | ';' | '*') ||
         // Characters that used in URL, e.g. `https://github.com/zed-industries/zed?a=1&b=2` for better wrapping a long URL.
         matches!(c,  '/' | ':' | '?' | '&' | '=') ||
         // `⋯` character is special used in Zed, to keep this at the end of the line.
@@ -649,6 +649,8 @@ mod tests {
         assert_word("#hashtag");
         assert_word("$variable");
         assert_word("more⋯");
+        assert_word("won’t");
+        assert_word("‘twas");
 
         // Space
         assert_not_word("foo bar");
