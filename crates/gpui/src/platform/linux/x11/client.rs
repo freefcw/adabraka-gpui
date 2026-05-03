@@ -181,6 +181,7 @@ pub struct X11ClientState {
     pub(crate) last_mouse_button: Option<MouseButton>,
     pub(crate) last_location: Point<Pixels>,
     pub(crate) current_count: usize,
+    pub(crate) pinch_scale: f32,
 
     gpu_context: GpuContext,
 
@@ -216,6 +217,7 @@ pub struct X11ClientState {
     pub(crate) cursor_cache: HashMap<CursorStyle, Option<xproto::Cursor>>,
 
     pointer_device_states: BTreeMap<xinput::DeviceId, PointerDeviceState>,
+    pub(crate) supports_xinput_gestures: bool,
 
     pub(crate) common: LinuxCommon,
     pub(crate) clipboard: Clipboard,
@@ -388,15 +390,24 @@ impl X11Client {
         xcb_connection.prefetch_extension_information(render::X11_EXTENSION_NAME)?;
         xcb_connection.prefetch_extension_information(xinput::X11_EXTENSION_NAME)?;
 
-        // Announce to X server that XInput up to 2.1 is supported. To increase this to 2.2 and
-        // beyond, support for touch events would need to be added.
+        // Announce to X server that XInput up to 2.4 is supported.
+        // Version 2.4 is needed for gesture events (GesturePinchBegin/Update/End).
+        // If the server only supports an older version, gesture events simply won't be delivered.
         let xinput_version = get_reply(
             || "XInput XiQueryVersion failed",
-            xcb_connection.xinput_xi_query_version(2, 1),
+            xcb_connection.xinput_xi_query_version(2, 4),
         )?;
         assert!(
             xinput_version.major_version >= 2,
             "XInput version >= 2 required."
+        );
+        let supports_xinput_gestures = xinput_version.major_version > 2
+            || (xinput_version.major_version == 2 && xinput_version.minor_version >= 4);
+        log::info!(
+            "XInput version: {}.{}, gesture support: {}",
+            xinput_version.major_version,
+            xinput_version.minor_version,
+            supports_xinput_gestures,
         );
 
         let pointer_device_states =
@@ -543,6 +554,7 @@ impl X11Client {
             last_mouse_button: None,
             last_location: Point::new(px(0.0), px(0.0)),
             current_count: 0,
+            pinch_scale: 1.0,
             gpu_context,
             scale_factor,
 
@@ -571,6 +583,7 @@ impl X11Client {
             cursor_cache: HashMap::default(),
 
             pointer_device_states,
+            supports_xinput_gestures,
 
             clipboard,
             clipboard_item: None,
@@ -1329,6 +1342,63 @@ impl X11Client {
                     reset_pointer_device_scroll_positions(pointer);
                 }
             }
+            Event::XinputGesturePinchBegin(event) => {
+                let window = self.get_window(event.event)?;
+                let mut state = self.0.borrow_mut();
+                state.pinch_scale = 1.0;
+                let modifiers = modifiers_from_xinput_info(event.mods);
+                state.modifiers = modifiers;
+                let position = point(
+                    px(event.event_x as f32 / u16::MAX as f32 / state.scale_factor),
+                    px(event.event_y as f32 / u16::MAX as f32 / state.scale_factor),
+                );
+                drop(state);
+                window.handle_input(PlatformInput::Pinch(crate::PinchEvent {
+                    position,
+                    delta: 0.0,
+                    modifiers,
+                    phase: TouchPhase::Started,
+                }));
+            }
+            Event::XinputGesturePinchUpdate(event) => {
+                let window = self.get_window(event.event)?;
+                let mut state = self.0.borrow_mut();
+                let modifiers = modifiers_from_xinput_info(event.mods);
+                state.modifiers = modifiers;
+                let position = point(
+                    px(event.event_x as f32 / u16::MAX as f32 / state.scale_factor),
+                    px(event.event_y as f32 / u16::MAX as f32 / state.scale_factor),
+                );
+                let new_absolute_scale = fp1616_to_f32(event.scale);
+                let previous_scale = state.pinch_scale;
+                let zoom_delta = new_absolute_scale - previous_scale;
+                state.pinch_scale = new_absolute_scale;
+                drop(state);
+                window.handle_input(PlatformInput::Pinch(crate::PinchEvent {
+                    position,
+                    delta: zoom_delta,
+                    modifiers,
+                    phase: TouchPhase::Moved,
+                }));
+            }
+            Event::XinputGesturePinchEnd(event) => {
+                let window = self.get_window(event.event)?;
+                let mut state = self.0.borrow_mut();
+                state.pinch_scale = 1.0;
+                let modifiers = modifiers_from_xinput_info(event.mods);
+                state.modifiers = modifiers;
+                let position = point(
+                    px(event.event_x as f32 / u16::MAX as f32 / state.scale_factor),
+                    px(event.event_y as f32 / u16::MAX as f32 / state.scale_factor),
+                );
+                drop(state);
+                window.handle_input(PlatformInput::Pinch(crate::PinchEvent {
+                    position,
+                    delta: 0.0,
+                    modifiers,
+                    phase: TouchPhase::Ended,
+                }));
+            }
             _ => {}
         };
 
@@ -1540,6 +1610,7 @@ impl LinuxClient for X11Client {
             &state.atoms,
             state.scale_factor,
             state.common.appearance,
+            state.supports_xinput_gestures,
             parent_window,
         )?;
         check_reply(
@@ -2112,6 +2183,10 @@ pub fn mode_refresh_rate(mode: &randr::ModeInfo) -> Duration {
 
 fn fp3232_to_f32(value: xinput::Fp3232) -> f32 {
     value.integral as f32 + value.frac as f32 / u32::MAX as f32
+}
+
+fn fp1616_to_f32(value: xinput::Fp1616) -> f32 {
+    value as f32 / 65536.0
 }
 
 fn check_compositor_present(xcb_connection: &XCBConnection, root: u32) -> bool {

@@ -403,6 +403,7 @@ impl X11WindowState {
         atoms: &XcbAtoms,
         scale_factor: f32,
         appearance: WindowAppearance,
+        supports_xinput_gestures: bool,
         parent_window: Option<xproto::Window>,
     ) -> anyhow::Result<Self> {
         let x_screen_index = params
@@ -659,19 +660,25 @@ impl X11WindowState {
                 ),
             )?;
 
+            let mut xi_event_mask = xinput::XIEventMask::MOTION
+                | xinput::XIEventMask::BUTTON_PRESS
+                | xinput::XIEventMask::BUTTON_RELEASE
+                | xinput::XIEventMask::ENTER
+                | xinput::XIEventMask::LEAVE;
+            if supports_xinput_gestures {
+                xi_event_mask |=
+                    xinput::XIEventMask::from(1u32 << xinput::GESTURE_PINCH_BEGIN_EVENT)
+                        | xinput::XIEventMask::from(1u32 << xinput::GESTURE_PINCH_UPDATE_EVENT)
+                        | xinput::XIEventMask::from(1u32 << xinput::GESTURE_PINCH_END_EVENT);
+            }
+
             check_reply(
                 || "X11 XiSelectEvents failed.",
                 xcb.xinput_xi_select_events(
                     x_window,
                     &[xinput::EventMask {
                         deviceid: XINPUT_ALL_DEVICE_GROUPS,
-                        mask: vec![
-                            xinput::XIEventMask::MOTION
-                                | xinput::XIEventMask::BUTTON_PRESS
-                                | xinput::XIEventMask::BUTTON_RELEASE
-                                | xinput::XIEventMask::ENTER
-                                | xinput::XIEventMask::LEAVE,
-                        ],
+                        mask: vec![xi_event_mask],
                     }],
                 ),
             )?;
@@ -826,6 +833,7 @@ impl X11Window {
         atoms: &XcbAtoms,
         scale_factor: f32,
         appearance: WindowAppearance,
+        supports_xinput_gestures: bool,
         parent_window: Option<xproto::Window>,
     ) -> anyhow::Result<Self> {
         let icon = params.icon.clone();
@@ -843,6 +851,7 @@ impl X11Window {
                 atoms,
                 scale_factor,
                 appearance,
+                supports_xinput_gestures,
                 parent_window,
             )?)),
             callbacks: Rc::new(RefCell::new(Callbacks::default())),

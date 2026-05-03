@@ -42,6 +42,9 @@ use wayland_protocols::wp::cursor_shape::v1::client::{
 use wayland_protocols::wp::fractional_scale::v1::client::{
     wp_fractional_scale_manager_v1, wp_fractional_scale_v1,
 };
+use wayland_protocols::wp::pointer_gestures::zv1::client::{
+    zwp_pointer_gesture_pinch_v1, zwp_pointer_gestures_v1,
+};
 use wayland_protocols::wp::primary_selection::zv1::client::zwp_primary_selection_offer_v1::{
     self, ZwpPrimarySelectionOfferV1,
 };
@@ -121,6 +124,7 @@ pub struct Globals {
     pub decoration_manager: Option<zxdg_decoration_manager_v1::ZxdgDecorationManagerV1>,
     pub blur_manager: Option<org_kde_kwin_blur_manager::OrgKdeKwinBlurManager>,
     pub text_input_manager: Option<zwp_text_input_manager_v3::ZwpTextInputManagerV3>,
+    pub gesture_manager: Option<zwp_pointer_gestures_v1::ZwpPointerGesturesV1>,
     pub executor: ForegroundExecutor,
 }
 
@@ -158,6 +162,7 @@ impl Globals {
             decoration_manager: globals.bind(&qh, 1..=1, ()).ok(),
             blur_manager: globals.bind(&qh, 1..=1, ()).ok(),
             text_input_manager: globals.bind(&qh, 1..=1, ()).ok(),
+            gesture_manager: globals.bind(&qh, 1..=3, ()).ok(),
             executor,
             qh,
         }
@@ -200,6 +205,8 @@ pub(crate) struct WaylandClientState {
     gpu_context: GpuContext,
     wl_seat: wl_seat::WlSeat, // TODO: Multi seat support
     wl_pointer: Option<wl_pointer::WlPointer>,
+    pinch_gesture: Option<zwp_pointer_gesture_pinch_v1::ZwpPointerGesturePinchV1>,
+    pinch_scale: f32,
     wl_keyboard: Option<wl_keyboard::WlKeyboard>,
     cursor_shape_device: Option<wp_cursor_shape_device_v1::WpCursorShapeDeviceV1>,
     data_device: Option<wl_data_device::WlDataDevice>,
@@ -242,6 +249,27 @@ pub(crate) struct WaylandClientState {
     event_loop: Option<EventLoop<'static, WaylandClientStatePtr>>,
     common: LinuxCommon,
     tray: crate::platform::linux::tray::LinuxTray,
+}
+
+impl WaylandClientState {
+    fn destroy_pinch_gesture(&mut self) {
+        if let Some(pinch_gesture) = self.pinch_gesture.take() {
+            pinch_gesture.destroy();
+        }
+        self.pinch_scale = 1.0;
+    }
+
+    fn release_pointer(&mut self) {
+        self.destroy_pinch_gesture();
+
+        if let Some(cursor_shape_device) = self.cursor_shape_device.take() {
+            cursor_shape_device.destroy();
+        }
+
+        if let Some(wl_pointer) = self.wl_pointer.take() {
+            wl_pointer.release();
+        }
+    }
 }
 
 impl LinuxTrayEventTarget for WaylandClientState {
@@ -461,12 +489,7 @@ impl Drop for WaylandClient {
         let mut state = self.0.borrow_mut();
         state.windows.clear();
 
-        if let Some(wl_pointer) = &state.wl_pointer {
-            wl_pointer.release();
-        }
-        if let Some(cursor_shape_device) = &state.cursor_shape_device {
-            cursor_shape_device.destroy();
-        }
+        state.release_pointer();
         if let Some(data_device) = &state.data_device {
             data_device.release();
         }
@@ -626,6 +649,8 @@ impl WaylandClient {
             gpu_context,
             wl_seat: seat,
             wl_pointer: None,
+            pinch_gesture: None,
+            pinch_scale: 1.0,
             wl_keyboard: None,
             cursor_shape_device: None,
             data_device,
@@ -990,9 +1015,7 @@ impl Dispatch<wl_registry::WlRegistry, GlobalListContents> for WaylandClientStat
                 version,
             } => match &interface[..] {
                 "wl_seat" => {
-                    if let Some(wl_pointer) = state.wl_pointer.take() {
-                        wl_pointer.release();
-                    }
+                    state.release_pointer();
                     if let Some(wl_keyboard) = state.wl_keyboard.take() {
                         wl_keyboard.release();
                     }
@@ -1041,6 +1064,7 @@ delegate_noop!(WaylandClientStatePtr: ignore zxdg_decoration_manager_v1::ZxdgDec
 delegate_noop!(WaylandClientStatePtr: ignore org_kde_kwin_blur_manager::OrgKdeKwinBlurManager);
 delegate_noop!(WaylandClientStatePtr: ignore zwp_text_input_manager_v3::ZwpTextInputManagerV3);
 delegate_noop!(WaylandClientStatePtr: ignore org_kde_kwin_blur::OrgKdeKwinBlur);
+delegate_noop!(WaylandClientStatePtr: ignore zwp_pointer_gestures_v1::ZwpPointerGesturesV1);
 delegate_noop!(WaylandClientStatePtr: ignore wp_viewporter::WpViewporter);
 delegate_noop!(WaylandClientStatePtr: ignore wp_viewport::WpViewport);
 
@@ -1260,6 +1284,7 @@ impl Dispatch<wl_seat::WlSeat, ()> for WaylandClientStatePtr {
                 state.wl_keyboard = Some(keyboard);
             }
             if capabilities.contains(wl_seat::Capability::Pointer) {
+                state.release_pointer();
                 let pointer = seat.get_pointer(qh, ());
                 state.cursor_shape_device = state
                     .globals
@@ -1267,11 +1292,15 @@ impl Dispatch<wl_seat::WlSeat, ()> for WaylandClientStatePtr {
                     .as_ref()
                     .map(|cursor_shape_manager| cursor_shape_manager.get_pointer(&pointer, qh, ()));
 
-                if let Some(wl_pointer) = &state.wl_pointer {
-                    wl_pointer.release();
-                }
+                state.pinch_gesture = state
+                    .globals
+                    .gesture_manager
+                    .as_ref()
+                    .map(|gesture_manager| gesture_manager.get_pinch_gesture(&pointer, qh, ()));
 
                 state.wl_pointer = Some(pointer);
+            } else {
+                state.release_pointer();
             }
         }
     }
@@ -2254,6 +2283,74 @@ impl Dispatch<zwp_primary_selection_source_v1::ZwpPrimarySelectionSourceV1, ()>
             }
             zwp_primary_selection_source_v1::Event::Cancelled => {
                 selection_source.destroy();
+            }
+            _ => {}
+        }
+    }
+}
+
+impl Dispatch<zwp_pointer_gesture_pinch_v1::ZwpPointerGesturePinchV1, ()>
+    for WaylandClientStatePtr
+{
+    fn event(
+        this: &mut Self,
+        pinch_gesture: &zwp_pointer_gesture_pinch_v1::ZwpPointerGesturePinchV1,
+        event: <zwp_pointer_gesture_pinch_v1::ZwpPointerGesturePinchV1 as Proxy>::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        let client = this.get_client();
+        let mut state = client.borrow_mut();
+
+        if state
+            .pinch_gesture
+            .as_ref()
+            .is_none_or(|current| current.id() != pinch_gesture.id())
+        {
+            return;
+        }
+
+        let Some(window) = state.mouse_focused_window.clone() else {
+            return;
+        };
+
+        match event {
+            zwp_pointer_gesture_pinch_v1::Event::Begin { .. } => {
+                state.pinch_scale = 1.0;
+                let input = PlatformInput::Pinch(crate::PinchEvent {
+                    position: state.mouse_location.unwrap_or(point(px(0.0), px(0.0))),
+                    delta: 0.0,
+                    modifiers: state.modifiers,
+                    phase: TouchPhase::Started,
+                });
+                drop(state);
+                window.handle_input(input);
+            }
+            zwp_pointer_gesture_pinch_v1::Event::Update { scale, .. } => {
+                let new_absolute_scale = scale as f32;
+                let previous_scale = state.pinch_scale;
+                let zoom_delta = new_absolute_scale - previous_scale;
+                state.pinch_scale = new_absolute_scale;
+                let input = PlatformInput::Pinch(crate::PinchEvent {
+                    position: state.mouse_location.unwrap_or(point(px(0.0), px(0.0))),
+                    delta: zoom_delta,
+                    modifiers: state.modifiers,
+                    phase: TouchPhase::Moved,
+                });
+                drop(state);
+                window.handle_input(input);
+            }
+            zwp_pointer_gesture_pinch_v1::Event::End { .. } => {
+                state.pinch_scale = 1.0;
+                let input = PlatformInput::Pinch(crate::PinchEvent {
+                    position: state.mouse_location.unwrap_or(point(px(0.0), px(0.0))),
+                    delta: 0.0,
+                    modifiers: state.modifiers,
+                    phase: TouchPhase::Ended,
+                });
+                drop(state);
+                window.handle_input(input);
             }
             _ => {}
         }
