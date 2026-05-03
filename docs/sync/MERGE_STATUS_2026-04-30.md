@@ -11,14 +11,14 @@
 本次分析检查了 Zed GPUI 在过去两年中的重要更新，评估了 Adabraka GPUI 的合并状态。
 
 ### 总体状态
-- ✅ **已合并**: 4 项关键更新
+- ✅ **已合并**: 5 项关键更新
 - ⚠️ **部分合并**: 2 项更新
 - ❌ **未合并**: 9 项更新
-- ❓ **需要详细评估**: 1 项更新
+- ❓ **需要详细评估**: 0 项更新
 
 ### 优先级建议
 - 🔴 **高优先级（建议立即合并）**: 3 项
-- 🟡 **中优先级（建议评估后合并）**: 3 项
+- 🟡 **中优先级（建议评估后合并）**: 2 项
 - 🟢 **低优先级（可选）**: 3 项
 
 ---
@@ -103,7 +103,7 @@ state.frame_index = state.frame_index.min(max_frame_index);
 
 #### ⚠️ a) macOS 字形膨胀优化（基于亮度）
 **Commit**: `a38fc8c8de` (2026-04-29)  
-**状态**: ⚠️ **部分合并**  
+**状态**: ⚠️ **部分合并**
 **优先级**: 🟡 **中** - 显著改善文本渲染
 
 **当前实现**:
@@ -168,18 +168,24 @@ pub struct SharedString(SmolStr);
 
 ---
 
-#### ❓ b) 性能调整合集
-**Commit**: `a62ae579ab` (2026-04-21)  
-**状态**: ❓ **需要详细对比**  
+#### ✅ b) 性能调整合集
+**Commit**: `a62ae579ab` (2026-04-21)
+**状态**: ✅ **GPUI 相关项已合并**
 **优先级**: 🟡 **中**
 
-**涉及**: 21 个文件的多处性能优化
-- bounds_tree 优化
-- scene 渲染优化
-- text_system 优化
-- 各平台渲染器优化
+**本次评估结果** (2026-05-01):
+- ✅ `AtlasTile: Copy` 已存在于当前代码
+- ✅ `wgpu_atlas` 少 clone 优化已存在于当前代码
+- ✅ 已合并 `metal_atlas` / `directx_atlas` / `test atlas` 少 clone 优化
+- ✅ 已合并 `ContentMask` 与 POD 渲染 primitive 的 `Copy` 优化
+- ✅ 已合并 macOS `SurfaceBounds.content_mask` 少 clone 优化
+- ✅ 已合并 `line_layout` 的 `max_lines.saturating_sub(1)` 防溢出修复
+- ✅ 已合并 `bounds_tree` 多叉 R-tree 优化
+- ✅ 已合并 Windows `is_maximized` 去除 `IsZoomed` 调用
+- ✅ `SharedString::default` 不适用：当前仓库已使用 `SmolStr`
+- ➖ Zed 应用层模块不适用：`csv_preview`、`editor`、`edit_prediction_context`、`multi_buffer`、`title_bar`
 
-**建议**: 需要逐个对比具体改动，评估是否已合并
+**说明**: 该提交中属于 Zed 应用层的文件在当前仓库无对应模块，未迁移且不适用。
 
 ---
 
@@ -262,7 +268,7 @@ fn set_window_icon(&self, icon: Option<image::RgbaImage>) {
 |------|------|--------|------|
 | 4 | macOS 字形膨胀优化（升级到 5 级） | `a38fc8c8de` | 显著改善文本渲染质量 |
 | 5 | 像素对齐 | `7d42f276f2` | 改善渲染质量，需要测试 |
-| 6 | 性能调整合集 | `a62ae579ab` | 整体性能提升，需要详细评估 |
+| 6 | 性能调整合集 | `a62ae579ab` | ✅ GPUI 相关项已合并 |
 
 ---
 
@@ -350,11 +356,6 @@ git commit -m "sync: upgrade macOS glyph dilation to 5 levels (a38fc8c8de)"
    - 检查是否影响 Adabraka 特有功能
    - 确认不破坏现有布局
 
-2. **性能调整合集** (`a62ae579ab`)
-   - 逐个文件对比
-   - 评估每个优化的适用性
-   - 选择性合并
-
 ---
 
 ## 合并前检查清单
@@ -403,8 +404,7 @@ git commit -m "sync: upgrade macOS glyph dilation to 5 levels (a38fc8c8de)"
 - 移除 naga 依赖
 
 ### 高风险 🔴
-- 像素对齐（涉及核心布局系统）
-- 性能调整合集（涉及多个核心模块）
+- 无
 
 ---
 
@@ -423,8 +423,7 @@ git commit -m "sync: upgrade macOS glyph dilation to 5 levels (a38fc8c8de)"
    - 在测试分支上验证
 
 4. **三周后** (2026-05-22 ~ 2026-05-28)
-   - 逐个对比性能调整合集
-   - 选择性合并
+   - 根据测试结果继续跟进高风险渲染/布局回归
 
 ---
 
