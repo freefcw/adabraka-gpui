@@ -46,7 +46,8 @@ struct LinearColorStop {
 struct Background {
     // 0u=Solid, 1u=LinearGradient, 2u=PatternSlash, 3u=RadialGradient, 4u=ConicGradient
     uint tag;
-    // 0u is sRGB linear color, 1u is Oklab color
+    // 0u is sRGB-encoded color (the values that hsla_to_rgba produces),
+    // 1u is Oklab color.
     uint color_space;
     Hsla solid;
     float gradient_angle_or_pattern_height;
@@ -126,7 +127,8 @@ float3 srgb_to_linear(float3 color) {
     return pow(color, float3(1.0 / 2.2, 1.0 / 2.2, 1.0 / 2.2));
 }
 
-/// Hsla to linear RGBA conversion.
+/// HSL to RGB conversion. Output is in sRGB-encoded space (CSS HSL
+/// convention), not linear sRGB; gamma decoding is *not* applied.
 float4 hsla_to_rgba(Hsla hsla) {
     float h = hsla.h * 6.0; // Now, it's an angle but scaled in [0, 6) range
     float s = hsla.s;

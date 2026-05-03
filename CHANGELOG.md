@@ -1,3 +1,14 @@
+## Unreleased
+
+### Fixes
+
+- **Linux/WGPU rendering** — aligned the WGPU shader's `Quad`/`Background` layout with the Rust `repr(C)` scene structs so that borders, rounded corners, gradients, separators, and toggle tracks no longer drop intermittently on Linux (`fix(wgpu): align Quad/Background ABI with Rust scene struct`).
+- **Multi-stop gradients** — `interpolate_multi_stop` now clamps `stop_count` to `[2, 4]` and protects every divisor with `max(p_high - p_low, 1e-6)`, so degenerate or collapsed stops no longer produce NaN/Inf that blank out a quad. Mirrored across WGSL, Metal, and HLSL.
+
+### Behavior changes
+
+- **Linux/WGPU sRGB gradients** — gradients with `ColorSpace::Srgb` now mix in the same color space as macOS/Windows. The previous WGPU path applied an extra `linear_to_srgba` / `srgba_to_linear` round-trip in vertex/fragment, producing visibly different gradients on Linux. After this change Linux gradients look slightly brighter and more saturated at the midpoint, matching macOS and Windows. Oklab gradients are unchanged.
+
 ## 0.6.2 (2026-04-30)
 
 ### Improvements

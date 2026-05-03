@@ -137,7 +137,7 @@ struct Background {
     // 3u is RadialGradient
     // 4u is ConicGradient
     tag: u32,
-    // 0u is sRGB linear color
+    // 0u is sRGB-encoded color (the values that hsla_to_rgba produces)
     // 1u is Oklab color
     color_space: u32,
     solid: Hsla,
@@ -241,7 +241,8 @@ fn srgba_to_linear(color: vec4<f32>) -> vec4<f32> {
     return vec4<f32>(srgb_to_linear(color.rgb), color.a);
 }
 
-/// Hsla to linear RGBA conversion.
+/// HSL to RGB conversion. Output is in sRGB-encoded space (CSS HSL
+/// convention), not linear sRGB; gamma decoding is *not* applied.
 fn hsla_to_rgba(hsla: Hsla) -> vec4<f32> {
     let h = hsla.h * 6.0; // Now, it's an angle but scaled in [0, 6) range
     let s = hsla.s;
@@ -425,7 +426,9 @@ fn prepare_gradient_color(tag: u32, color_space: u32,
         result.solid = hsla_to_rgba(solid);
     } else {
         let count = select(stop_count, 2u, stop_count == 0u);
-        // The hsla_to_rgba is returns a linear sRGB color
+        // hsla_to_rgba returns sRGB-encoded RGBA (CSS HSL convention),
+        // not linear sRGB. The Srgb path below leaves it unchanged so the
+        // fragment can mix and write directly to the BGRA8Unorm surface.
         result.color0 = hsla_to_rgba(colors[0].color);
         result.color1 = hsla_to_rgba(colors[1].color);
         if (count > 2u) {
@@ -435,19 +438,15 @@ fn prepare_gradient_color(tag: u32, color_space: u32,
             result.color3 = hsla_to_rgba(colors[3].color);
         }
 
-        // Prepare color space in vertex for avoid conversion
-        // in fragment shader for performance reasons
-        if (color_space == 0u) {
-            // sRGB
-            result.color0 = linear_to_srgba(result.color0);
-            result.color1 = linear_to_srgba(result.color1);
-            if (count > 2u) {
-                result.color2 = linear_to_srgba(result.color2);
-            }
-            if (count > 3u) {
-                result.color3 = linear_to_srgba(result.color3);
-            }
-        } else if (color_space == 1u) {
+        // Prepare color space in vertex to avoid per-fragment conversion.
+        //
+        // For ColorSpace::Srgb we keep the sRGB-encoded output of
+        // `hsla_to_rgba` as-is so the fragment can `mix` in that space
+        // and return directly, matching the Metal/HLSL paths. The
+        // previous WGPU behavior round-tripped through `linear_to_srgba`
+        // / `srgba_to_linear`, producing visibly different gradients on
+        // Linux.
+        if (color_space == 1u) {
             // Oklab
             result.color0 = linear_srgb_to_oklab(result.color0);
             result.color1 = linear_srgb_to_oklab(result.color1);
@@ -504,7 +503,9 @@ fn interpolate_multi_stop(t_raw: f32, background: Background, color_space: u32,
     if (color_space == 1u) {
         return oklab_to_linear_srgb(mixed);
     }
-    return srgba_to_linear(mixed);
+    // sRGB path: colors stayed in sRGB-encoded space through prepare/mix,
+    // return them unchanged. Mirrors Metal/HLSL `interpolate_multi_stop_*`.
+    return mixed;
 }
 
 fn gradient_color(background: Background, position: vec2<f32>, bounds: Bounds,
