@@ -1,0 +1,53 @@
+# 预提交钩子配置：保持提交前代码格式、静态检查与基础卫生一致
+# 使用方法：
+#   pip install pre-commit   # 或 brew install pre-commit
+#   pre-commit install       # 安装到 .git/hooks/pre-commit
+#   pre-commit run --all-files  # 手动对全部文件执行
+
+minimum_pre_commit_version: "3.0.0"
+fail_fast: false
+
+repos:
+  # 通用文件卫生检查
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: \.(md|patch)$
+      - id: end-of-file-fixer
+        exclude: \.(patch|lock)$
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=1024"]
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+
+  # Rust 工具链：fmt / clippy / check / 测试编译
+  # 使用 system 语言直接调用本地 cargo，避免 pre-commit 在隔离环境中重复构建
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: cargo fmt
+        description: 使用 rustfmt 检查代码格式（不会修改文件，CI 友好）
+        entry: cargo fmt --all -- --check
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+      - id: cargo-clippy
+        name: cargo clippy
+        description: 使用 clippy 进行静态分析，warning 视为错误
+        entry: cargo clippy --workspace --all-targets --all-features -- -D warnings
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+      - id: cargo-check
+        name: cargo check
+        description: 编译检查整个 workspace，确保不会破坏构建
+        entry: cargo check --workspace --all-targets --all-features
+        language: system
+        types: [rust]
+        pass_filenames: false
