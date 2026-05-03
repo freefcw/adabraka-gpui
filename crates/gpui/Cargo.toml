@@ -337,12 +337,16 @@ path = "../refineable"
 package = "adabraka_refineable"
 version = "0.5.1"
 
+[dependencies.regex]
+version = "1.11.1"
+
 [dependencies.resvg]
 version = "0.45.0"
 features = [
     "text",
     "system-fonts",
     "memmap-fonts",
+    "raster-images",
 ]
 default-features = false
 
@@ -402,6 +406,9 @@ version = "0.9"
 
 [dependencies.thiserror]
 version = "2.0.12"
+
+[dependencies.ttf-parser]
+version = "0.25"
 
 [dependencies.usvg]
 version = "0.45.0"
