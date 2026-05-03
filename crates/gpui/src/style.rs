@@ -140,6 +140,42 @@ impl ObjectFit {
     }
 }
 
+/// The minimum size of a repeated grid column or row.
+#[derive(
+    Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Default, JsonSchema, Serialize, Deserialize,
+)]
+pub enum TemplateColumnMinSize {
+    /// The track minimum is zero.
+    #[default]
+    Zero,
+    /// The track minimum is min-content.
+    MinContent,
+    /// The track maximum is max-content.
+    MaxContent,
+}
+
+/// A simplified representation of a repeated `grid-template-*` value.
+#[derive(
+    Copy,
+    Clone,
+    Refineable,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Debug,
+    Default,
+    JsonSchema,
+    Serialize,
+    Deserialize,
+)]
+pub struct GridTemplate {
+    /// Number of repeated tracks.
+    pub repeat: u16,
+    /// Track sizing mode.
+    pub min_size: TemplateColumnMinSize,
+}
+
 /// The CSS styling that can be applied to an element via the `Styled` trait
 #[derive(Clone, Refineable, Debug)]
 #[refineable(Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -279,11 +315,11 @@ pub struct Style {
 
     /// The grid columns of this element
     /// Equivalent to the Tailwind `grid-cols-<number>`
-    pub grid_cols: Option<u16>,
+    pub grid_cols: Option<GridTemplate>,
 
     /// The row span of this element
     /// Equivalent to the Tailwind `grid-rows-<number>`
-    pub grid_rows: Option<u16>,
+    pub grid_rows: Option<GridTemplate>,
 
     /// The grid location of this element
     pub grid_location: Option<GridLocation>,

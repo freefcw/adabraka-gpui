@@ -1,9 +1,9 @@
 use crate::{
-    self as gpui, AbsoluteLength, AlignContent, AlignItems, BlendMode, BorderStyle, CursorStyle,
-    DefiniteLength, Display, Fill, FlexDirection, FlexWrap, Font, FontStyle, FontWeight,
-    GridPlacement, Hsla, JustifyContent, Length, Pixels, SharedString, StrikethroughStyle,
-    StyleRefinement, TextAlign, TextOverflow, TextShadow, TextStyleRefinement, UnderlineStyle,
-    WhiteSpace, point, px, relative, rems,
+    self as gpui, AbsoluteLength, AlignContent, AlignItems, AlignSelf, BlendMode, BorderStyle,
+    CursorStyle, DefiniteLength, Display, Fill, FlexDirection, FlexWrap, Font, FontStyle,
+    FontWeight, GridPlacement, GridTemplate, Hsla, JustifyContent, Length, Pixels, SharedString,
+    StrikethroughStyle, StyleRefinement, TemplateColumnMinSize, TextAlign, TextOverflow,
+    TextShadow, TextStyleRefinement, UnderlineStyle, WhiteSpace, point, px, relative, rems,
 };
 pub use gpui_macros::{
     border_style_methods, box_shadow_style_methods, cursor_style_methods, margin_style_methods,
@@ -374,6 +374,48 @@ pub trait Styled: Sized {
     /// [Docs](https://tailwindcss.com/docs/align-items#baseline)
     fn items_baseline(mut self) -> Self {
         self.style().align_items = Some(AlignItems::Baseline);
+        self
+    }
+
+    /// Sets how this specific element is aligned along the container's cross axis.
+    fn self_start(mut self) -> Self {
+        self.style().align_self = Some(AlignSelf::Start);
+        self
+    }
+
+    /// Sets this element to align against the end of the container's cross axis.
+    fn self_end(mut self) -> Self {
+        self.style().align_self = Some(AlignSelf::End);
+        self
+    }
+
+    /// Sets this element to align against the flex start of the container's cross axis.
+    fn self_flex_start(mut self) -> Self {
+        self.style().align_self = Some(AlignSelf::FlexStart);
+        self
+    }
+
+    /// Sets this element to align against the flex end of the container's cross axis.
+    fn self_flex_end(mut self) -> Self {
+        self.style().align_self = Some(AlignSelf::FlexEnd);
+        self
+    }
+
+    /// Sets this element to align along the center of the container's cross axis.
+    fn self_center(mut self) -> Self {
+        self.style().align_self = Some(AlignSelf::Center);
+        self
+    }
+
+    /// Sets this element to align along the baseline of the container's cross axis.
+    fn self_baseline(mut self) -> Self {
+        self.style().align_self = Some(AlignSelf::Baseline);
+        self
+    }
+
+    /// Sets this element to stretch to fill available space along the container's cross axis.
+    fn self_stretch(mut self) -> Self {
+        self.style().align_self = Some(AlignSelf::Stretch);
         self
     }
 
@@ -786,13 +828,28 @@ pub trait Styled: Sized {
 
     /// Sets the grid columns of this element.
     fn grid_cols(mut self, cols: u16) -> Self {
-        self.style().grid_cols = Some(cols);
+        self.style().grid_cols = Some(GridTemplate {
+            repeat: cols,
+            min_size: TemplateColumnMinSize::Zero,
+        });
+        self
+    }
+
+    /// Sets grid columns to use content-based max-content widths.
+    fn grid_cols_max_content(mut self, cols: u16) -> Self {
+        self.style().grid_cols = Some(GridTemplate {
+            repeat: cols,
+            min_size: TemplateColumnMinSize::MaxContent,
+        });
         self
     }
 
     /// Sets the grid rows of this element.
     fn grid_rows(mut self, rows: u16) -> Self {
-        self.style().grid_rows = Some(rows);
+        self.style().grid_rows = Some(GridTemplate {
+            repeat: rows,
+            min_size: TemplateColumnMinSize::Zero,
+        });
         self
     }
 
