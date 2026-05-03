@@ -108,6 +108,7 @@ dependencies = [
 name = "adabraka-gpui-macros"
 version = "0.5.1"
 dependencies = [
+ "adabraka-gpui",
  "heck 0.5.0",
  "proc-macro2",
  "quote",

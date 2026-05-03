@@ -41,12 +41,12 @@ fn generate_reflected_trait(trait_item: ItemTrait) -> TokenStream {
     let trait_name = &trait_item.ident;
     let vis = &trait_item.vis;
 
-    // Determine if we're being called from within the gpui crate
+    // Determine if we're being called from within the adabraka_gpui crate
     let call_site = Span::call_site();
     let inspector_reflection_path = if is_called_from_gpui_crate(call_site) {
         quote! { crate::inspector_reflection }
     } else {
-        quote! { ::gpui::inspector_reflection }
+        quote! { ::adabraka_gpui::inspector_reflection }
     };
 
     // Collect method information for methods of form fn name(self) -> Self or fn name(mut self) -> Self
@@ -187,9 +187,8 @@ fn extract_cfg_attributes(attrs: &[Attribute]) -> Vec<Attribute> {
 }
 
 fn is_called_from_gpui_crate(_span: Span) -> bool {
-    // Check if we're being called from within the gpui crate by examining the call site
-    // This is a heuristic approach - we check if the current crate name is "gpui"
-    std::env::var("CARGO_PKG_NAME").is_ok_and(|name| name == "gpui")
+    // Cargo package names use hyphens; generated Rust paths use underscores.
+    std::env::var("CARGO_PKG_NAME").is_ok_and(|name| name == "adabraka-gpui")
 }
 
 struct MacroExpander;
