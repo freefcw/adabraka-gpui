@@ -58,10 +58,14 @@ impl Render for LinuxRenderingProbe {
                             .bg(rgb(0x082f49))
                             .cursor_pointer()
                             .child("Toggle / repaint")
-                            .on_click(cx.listener(|this, _, _, cx| {
+                            .on_click(cx.listener(|this, _, window, cx| {
                                 this.enabled = !this.enabled;
                                 this.ratio = if this.enabled { 0.67 } else { 0.33 };
+                                // 触发整窗 invalidate，复刻最初 bug「滚动一下整片刷新」的路径，
+                                // 验证重新上传 instance buffer 后渲染仍然正确，而不仅仅依赖
+                                // reactive 系统的 partial redraw。
                                 cx.notify();
+                                window.refresh();
                             })),
                     ),
             )
@@ -112,11 +116,7 @@ impl Render for LinuxRenderingProbe {
     }
 }
 
-fn section(
-    title: &'static str,
-    note: &'static str,
-    body: impl IntoElement,
-) -> impl IntoElement {
+fn section(title: &'static str, note: &'static str, body: impl IntoElement) -> impl IntoElement {
     div()
         .flex()
         .flex_col()
@@ -133,8 +133,8 @@ fn section(
 
 fn stress_grid() -> impl IntoElement {
     let colors = [
-        0xef4444, 0xf97316, 0xf59e0b, 0x84cc16, 0x22c55e, 0x14b8a6, 0x06b6d4, 0x3b82f6,
-        0x6366f1, 0x8b5cf6, 0xa855f7, 0xd946ef, 0xec4899, 0xf43f5e, 0xffffff, 0x111827,
+        0xef4444, 0xf97316, 0xf59e0b, 0x84cc16, 0x22c55e, 0x14b8a6, 0x06b6d4, 0x3b82f6, 0x6366f1,
+        0x8b5cf6, 0xa855f7, 0xd946ef, 0xec4899, 0xf43f5e, 0xffffff, 0x111827,
     ];
 
     let mut grid = div().flex().flex_wrap().gap_2();
