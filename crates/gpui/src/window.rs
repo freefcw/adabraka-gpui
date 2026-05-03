@@ -26,6 +26,8 @@ use core_video::pixel_buffer::CVPixelBuffer;
 use derive_more::{Deref, DerefMut};
 use futures::FutureExt;
 use futures::channel::oneshot;
+#[cfg(feature = "input-latency-histogram")]
+use hdrhistogram::Histogram;
 use itertools::FoldWhile::{Continue, Done};
 use itertools::Itertools;
 use parking_lot::RwLock;
@@ -99,6 +101,7 @@ struct WindowInvalidatorInner {
     pub dirty: bool,
     pub draw_phase: DrawPhase,
     pub dirty_views: FxHashSet<EntityId>,
+    pub update_count: usize,
 }
 
 #[derive(Clone)]
@@ -113,12 +116,14 @@ impl WindowInvalidator {
                 dirty: true,
                 draw_phase: DrawPhase::None,
                 dirty_views: FxHashSet::default(),
+                update_count: 0,
             })),
         }
     }
 
     pub fn invalidate_view(&self, entity: EntityId, cx: &mut App) -> bool {
         let mut inner = self.inner.borrow_mut();
+        inner.update_count += 1;
         inner.dirty_views.insert(entity);
         if inner.draw_phase == DrawPhase::None {
             inner.dirty = true;
@@ -134,11 +139,19 @@ impl WindowInvalidator {
     }
 
     pub fn set_dirty(&self, dirty: bool) {
-        self.inner.borrow_mut().dirty = dirty
+        let mut inner = self.inner.borrow_mut();
+        inner.dirty = dirty;
+        if dirty {
+            inner.update_count += 1;
+        }
     }
 
     pub fn set_phase(&self, phase: DrawPhase) {
         self.inner.borrow_mut().draw_phase = phase
+    }
+
+    pub fn update_count(&self) -> usize {
+        self.inner.borrow().update_count
     }
 
     pub fn take_views(&self) -> FxHashSet<EntityId> {
@@ -876,6 +889,73 @@ impl InputRateTracker {
     }
 }
 
+/// A point-in-time snapshot of the input latency histograms for a window.
+#[cfg(feature = "input-latency-histogram")]
+pub struct InputLatencySnapshot {
+    /// Histogram of input-to-frame latency samples, in nanoseconds.
+    pub latency_histogram: Histogram<u64>,
+    /// Histogram of input events coalesced per rendered frame.
+    pub events_per_frame_histogram: Histogram<u64>,
+    /// Count of input events that arrived mid-draw and were excluded from latency recording.
+    pub mid_draw_events_dropped: u64,
+}
+
+#[cfg(feature = "input-latency-histogram")]
+struct InputLatencyTracker {
+    first_input_at: Option<Instant>,
+    pending_input_count: u64,
+    latency_histogram: Histogram<u64>,
+    events_per_frame_histogram: Histogram<u64>,
+    mid_draw_events_dropped: u64,
+}
+
+#[cfg(feature = "input-latency-histogram")]
+impl InputLatencyTracker {
+    fn new() -> Result<Self> {
+        Ok(Self {
+            first_input_at: None,
+            pending_input_count: 0,
+            latency_histogram: Histogram::new(3)
+                .map_err(|error| anyhow!("failed to create input latency histogram: {error}"))?,
+            events_per_frame_histogram: Histogram::new(3)
+                .map_err(|error| anyhow!("failed to create events per frame histogram: {error}"))?,
+            mid_draw_events_dropped: 0,
+        })
+    }
+
+    fn record_input(&mut self, dispatch_time: Instant) {
+        self.first_input_at.get_or_insert(dispatch_time);
+        self.pending_input_count += 1;
+    }
+
+    fn record_mid_draw_input(&mut self) {
+        self.mid_draw_events_dropped += 1;
+    }
+
+    fn record_frame_presented(&mut self) {
+        if let Some(first_input_at) = self.first_input_at.take() {
+            self.latency_histogram
+                .record(first_input_at.elapsed().as_nanos() as u64)
+                .ok();
+        }
+
+        if self.pending_input_count > 0 {
+            self.events_per_frame_histogram
+                .record(self.pending_input_count)
+                .ok();
+            self.pending_input_count = 0;
+        }
+    }
+
+    fn snapshot(&self) -> InputLatencySnapshot {
+        InputLatencySnapshot {
+            latency_histogram: self.latency_histogram.clone(),
+            events_per_frame_histogram: self.events_per_frame_histogram.clone(),
+            mid_draw_events_dropped: self.mid_draw_events_dropped,
+        }
+    }
+}
+
 /// Holds the state for a specific window.
 pub struct Window {
     pub(crate) handle: AnyWindowHandle,
@@ -924,6 +1004,8 @@ pub struct Window {
     hovered: Rc<Cell<bool>>,
     pub(crate) needs_present: Rc<Cell<bool>>,
     pub(crate) input_rate_tracker: Rc<RefCell<InputRateTracker>>,
+    #[cfg(feature = "input-latency-histogram")]
+    input_latency_tracker: InputLatencyTracker,
     #[allow(dead_code)]
     pub(crate) last_frame_time: Rc<Cell<Option<Instant>>>,
     pub(crate) last_input_was_keyboard: Cell<bool>,
@@ -1350,6 +1432,8 @@ impl Window {
             hovered,
             needs_present,
             input_rate_tracker,
+            #[cfg(feature = "input-latency-histogram")]
+            input_latency_tracker: InputLatencyTracker::new()?,
             last_frame_time,
             last_input_was_keyboard: Cell::new(false),
             refreshing: false,
@@ -2184,10 +2268,18 @@ impl Window {
     }
 
     #[profiling::function]
-    fn present(&self) {
+    fn present(&mut self) {
         self.platform_window.draw(&self.rendered_frame.scene);
+        #[cfg(feature = "input-latency-histogram")]
+        self.input_latency_tracker.record_frame_presented();
         self.needs_present.set(false);
         profiling::finish_frame!();
+    }
+
+    /// Returns a snapshot of the current input latency histograms.
+    #[cfg(feature = "input-latency-histogram")]
+    pub fn input_latency_snapshot(&self) -> InputLatencySnapshot {
+        self.input_latency_tracker.snapshot()
     }
 
     fn draw_roots(&mut self, cx: &mut App) {
@@ -3789,6 +3881,10 @@ impl Window {
     /// Dispatch a mouse or keyboard event on the window.
     #[profiling::function]
     pub fn dispatch_event(&mut self, event: PlatformInput, cx: &mut App) -> DispatchEventResult {
+        #[cfg(feature = "input-latency-histogram")]
+        let dispatch_time = Instant::now();
+        let update_count_before = self.invalidator.update_count();
+
         // Handlers may set this to false by calling `stop_propagation`.
         cx.propagate_event = true;
         // Handlers may set this to true by calling `prevent_default`.
@@ -3882,7 +3978,15 @@ impl Window {
             self.dispatch_key_event(any_key_event, cx);
         }
 
-        self.input_rate_tracker.borrow_mut().record_input();
+        if self.invalidator.update_count() > update_count_before {
+            self.input_rate_tracker.borrow_mut().record_input();
+            #[cfg(feature = "input-latency-histogram")]
+            if self.invalidator.not_drawing() {
+                self.input_latency_tracker.record_input(dispatch_time);
+            } else {
+                self.input_latency_tracker.record_mid_draw_input();
+            }
+        }
 
         DispatchEventResult {
             propagate: cx.propagate_event,
@@ -4694,6 +4798,11 @@ impl Window {
     pub fn set_tabbing_identifier(&self, tabbing_identifier: Option<String>) {
         self.platform_window
             .set_tabbing_identifier(tabbing_identifier)
+    }
+
+    /// Request the OS to play an alert sound.
+    pub fn play_system_bell(&self) {
+        self.platform_window.play_system_bell()
     }
 
     /// Toggles the inspector mode on this window.

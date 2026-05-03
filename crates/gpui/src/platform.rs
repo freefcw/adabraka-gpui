@@ -657,6 +657,8 @@ pub(crate) trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
 
     fn update_ime_position(&self, _bounds: Bounds<Pixels>);
 
+    fn play_system_bell(&self) {}
+
     fn show(&self) {}
     fn hide(&self) {}
     fn is_visible(&self) -> bool {

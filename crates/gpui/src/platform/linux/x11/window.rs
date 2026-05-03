@@ -1769,6 +1769,11 @@ impl PlatformWindow for X11Window {
         self.0.state.borrow().renderer.gpu_specs().into()
     }
 
+    fn play_system_bell(&self) {
+        self.0.xcb.bell(0).log_err();
+        xcb_flush(&self.0.xcb);
+    }
+
     fn show(&self) {
         self.0.xcb.map_window(self.0.x_window).log_err();
         xcb_flush(&self.0.xcb);

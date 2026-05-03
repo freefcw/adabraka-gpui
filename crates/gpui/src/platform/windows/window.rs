@@ -20,7 +20,9 @@ use windows::{
     Win32::{
         Foundation::*,
         Graphics::Gdi::*,
-        System::{Com::*, LibraryLoader::*, Ole::*, SystemServices::*},
+        System::{
+            Com::*, Diagnostics::Debug::MessageBeep, LibraryLoader::*, Ole::*, SystemServices::*,
+        },
         UI::{Controls::*, HiDpi::*, Input::KeyboardAndMouse::*, Shell::*, WindowsAndMessaging::*},
     },
     core::*,
@@ -854,6 +856,11 @@ impl PlatformWindow for WindowsWindow {
 
     fn update_ime_position(&self, _bounds: Bounds<Pixels>) {
         // There is no such thing on Windows.
+    }
+
+    fn play_system_bell(&self) {
+        // MB_OK: the Windows Default Beep sound.
+        unsafe { MessageBeep(MB_OK).log_err() };
     }
 
     fn show(&self) {

@@ -23,7 +23,7 @@ use objc::{
 };
 use objc2_app_kit::{
     NSAppKitVersionNumber, NSAppKitVersionNumber12_0, NSAutoresizingMaskOptions,
-    NSBackingStoreType, NSEventModifierFlags, NSVisualEffectMaterial, NSVisualEffectState,
+    NSBackingStoreType, NSBeep, NSEventModifierFlags, NSVisualEffectMaterial, NSVisualEffectState,
     NSWindowButton, NSWindowCollectionBehavior, NSWindowOcclusionState, NSWindowOrderingMode,
     NSWindowStyleMask, NSWindowTitleVisibility,
 };
@@ -1773,6 +1773,10 @@ impl PlatformWindow for MacWindow {
                 }
             })
             .detach()
+    }
+
+    fn play_system_bell(&self) {
+        NSBeep()
     }
 
     fn show(&self) {
