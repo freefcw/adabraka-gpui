@@ -133,20 +133,18 @@ impl Scene {
             match operation {
                 PaintOperation::Primitive(kind, index) => {
                     let primitive = match kind {
-                        PrimitiveKind::Shadow => {
-                            Primitive::Shadow(prev_scene.shadows[*index].clone())
-                        }
-                        PrimitiveKind::Quad => Primitive::Quad(prev_scene.quads[*index].clone()),
+                        PrimitiveKind::Shadow => Primitive::Shadow(prev_scene.shadows[*index]),
+                        PrimitiveKind::Quad => Primitive::Quad(prev_scene.quads[*index]),
                         PrimitiveKind::Path => Primitive::Path(prev_scene.paths[*index].clone()),
                         PrimitiveKind::Underline => {
-                            Primitive::Underline(prev_scene.underlines[*index].clone())
+                            Primitive::Underline(prev_scene.underlines[*index])
                         }
-                        PrimitiveKind::MonochromeSprite => Primitive::MonochromeSprite(
-                            prev_scene.monochrome_sprites[*index].clone(),
-                        ),
-                        PrimitiveKind::PolychromeSprite => Primitive::PolychromeSprite(
-                            prev_scene.polychrome_sprites[*index].clone(),
-                        ),
+                        PrimitiveKind::MonochromeSprite => {
+                            Primitive::MonochromeSprite(prev_scene.monochrome_sprites[*index])
+                        }
+                        PrimitiveKind::PolychromeSprite => {
+                            Primitive::PolychromeSprite(prev_scene.polychrome_sprites[*index])
+                        }
                         PrimitiveKind::Surface => {
                             Primitive::Surface(prev_scene.surfaces[*index].clone())
                         }
@@ -511,7 +509,7 @@ pub(crate) enum PrimitiveBatch<'a> {
     Surfaces(&'a [PaintSurface]),
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Copy, Clone)]
 #[repr(C)]
 pub(crate) struct Quad {
     pub order: DrawOrder,
@@ -535,7 +533,7 @@ impl From<Quad> for Primitive {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
 #[repr(C)]
 pub(crate) struct Underline {
     pub order: DrawOrder,
@@ -553,7 +551,7 @@ impl From<Underline> for Primitive {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
 #[repr(C)]
 pub(crate) struct Shadow {
     pub order: DrawOrder,
@@ -705,7 +703,7 @@ impl Default for TransformationMatrix {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Copy, Clone, Debug)]
 #[repr(C)]
 pub(crate) struct MonochromeSprite {
     pub order: DrawOrder,
@@ -723,7 +721,7 @@ impl From<MonochromeSprite> for Primitive {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Copy, Clone, Debug)]
 #[repr(C)]
 pub(crate) struct PolychromeSprite {
     pub order: DrawOrder,
