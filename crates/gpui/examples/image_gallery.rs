@@ -5,8 +5,10 @@ use gpui::{
     RetainAllImageCache, SharedString, TitlebarOptions, Window, WindowBounds, WindowOptions,
     actions, div, hash, image_cache, img, prelude::*, px, rgb, size,
 };
-use reqwest_client::ReqwestClient;
 use std::{collections::HashMap, sync::Arc};
+
+#[path = "support/reqwest_example_client.rs"]
+mod reqwest_example_client;
 
 const IMAGES_IN_GALLERY: usize = 30;
 
@@ -250,8 +252,7 @@ fn main() {
     env_logger::init();
 
     Application::new().run(move |cx: &mut App| {
-        let http_client = ReqwestClient::user_agent("gpui example").unwrap();
-        cx.set_http_client(Arc::new(http_client));
+        cx.set_http_client(reqwest_example_client::new_http_client().unwrap());
 
         cx.activate(true);
         cx.on_action(|_: &Quit, cx| cx.quit());

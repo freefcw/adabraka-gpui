@@ -73,7 +73,7 @@ fn try_kdialog(options: &DialogOptions) -> Option<usize> {
         return Some(0);
     }
 
-    let mut args = vec!["--warningyesno".to_string(), message.clone()];
+    let mut args = vec!["--warningyesno".to_string(), message];
     if button_count >= 3 {
         args[0] = "--warningyesnocancel".to_string();
     }

@@ -714,16 +714,13 @@ impl StateInner {
 
         if let Some(handler) = self.scroll_handler.as_mut() {
             let visible_range = Self::visible_range(&self.items, height, &scroll_top_after_event);
-            handler(
-                &ListScrollEvent {
-                    visible_range,
-                    count: self.items.summary().count,
-                    is_scrolled: self.logical_scroll_top.is_some(),
-                    is_following_tail: self.follow_state.is_following(),
-                },
-                window,
-                cx,
-            );
+            let event = ListScrollEvent {
+                visible_range,
+                count: self.items.summary().count,
+                is_scrolled: self.logical_scroll_top.is_some(),
+                is_following_tail: self.follow_state.is_following(),
+            };
+            handler(&event, window, cx);
         }
 
         cx.notify(current_view);

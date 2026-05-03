@@ -8,7 +8,9 @@ use gpui::{
     MenuItem, Point, SharedString, SharedUri, TitlebarOptions, Window, WindowBounds, WindowOptions,
     actions, div, img, prelude::*, px, rgb, size,
 };
-use reqwest_client::ReqwestClient;
+
+#[path = "../support/reqwest_example_client.rs"]
+mod reqwest_example_client;
 
 struct Assets {
     base: PathBuf,
@@ -155,8 +157,7 @@ fn main() {
             base: manifest_dir.join("examples"),
         })
         .run(move |cx: &mut App| {
-            let http_client = ReqwestClient::user_agent("gpui example").unwrap();
-            cx.set_http_client(Arc::new(http_client));
+            cx.set_http_client(reqwest_example_client::new_http_client().unwrap());
 
             cx.activate(true);
             cx.on_action(|_: &Quit, cx| cx.quit());

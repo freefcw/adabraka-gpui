@@ -9,7 +9,7 @@ use std::{
 
 /// A shared string is an immutable string that can be cheaply cloned in GPUI
 /// tasks. Uses SmolStr for efficient storage with inline optimization for small strings.
-#[derive(Eq, PartialEq, PartialOrd, Ord, Hash, Clone)]
+#[derive(Eq, PartialEq, PartialOrd, Ord, Hash, Clone, Default)]
 pub struct SharedString(SmolStr);
 
 impl SharedString {
@@ -48,12 +48,6 @@ impl JsonSchema for SharedString {
 
     fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
         String::json_schema(generator)
-    }
-}
-
-impl Default for SharedString {
-    fn default() -> Self {
-        Self(SmolStr::default())
     }
 }
 

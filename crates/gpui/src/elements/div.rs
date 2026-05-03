@@ -2029,10 +2029,10 @@ impl Interactivity {
                         origin: hitbox.origin,
                         size: text.size(FONT_SIZE),
                     };
-                    if self.source_location.is_some()
-                        && text_bounds.contains(&window.mouse_position())
-                        && window.modifiers().secondary()
-                    {
+                    if let Some(source_location) = self.source_location.filter(|_| {
+                        text_bounds.contains(&window.mouse_position())
+                            && window.modifiers().secondary()
+                    }) {
                         let secondary_held = window.modifiers().secondary();
                         window.on_key_event({
                             move |e: &crate::ModifiersChangedEvent, _phase, window, _cx| {
@@ -2060,7 +2060,7 @@ impl Interactivity {
 
                         window.on_mouse_event({
                             let hitbox = hitbox.clone();
-                            let location = self.source_location.unwrap();
+                            let location = source_location;
                             move |e: &crate::MouseDownEvent, phase, window, cx| {
                                 if text_bounds.contains(&e.position)
                                     && phase.capture()

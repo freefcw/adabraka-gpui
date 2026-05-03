@@ -471,6 +471,15 @@ features = ["unstable"]
 [dev-dependencies.rand]
 version = "0.9"
 
+[dev-dependencies.reqwest]
+version = "0.12.15-zed"
+features = [
+    "rustls-tls-native-roots",
+    "stream",
+]
+default-features = false
+package = "zed-reqwest"
+
 [dev-dependencies.unicode-segmentation]
 version = "1.10"
 

@@ -231,7 +231,7 @@ impl LinuxTray {
             let data = icon_data.unwrap_or(&[]).to_vec();
             if handle
                 .update(move |tray: &mut GpuiTray| {
-                    tray.icon_data = data.clone();
+                    tray.icon_data = data;
                 })
                 .is_none()
             {
@@ -246,7 +246,7 @@ impl LinuxTray {
             let tooltip = tooltip.to_string();
             if handle
                 .update(move |tray: &mut GpuiTray| {
-                    tray.tooltip = tooltip.clone();
+                    tray.tooltip = tooltip;
                 })
                 .is_none()
             {
@@ -260,7 +260,7 @@ impl LinuxTray {
         if let Some(handle) = &self.handle {
             if handle
                 .update(move |tray: &mut GpuiTray| {
-                    tray.menu_items = items.clone();
+                    tray.menu_items = items;
                 })
                 .is_none()
             {

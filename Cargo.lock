@@ -99,6 +99,7 @@ dependencies = [
  "x11rb",
  "xkbcommon",
  "zed-font-kit",
+ "zed-reqwest",
  "zed-scap",
  "zed-xim",
 ]

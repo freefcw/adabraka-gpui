@@ -766,7 +766,7 @@ mod tests {
             size(10.0.into(), 10.0.into()),
         );
         Quad {
-            bounds: bounds.clone(),
+            bounds,
             content_mask: ContentMask { bounds },
             background: transparent_black().into(),
             blend_mode: blend_mode as u32,

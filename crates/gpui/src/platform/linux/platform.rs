@@ -51,6 +51,7 @@ pub(crate) const KEYRING_LABEL: &str = "zed-github-account";
 const FILE_PICKER_PORTAL_MISSING: &str =
     "Couldn't open file picker due to missing xdg-desktop-portal implementation.";
 
+#[cfg_attr(not(any(feature = "wayland", feature = "x11")), allow(dead_code))]
 pub(crate) enum LinuxTrayEvent {
     Click(LinuxTrayClickEvent),
     MenuAction(SharedString),
@@ -70,6 +71,7 @@ pub(crate) type TrayIconEventCallback = Box<dyn FnMut(TrayIconEvent)>;
 pub(crate) type TrayIconClickEventCallback = Box<dyn FnMut(TrayIconClickEvent)>;
 pub(crate) type TrayMenuActionCallback = Box<dyn FnMut(SharedString)>;
 
+#[cfg_attr(not(any(feature = "wayland", feature = "x11")), allow(dead_code))]
 pub(crate) trait LinuxTrayEventTarget {
     fn convert_tray_click_event(&self, event: LinuxTrayClickEvent) -> TrayIconClickEvent;
     fn take_tray_icon_event_callback(&mut self) -> Option<TrayIconEventCallback>;
@@ -83,6 +85,7 @@ pub(crate) trait LinuxTrayEventTarget {
     fn restore_tray_menu_action_callback_if_empty(&mut self, callback: TrayMenuActionCallback);
 }
 
+#[cfg_attr(not(any(feature = "wayland", feature = "x11")), allow(dead_code))]
 fn dispatch_tray_icon_event<State: LinuxTrayEventTarget>(
     state: &Rc<RefCell<State>>,
     event: LinuxTrayClickEvent,
@@ -98,7 +101,7 @@ fn dispatch_tray_icon_event<State: LinuxTrayEventTarget>(
     }
 
     if let Some(ref mut callback) = click_callback {
-        callback(event.clone());
+        callback(event);
     }
 
     let mut state_ref = state.borrow_mut();
@@ -110,6 +113,7 @@ fn dispatch_tray_icon_event<State: LinuxTrayEventTarget>(
     }
 }
 
+#[cfg_attr(not(any(feature = "wayland", feature = "x11")), allow(dead_code))]
 fn dispatch_tray_menu_action<State: LinuxTrayEventTarget>(
     state: &Rc<RefCell<State>>,
     id: SharedString,
@@ -129,6 +133,7 @@ fn dispatch_tray_menu_action<State: LinuxTrayEventTarget>(
     }
 }
 
+#[cfg_attr(not(any(feature = "wayland", feature = "x11")), allow(dead_code))]
 pub(crate) fn install_linux_tray_event_source<State, Client, Extract>(
     handle: &LoopHandle<'static, Client>,
     state_from_client: Extract,

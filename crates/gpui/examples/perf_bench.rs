@@ -21,7 +21,7 @@ struct PerfBench {
 }
 
 impl Render for PerfBench {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         if !STARTED.swap(true, Ordering::Relaxed) {
             let _ = writeln!(self.log_file, "render started");
             let _ = self.log_file.flush();
