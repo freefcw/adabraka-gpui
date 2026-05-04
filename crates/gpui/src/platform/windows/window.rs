@@ -28,6 +28,7 @@ use windows::{
     core::*,
 };
 
+use crate::platform::windows::direct_manipulation::DirectManipulationHandler;
 use crate::*;
 
 pub(crate) struct WindowsWindow(pub Rc<WindowsWindowInner>);
@@ -49,6 +50,7 @@ pub struct WindowsWindowState {
     pub last_reported_capslock: Option<Capslock>,
     pub system_key_handled: bool,
     pub hovered: bool,
+    pub direct_manipulation: DirectManipulationHandler,
 
     pub renderer: DirectXRenderer,
 
@@ -121,6 +123,8 @@ impl WindowsWindowState {
         let nc_button_pressed = None;
         let fullscreen = None;
         let initial_placement = None;
+        let direct_manipulation = DirectManipulationHandler::new(hwnd, scale_factor)
+            .context("initializing Direct Manipulation")?;
 
         Ok(Self {
             origin,
@@ -138,6 +142,7 @@ impl WindowsWindowState {
             last_reported_capslock,
             system_key_handled,
             hovered,
+            direct_manipulation,
             renderer,
             click_state,
             system_settings,

@@ -114,6 +114,7 @@ impl WindowsWindowInner {
             WM_GPUI_CURSOR_STYLE_CHANGED => self.handle_cursor_changed(lparam),
             WM_GPUI_FORCE_UPDATE_WINDOW => self.draw_window(handle, true),
             WM_GPUI_GPU_DEVICE_LOST => self.handle_device_lost(lparam),
+            DM_POINTERHITTEST => self.handle_dm_pointer_hit_test(wparam),
             _ => None,
         };
         if let Some(n) = handled {
@@ -794,6 +795,7 @@ impl WindowsWindowInner {
         let new_scale_factor = new_dpi / USER_DEFAULT_SCREEN_DPI as f32;
         lock.scale_factor = new_scale_factor;
         lock.border_offset.update(handle).log_err();
+        lock.direct_manipulation.set_scale_factor(new_scale_factor);
         drop(lock);
 
         let rect = unsafe { &*(lparam.0 as *const RECT) };
@@ -1234,9 +1236,32 @@ impl WindowsWindowInner {
         Some(0)
     }
 
+    fn handle_dm_pointer_hit_test(&self, wparam: WPARAM) -> Option<isize> {
+        self.state
+            .borrow()
+            .direct_manipulation
+            .on_pointer_hit_test(wparam);
+        None
+    }
+
     #[inline]
     fn draw_window(&self, handle: HWND, force_render: bool) -> Option<isize> {
         let mut request_frame = self.state.borrow_mut().callbacks.request_frame.take()?;
+        let events = {
+            let lock = self.state.borrow();
+            lock.direct_manipulation.update();
+            lock.direct_manipulation.drain_events()
+        };
+        if !events.is_empty() {
+            let mut lock = self.state.borrow_mut();
+            if let Some(mut func) = lock.callbacks.input.take() {
+                drop(lock);
+                for event in events {
+                    func(event);
+                }
+                self.state.borrow_mut().callbacks.input = Some(func);
+            }
+        }
         request_frame(RequestFrameOptions {
             require_presentation: false,
             force_render,

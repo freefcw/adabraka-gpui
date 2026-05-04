@@ -3,6 +3,7 @@ mod auto_launch;
 mod clipboard;
 mod destination_list;
 mod dialog;
+mod direct_manipulation;
 mod direct_write;
 mod directx_atlas;
 mod directx_devices;
