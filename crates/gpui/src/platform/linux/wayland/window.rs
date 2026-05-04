@@ -12,7 +12,10 @@ use futures::channel::oneshot::Receiver;
 use raw_window_handle as rwh;
 use wayland_backend::client::ObjectId;
 use wayland_client::WEnum;
-use wayland_client::{Proxy, protocol::wl_surface};
+use wayland_client::{
+    Proxy,
+    protocol::{wl_output, wl_surface},
+};
 use wayland_protocols::wp::viewporter::client::wp_viewport;
 use wayland_protocols::xdg::decoration::zv1::client::zxdg_toplevel_decoration_v1;
 use wayland_protocols::xdg::shell::client::xdg_surface;
@@ -35,6 +38,14 @@ use crate::{
         PlatformAtlas, PlatformInputHandler, PlatformWindow,
         linux::wayland::{display::WaylandDisplay, serial::SerialKind},
         wgpu::{GpuContext, WgpuRenderer, WgpuSurfaceConfig},
+    },
+};
+use crate::{
+    LayerShellAnchor, LayerShellExclusiveZone, LayerShellKeyboardInteractivity, LayerShellLayer,
+    LayerShellOptions, LayerShellProtocolPreference,
+    platform::linux::wayland::{
+        ext_layer_shell::client::ext_layer_surface_v1,
+        wlr_layer_shell::client::{zwlr_layer_shell_v1, zwlr_layer_surface_v1},
     },
 };
 use crate::{WindowKind, scene::Scene};
@@ -86,14 +97,12 @@ struct InProgressConfigure {
 }
 
 pub struct WaylandWindowState {
-    xdg_surface: xdg_surface::XdgSurface,
+    role: WaylandWindowRole,
     acknowledged_first_configure: bool,
     pub surface: wl_surface::WlSurface,
-    decoration: Option<zxdg_toplevel_decoration_v1::ZxdgToplevelDecorationV1>,
     app_id: Option<String>,
     appearance: WindowAppearance,
     blur: Option<org_kde_kwin_blur::OrgKdeKwinBlur>,
-    toplevel: xdg_toplevel::XdgToplevel,
     viewport: Option<wp_viewport::WpViewport>,
     outputs: HashMap<ObjectId, Output>,
     display: Option<(ObjectId, Output)>,
@@ -121,6 +130,41 @@ pub struct WaylandWindowState {
     visible: bool,
 }
 
+pub enum WaylandWindowRole {
+    XdgToplevel {
+        xdg_surface: xdg_surface::XdgSurface,
+        toplevel: xdg_toplevel::XdgToplevel,
+        decoration: Option<zxdg_toplevel_decoration_v1::ZxdgToplevelDecorationV1>,
+    },
+    ExtLayer {
+        layer_surface: ext_layer_surface_v1::ExtLayerSurfaceV1,
+        options: LayerShellOptions,
+        configured: bool,
+    },
+    WlrLayer {
+        layer_surface: zwlr_layer_surface_v1::ZwlrLayerSurfaceV1,
+        options: LayerShellOptions,
+        configured: bool,
+    },
+}
+
+impl WaylandWindowRole {
+    fn toplevel(&self) -> Option<xdg_toplevel::XdgToplevel> {
+        match self {
+            WaylandWindowRole::XdgToplevel { toplevel, .. } => Some(toplevel.clone()),
+            WaylandWindowRole::ExtLayer { .. } => None,
+            WaylandWindowRole::WlrLayer { .. } => None,
+        }
+    }
+
+    fn is_layer_shell(&self) -> bool {
+        matches!(
+            self,
+            WaylandWindowRole::ExtLayer { .. } | WaylandWindowRole::WlrLayer { .. }
+        )
+    }
+}
+
 #[derive(Clone)]
 pub struct WaylandWindowStatePtr {
     state: Rc<RefCell<WaylandWindowState>>,
@@ -131,9 +175,7 @@ impl WaylandWindowState {
     pub(crate) fn new(
         handle: AnyWindowHandle,
         surface: wl_surface::WlSurface,
-        xdg_surface: xdg_surface::XdgSurface,
-        toplevel: xdg_toplevel::XdgToplevel,
-        decoration: Option<zxdg_toplevel_decoration_v1::ZxdgToplevelDecorationV1>,
+        role: WaylandWindowRole,
         appearance: WindowAppearance,
         viewport: Option<wp_viewport::WpViewport>,
         client: WaylandClientStatePtr,
@@ -160,13 +202,11 @@ impl WaylandWindowState {
         };
 
         Ok(Self {
-            xdg_surface,
+            role,
             acknowledged_first_configure: false,
             surface,
-            decoration,
             app_id: None,
             blur: None,
-            toplevel,
             viewport,
             globals,
             outputs: HashMap::default(),
@@ -241,17 +281,31 @@ impl Drop for WaylandWindow {
         let client = state.client.clone();
 
         state.renderer.destroy();
-        if let Some(decoration) = &state.decoration {
-            decoration.destroy();
-        }
         if let Some(blur) = &state.blur {
             blur.release();
         }
-        state.toplevel.destroy();
+        match &state.role {
+            WaylandWindowRole::XdgToplevel {
+                xdg_surface,
+                toplevel,
+                decoration,
+            } => {
+                if let Some(decoration) = decoration {
+                    decoration.destroy();
+                }
+                toplevel.destroy();
+                xdg_surface.destroy();
+            }
+            WaylandWindowRole::ExtLayer { layer_surface, .. } => {
+                layer_surface.destroy();
+            }
+            WaylandWindowRole::WlrLayer { layer_surface, .. } => {
+                layer_surface.destroy();
+            }
+        }
         if let Some(viewport) = &state.viewport {
             viewport.destroy();
         }
-        state.xdg_surface.destroy();
         state.surface.destroy();
 
         let state_ptr = self.0.clone();
@@ -284,39 +338,14 @@ impl WaylandWindow {
         params: WindowParams,
         appearance: WindowAppearance,
         parent: Option<XdgToplevel>,
+        outputs: Vec<Output>,
     ) -> anyhow::Result<(Self, ObjectId)> {
         let surface = globals.compositor.create_surface(&globals.qh, ());
-        let xdg_surface = globals
-            .wm_base
-            .get_xdg_surface(&surface, &globals.qh, surface.id());
-        let toplevel = xdg_surface.get_toplevel(&globals.qh, surface.id());
-
-        if params.kind == WindowKind::Floating || params.kind == WindowKind::Overlay {
-            toplevel.set_parent(parent.as_ref());
-        }
-
-        if params.kind == WindowKind::Overlay {
-            log::warn!(
-                "Wayland: WindowKind::Overlay does not support true always-on-top. \
-                 Always-on-top requires compositor support (e.g. wlr-layer-shell protocol)."
-            );
-        }
-
-        if let Some(size) = params.window_min_size {
-            toplevel.set_min_size(size.width.0 as i32, size.height.0 as i32);
-        }
+        let role = create_window_role(&surface, &globals, &params, parent, &outputs)?;
 
         if let Some(fractional_scale_manager) = globals.fractional_scale_manager.as_ref() {
             fractional_scale_manager.get_fractional_scale(&surface, &globals.qh, surface.id());
         }
-
-        // Attempt to set up window decorations based on the requested configuration
-        let decoration = globals
-            .decoration_manager
-            .as_ref()
-            .map(|decoration_manager| {
-                decoration_manager.get_toplevel_decoration(&toplevel, &globals.qh, surface.id())
-            });
 
         let viewport = globals
             .viewporter
@@ -329,9 +358,7 @@ impl WaylandWindow {
             state: Rc::new(RefCell::new(WaylandWindowState::new(
                 handle,
                 surface.clone(),
-                xdg_surface,
-                toplevel,
-                decoration,
+                role,
                 appearance,
                 viewport,
                 client,
@@ -353,6 +380,375 @@ impl WaylandWindow {
     }
 }
 
+fn create_window_role(
+    surface: &wl_surface::WlSurface,
+    globals: &Globals,
+    params: &WindowParams,
+    parent: Option<XdgToplevel>,
+    outputs: &[Output],
+) -> anyhow::Result<WaylandWindowRole> {
+    if let Some(options) = layer_shell_options(params, globals, outputs) {
+        if let Some(role) = create_layer_shell_role(surface, globals, params, &options, outputs) {
+            return Ok(role);
+        }
+        return Ok(create_xdg_toplevel_role(surface, globals, params, parent));
+    }
+
+    Ok(create_xdg_toplevel_role(surface, globals, params, parent))
+}
+
+fn create_layer_shell_role(
+    surface: &wl_surface::WlSurface,
+    globals: &Globals,
+    params: &WindowParams,
+    options: &LayerShellOptions,
+    outputs: &[Output],
+) -> Option<WaylandWindowRole> {
+    match options.protocol {
+        LayerShellProtocolPreference::ExtThenWlr => {
+            create_ext_layer_shell_role(surface, globals, params, options, outputs)
+                .or_else(|| create_wlr_layer_shell_role(surface, globals, params, options, outputs))
+        }
+        LayerShellProtocolPreference::Wlr => {
+            create_wlr_layer_shell_role(surface, globals, params, options, outputs)
+        }
+    }
+}
+
+fn create_ext_layer_shell_role(
+    surface: &wl_surface::WlSurface,
+    globals: &Globals,
+    params: &WindowParams,
+    options: &LayerShellOptions,
+    outputs: &[Output],
+) -> Option<WaylandWindowRole> {
+    let layer_shell = globals.ext_layer_shell.as_ref()?;
+    let output = output_for_layer_shell(params, outputs);
+    let layer_surface =
+        layer_shell.get_layer_surface(surface, output.as_ref(), &globals.qh, surface.id());
+
+    configure_ext_layer_surface(&layer_surface, options, params.bounds.size);
+    if let Some(app_id) = &params.app_id {
+        layer_surface.set_app_id(app_id.clone());
+    }
+    Some(WaylandWindowRole::ExtLayer {
+        layer_surface,
+        options: options.clone(),
+        configured: false,
+    })
+}
+
+fn create_wlr_layer_shell_role(
+    surface: &wl_surface::WlSurface,
+    globals: &Globals,
+    params: &WindowParams,
+    options: &LayerShellOptions,
+    outputs: &[Output],
+) -> Option<WaylandWindowRole> {
+    let layer_shell = globals.wlr_layer_shell.as_ref()?;
+    let output = output_for_layer_shell(params, outputs);
+    let layer_surface = layer_shell.get_layer_surface(
+        surface,
+        output.as_ref(),
+        options.layer.to_wlr(),
+        options.namespace.to_string(),
+        &globals.qh,
+        surface.id(),
+    );
+
+    configure_wlr_layer_surface(&layer_surface, options, params.bounds.size);
+    Some(WaylandWindowRole::WlrLayer {
+        layer_surface,
+        options: options.clone(),
+        configured: false,
+    })
+}
+
+fn output_for_layer_shell(
+    params: &WindowParams,
+    outputs: &[Output],
+) -> Option<wl_output::WlOutput> {
+    params.display_id.and_then(|display_id| {
+        outputs
+            .iter()
+            .find(|output| output.id.protocol_id() == display_id.0)
+            .map(|output| output.output.clone())
+    })
+}
+
+fn create_xdg_toplevel_role(
+    surface: &wl_surface::WlSurface,
+    globals: &Globals,
+    params: &WindowParams,
+    parent: Option<XdgToplevel>,
+) -> WaylandWindowRole {
+    let xdg_surface = globals
+        .wm_base
+        .get_xdg_surface(surface, &globals.qh, surface.id());
+    let toplevel = xdg_surface.get_toplevel(&globals.qh, surface.id());
+
+    if params.kind == WindowKind::Floating || params.kind == WindowKind::Overlay {
+        toplevel.set_parent(parent.as_ref());
+    }
+
+    if params.kind == WindowKind::Overlay {
+        log::warn!(
+            "Wayland: WindowKind::Overlay does not support true always-on-top without \
+             layer-shell support; falling back to xdg_toplevel."
+        );
+    }
+
+    if let Some(size) = params.window_min_size {
+        toplevel.set_min_size(size.width.0 as i32, size.height.0 as i32);
+    }
+
+    let decoration = globals
+        .decoration_manager
+        .as_ref()
+        .map(|decoration_manager| {
+            decoration_manager.get_toplevel_decoration(&toplevel, &globals.qh, surface.id())
+        });
+
+    WaylandWindowRole::XdgToplevel {
+        xdg_surface,
+        toplevel,
+        decoration,
+    }
+}
+
+fn layer_shell_options(
+    params: &WindowParams,
+    globals: &Globals,
+    outputs: &[Output],
+) -> Option<LayerShellOptions> {
+    let mut options = params.layer_shell.clone().or_else(|| {
+        (params.kind == WindowKind::Overlay).then(|| LayerShellOptions {
+            layer: LayerShellLayer::Overlay,
+            keyboard_interactivity: LayerShellKeyboardInteractivity::None,
+            namespace: "gpui-overlay".into(),
+            ..LayerShellOptions::default()
+        })
+    })?;
+
+    if params.layer_shell.is_none()
+        && params.kind == WindowKind::Overlay
+        && let Some(output) = find_output_for_params(params, outputs)
+    {
+        options = LayerShellOptions::from_window_bounds(
+            output.bounds.to_pixels(output.scale as f32),
+            params.bounds,
+        );
+        options.layer = LayerShellLayer::Overlay;
+        options.keyboard_interactivity = LayerShellKeyboardInteractivity::None;
+        options.namespace = "gpui-overlay".into();
+    }
+
+    if !is_layer_shell_available(globals, options.protocol) {
+        log::warn!(
+            "Wayland: layer-shell requested but no supported layer-shell protocol is available; \
+             falling back to xdg_toplevel positioning."
+        );
+        return None;
+    }
+
+    Some(options)
+}
+
+fn is_layer_shell_available(globals: &Globals, protocol: LayerShellProtocolPreference) -> bool {
+    match protocol {
+        LayerShellProtocolPreference::ExtThenWlr => {
+            globals.ext_layer_shell.is_some() || globals.wlr_layer_shell.is_some()
+        }
+        LayerShellProtocolPreference::Wlr => globals.wlr_layer_shell.is_some(),
+    }
+}
+
+fn find_output_for_params<'a>(params: &WindowParams, outputs: &'a [Output]) -> Option<&'a Output> {
+    params
+        .display_id
+        .and_then(|display_id| {
+            outputs
+                .iter()
+                .find(|output| output.id.protocol_id() == display_id.0)
+        })
+        .or_else(|| {
+            outputs.iter().find(|output| {
+                output
+                    .bounds
+                    .to_pixels(output.scale as f32)
+                    .contains(&params.bounds.center())
+            })
+        })
+        .or_else(|| outputs.first())
+}
+
+fn configure_layer_surface_state(
+    set_size: impl FnOnce(i32, i32),
+    set_anchor: impl FnOnce(u32),
+    set_margin: impl FnOnce(i32, i32, i32, i32),
+    set_exclusive_zone: impl FnOnce(i32),
+    set_keyboard_interactivity: impl FnOnce(LayerShellKeyboardInteractivity),
+    options: &LayerShellOptions,
+    size: Size<Pixels>,
+) {
+    set_size(size.width.0.max(1.0) as i32, size.height.0.max(1.0) as i32);
+    set_anchor(options.anchor.bits());
+    set_margin(
+        options.margin.top.0 as i32,
+        options.margin.right.0 as i32,
+        options.margin.bottom.0 as i32,
+        options.margin.left.0 as i32,
+    );
+    set_exclusive_zone(options.exclusive_zone.to_wayland());
+    set_keyboard_interactivity(options.keyboard_interactivity);
+}
+
+fn configure_ext_layer_surface(
+    layer_surface: &ext_layer_surface_v1::ExtLayerSurfaceV1,
+    options: &LayerShellOptions,
+    size: Size<Pixels>,
+) {
+    layer_surface.set_layer(options.layer.to_ext());
+    configure_layer_surface_state(
+        |width, height| layer_surface.set_size(width, height),
+        |anchor| layer_surface.set_anchor(ext_layer_surface_v1::Anchor::from_bits_truncate(anchor)),
+        |top, right, bottom, left| layer_surface.set_margin(top, right, bottom, left),
+        |zone| layer_surface.set_exclusive_zone(zone),
+        |interactivity| {
+            let Some(interactivity) = interactivity.to_ext() else {
+                log::warn!(
+                    "Wayland: ext-layer-shell does not support exclusive keyboard \
+                     interactivity; using on-demand focus."
+                );
+                layer_surface.set_keyboard_interactivity(
+                    ext_layer_surface_v1::KeyboardInteractivity::OnDemand,
+                );
+                return;
+            };
+            layer_surface.set_keyboard_interactivity(interactivity);
+        },
+        options,
+        size,
+    );
+}
+
+fn configure_wlr_layer_surface(
+    layer_surface: &zwlr_layer_surface_v1::ZwlrLayerSurfaceV1,
+    options: &LayerShellOptions,
+    size: Size<Pixels>,
+) {
+    configure_layer_surface_state(
+        |width, height| layer_surface.set_size(width as u32, height as u32),
+        |anchor| {
+            layer_surface.set_anchor(zwlr_layer_surface_v1::Anchor::from_bits_truncate(anchor))
+        },
+        |top, right, bottom, left| layer_surface.set_margin(top, right, bottom, left),
+        |zone| layer_surface.set_exclusive_zone(zone),
+        |interactivity| layer_surface.set_keyboard_interactivity(interactivity.to_wlr()),
+        options,
+        size,
+    );
+}
+
+trait ToWlrLayerShell {
+    type Wlr;
+
+    fn to_wlr(self) -> Self::Wlr;
+}
+
+impl ToWlrLayerShell for LayerShellLayer {
+    type Wlr = zwlr_layer_shell_v1::Layer;
+
+    fn to_wlr(self) -> Self::Wlr {
+        match self {
+            LayerShellLayer::Background => zwlr_layer_shell_v1::Layer::Background,
+            LayerShellLayer::Bottom => zwlr_layer_shell_v1::Layer::Bottom,
+            LayerShellLayer::Top => zwlr_layer_shell_v1::Layer::Top,
+            LayerShellLayer::Overlay => zwlr_layer_shell_v1::Layer::Overlay,
+        }
+    }
+}
+
+trait ToExtLayerShell {
+    type Ext;
+
+    fn to_ext(self) -> Self::Ext;
+}
+
+impl ToExtLayerShell for LayerShellLayer {
+    type Ext = ext_layer_surface_v1::Layer;
+
+    fn to_ext(self) -> Self::Ext {
+        match self {
+            LayerShellLayer::Background => ext_layer_surface_v1::Layer::Background,
+            LayerShellLayer::Bottom => ext_layer_surface_v1::Layer::Bottom,
+            LayerShellLayer::Top => ext_layer_surface_v1::Layer::Top,
+            LayerShellLayer::Overlay => ext_layer_surface_v1::Layer::Overlay,
+        }
+    }
+}
+
+impl ToWlrLayerShell for LayerShellAnchor {
+    type Wlr = zwlr_layer_surface_v1::Anchor;
+
+    fn to_wlr(self) -> Self::Wlr {
+        zwlr_layer_surface_v1::Anchor::from_bits_truncate(self.bits())
+    }
+}
+
+impl LayerShellExclusiveZone {
+    fn to_wayland(self) -> i32 {
+        match self {
+            LayerShellExclusiveZone::None => 0,
+            LayerShellExclusiveZone::Auto => -1,
+            LayerShellExclusiveZone::Pixels(zone) => zone,
+        }
+    }
+}
+
+impl ToWlrLayerShell for LayerShellKeyboardInteractivity {
+    type Wlr = zwlr_layer_surface_v1::KeyboardInteractivity;
+
+    fn to_wlr(self) -> Self::Wlr {
+        match self {
+            LayerShellKeyboardInteractivity::None => {
+                zwlr_layer_surface_v1::KeyboardInteractivity::None
+            }
+            LayerShellKeyboardInteractivity::OnDemand => {
+                zwlr_layer_surface_v1::KeyboardInteractivity::OnDemand
+            }
+            LayerShellKeyboardInteractivity::Exclusive => {
+                zwlr_layer_surface_v1::KeyboardInteractivity::Exclusive
+            }
+        }
+    }
+}
+
+impl ToExtLayerShell for LayerShellKeyboardInteractivity {
+    type Ext = Option<ext_layer_surface_v1::KeyboardInteractivity>;
+
+    fn to_ext(self) -> Self::Ext {
+        match self {
+            LayerShellKeyboardInteractivity::None => {
+                Some(ext_layer_surface_v1::KeyboardInteractivity::None)
+            }
+            LayerShellKeyboardInteractivity::OnDemand => {
+                Some(ext_layer_surface_v1::KeyboardInteractivity::OnDemand)
+            }
+            LayerShellKeyboardInteractivity::Exclusive => None,
+        }
+    }
+}
+
+fn layer_configure_size(current_size: Size<Pixels>, width: i32, height: i32) -> Size<Pixels> {
+    match (width, height) {
+        (0, 0) => current_size,
+        (0, height) => size(current_size.width, px(height as f32)),
+        (width, 0) => size(px(width as f32), current_size.height),
+        (width, height) => size(px(width as f32), px(height as f32)),
+    }
+}
+
 impl WaylandWindowStatePtr {
     pub fn handle(&self) -> AnyWindowHandle {
         self.state.borrow().handle
@@ -362,8 +758,8 @@ impl WaylandWindowStatePtr {
         self.state.borrow().surface.clone()
     }
 
-    pub fn toplevel(&self) -> xdg_toplevel::XdgToplevel {
-        self.state.borrow().toplevel.clone()
+    pub fn toplevel(&self) -> Option<xdg_toplevel::XdgToplevel> {
+        self.state.borrow().role.toplevel()
     }
 
     pub fn ptr_eq(&self, other: &Self) -> bool {
@@ -435,7 +831,12 @@ impl WaylandWindowStatePtr {
                 }
             }
             let mut state = self.state.borrow_mut();
-            state.xdg_surface.ack_configure(serial);
+            let xdg_surface = match &state.role {
+                WaylandWindowRole::XdgToplevel { xdg_surface, .. } => xdg_surface.clone(),
+                WaylandWindowRole::ExtLayer { .. } => return,
+                WaylandWindowRole::WlrLayer { .. } => return,
+            };
+            xdg_surface.ack_configure(serial);
 
             let window_geometry = inset_by_tiling(
                 state.bounds.map_origin(|_| px(0.0)),
@@ -445,7 +846,7 @@ impl WaylandWindowStatePtr {
             .map(|v| v.0 as i32)
             .map_size(|v| if v <= 0 { 1 } else { v });
 
-            state.xdg_surface.set_window_geometry(
+            xdg_surface.set_window_geometry(
                 window_geometry.origin.x,
                 window_geometry.origin.y,
                 window_geometry.size.width,
@@ -488,6 +889,70 @@ impl WaylandWindowStatePtr {
                     log::warn!("Unknown decoration mode: {}", v);
                 }
             }
+        }
+    }
+
+    pub fn handle_ext_layer_surface_event(&self, event: ext_layer_surface_v1::Event) -> bool {
+        match event {
+            ext_layer_surface_v1::Event::Configure {
+                serial,
+                width,
+                height,
+            } => {
+                let mut state = self.state.borrow_mut();
+                let size = layer_configure_size(state.bounds.size, width, height);
+                let layer_surface = match &mut state.role {
+                    WaylandWindowRole::ExtLayer {
+                        layer_surface,
+                        configured,
+                        ..
+                    } => {
+                        *configured = true;
+                        layer_surface.clone()
+                    }
+                    WaylandWindowRole::XdgToplevel { .. } | WaylandWindowRole::WlrLayer { .. } => {
+                        return false;
+                    }
+                };
+                layer_surface.ack_configure(serial);
+                drop(state);
+                self.resize(size);
+                self.frame();
+                false
+            }
+            ext_layer_surface_v1::Event::Closed => true,
+        }
+    }
+
+    pub fn handle_wlr_layer_surface_event(&self, event: zwlr_layer_surface_v1::Event) -> bool {
+        match event {
+            zwlr_layer_surface_v1::Event::Configure {
+                serial,
+                width,
+                height,
+            } => {
+                let mut state = self.state.borrow_mut();
+                let size = layer_configure_size(state.bounds.size, width as i32, height as i32);
+                let layer_surface = match &mut state.role {
+                    WaylandWindowRole::WlrLayer {
+                        layer_surface,
+                        configured,
+                        ..
+                    } => {
+                        *configured = true;
+                        layer_surface.clone()
+                    }
+                    WaylandWindowRole::XdgToplevel { .. } | WaylandWindowRole::ExtLayer { .. } => {
+                        return false;
+                    }
+                };
+                layer_surface.ack_configure(serial);
+                drop(state);
+                self.resize(size);
+                self.frame();
+                false
+            }
+            zwlr_layer_surface_v1::Event::Closed => true,
         }
     }
 
@@ -865,12 +1330,28 @@ impl PlatformWindow for WaylandWindow {
         let state_ptr = self.0.clone();
         let dp_size = size.to_device_pixels(self.scale_factor());
 
-        state.xdg_surface.set_window_geometry(
-            state.bounds.origin.x.0 as i32,
-            state.bounds.origin.y.0 as i32,
-            dp_size.width.0,
-            dp_size.height.0,
-        );
+        match &state.role {
+            WaylandWindowRole::XdgToplevel { xdg_surface, .. } => {
+                xdg_surface.set_window_geometry(
+                    state.bounds.origin.x.0 as i32,
+                    state.bounds.origin.y.0 as i32,
+                    dp_size.width.0,
+                    dp_size.height.0,
+                );
+            }
+            WaylandWindowRole::ExtLayer { layer_surface, .. } => {
+                if state.visible {
+                    layer_surface
+                        .set_size(size.width.0.max(1.0) as i32, size.height.0.max(1.0) as i32);
+                }
+            }
+            WaylandWindowRole::WlrLayer { layer_surface, .. } => {
+                if state.visible {
+                    layer_surface
+                        .set_size(size.width.0.max(1.0) as u32, size.height.0.max(1.0) as u32);
+                }
+            }
+        }
 
         state
             .globals
@@ -959,12 +1440,23 @@ impl PlatformWindow for WaylandWindow {
     }
 
     fn set_title(&mut self, title: &str) {
-        self.borrow().toplevel.set_title(title.to_string());
+        let state = self.borrow();
+        if let Some(toplevel) = state.role.toplevel() {
+            toplevel.set_title(title.to_string());
+        }
     }
 
     fn set_app_id(&mut self, app_id: &str) {
         let mut state = self.borrow_mut();
-        state.toplevel.set_app_id(app_id.to_owned());
+        match &state.role {
+            WaylandWindowRole::XdgToplevel { toplevel, .. } => {
+                toplevel.set_app_id(app_id.to_owned());
+            }
+            WaylandWindowRole::ExtLayer { layer_surface, .. } => {
+                layer_surface.set_app_id(app_id.to_owned());
+            }
+            WaylandWindowRole::WlrLayer { .. } => {}
+        }
         state.app_id = Some(app_id.to_owned());
     }
 
@@ -975,24 +1467,32 @@ impl PlatformWindow for WaylandWindow {
     }
 
     fn minimize(&self) {
-        self.borrow().toplevel.set_minimized();
+        if let Some(toplevel) = self.borrow().role.toplevel() {
+            toplevel.set_minimized();
+        }
     }
 
     fn zoom(&self) {
         let state = self.borrow();
+        let Some(toplevel) = state.role.toplevel() else {
+            return;
+        };
         if !state.maximized {
-            state.toplevel.set_maximized();
+            toplevel.set_maximized();
         } else {
-            state.toplevel.unset_maximized();
+            toplevel.unset_maximized();
         }
     }
 
     fn toggle_fullscreen(&self) {
         let mut state = self.borrow_mut();
+        let Some(toplevel) = state.role.toplevel() else {
+            return;
+        };
         if !state.fullscreen {
-            state.toplevel.set_fullscreen(None);
+            toplevel.set_fullscreen(None);
         } else {
-            state.toplevel.unset_fullscreen();
+            toplevel.unset_fullscreen();
         }
     }
 
@@ -1076,6 +1576,9 @@ impl PlatformWindow for WaylandWindow {
 
     fn completed_frame(&self) {
         let state = self.borrow();
+        if is_unconfigured_layer_shell(&state.role) {
+            return;
+        }
         state.surface.commit();
     }
 
@@ -1086,8 +1589,11 @@ impl PlatformWindow for WaylandWindow {
 
     fn show_window_menu(&self, position: Point<Pixels>) {
         let state = self.borrow();
+        let Some(toplevel) = state.role.toplevel() else {
+            return;
+        };
         let serial = state.client.get_serial(SerialKind::MousePress);
-        state.toplevel.show_window_menu(
+        toplevel.show_window_menu(
             &state.globals.seat,
             serial,
             position.x.0 as i32,
@@ -1097,13 +1603,19 @@ impl PlatformWindow for WaylandWindow {
 
     fn start_window_move(&self) {
         let state = self.borrow();
+        let Some(toplevel) = state.role.toplevel() else {
+            return;
+        };
         let serial = state.client.get_serial(SerialKind::MousePress);
-        state.toplevel._move(&state.globals.seat, serial);
+        toplevel._move(&state.globals.seat, serial);
     }
 
     fn start_window_resize(&self, edge: crate::ResizeEdge) {
         let state = self.borrow();
-        state.toplevel.resize(
+        let Some(toplevel) = state.role.toplevel() else {
+            return;
+        };
+        toplevel.resize(
             &state.globals.seat,
             state.client.get_serial(SerialKind::MousePress),
             edge.to_xdg(),
@@ -1112,6 +1624,11 @@ impl PlatformWindow for WaylandWindow {
 
     fn window_decorations(&self) -> Decorations {
         let state = self.borrow();
+        if state.role.is_layer_shell() {
+            return Decorations::Client {
+                tiling: Tiling::default(),
+            };
+        }
         match state.decorations {
             WindowDecorations::Server => Decorations::Server,
             WindowDecorations::Client => Decorations::Client {
@@ -1123,7 +1640,12 @@ impl PlatformWindow for WaylandWindow {
     fn request_decorations(&self, decorations: WindowDecorations) {
         let mut state = self.borrow_mut();
         state.decorations = decorations;
-        if let Some(decoration) = state.decoration.as_ref() {
+        let decoration = match &state.role {
+            WaylandWindowRole::XdgToplevel { decoration, .. } => decoration.clone(),
+            WaylandWindowRole::ExtLayer { .. } => None,
+            WaylandWindowRole::WlrLayer { .. } => None,
+        };
+        if let Some(decoration) = decoration {
             decoration.set_mode(decorations.to_xdg());
             update_window(state);
         }
@@ -1153,6 +1675,26 @@ impl PlatformWindow for WaylandWindow {
     fn show(&self) {
         let mut state = self.borrow_mut();
         state.visible = true;
+        let size = state.bounds.size;
+        match &mut state.role {
+            WaylandWindowRole::ExtLayer {
+                configured,
+                layer_surface,
+                options,
+            } => {
+                *configured = false;
+                configure_ext_layer_surface(layer_surface, options, size);
+            }
+            WaylandWindowRole::WlrLayer {
+                configured,
+                layer_surface,
+                options,
+            } => {
+                *configured = false;
+                configure_wlr_layer_surface(layer_surface, options, size);
+            }
+            WaylandWindowRole::XdgToplevel { .. } => {}
+        }
         state.surface.frame(&state.globals.qh, state.surface.id());
         state.surface.commit();
     }
@@ -1160,6 +1702,9 @@ impl PlatformWindow for WaylandWindow {
     fn hide(&self) {
         let mut state = self.borrow_mut();
         state.visible = false;
+        if is_unconfigured_layer_shell(&state.role) {
+            return;
+        }
         state.surface.attach(None, 0, 0);
         state.surface.commit();
     }
@@ -1180,8 +1725,23 @@ impl PlatformWindow for WaylandWindow {
         } else {
             state.surface.set_input_region(None);
         }
-        state.surface.commit();
+        if !is_unconfigured_layer_shell(&state.role) {
+            state.surface.commit();
+        }
     }
+}
+
+fn is_unconfigured_layer_shell(role: &WaylandWindowRole) -> bool {
+    matches!(
+        role,
+        WaylandWindowRole::ExtLayer {
+            configured: false,
+            ..
+        } | WaylandWindowRole::WlrLayer {
+            configured: false,
+            ..
+        }
+    )
 }
 
 fn update_window(mut state: RefMut<WaylandWindowState>) {

@@ -76,6 +76,7 @@ test-support = [
     "x11",
 ]
 wayland = [
+    "bitflags",
     "bytemuck",
     "ashpd/wayland",
     "cosmic-text",
@@ -86,6 +87,7 @@ wayland = [
     "wayland-cursor",
     "wayland-protocols",
     "wayland-protocols-plasma",
+    "wayland-scanner",
     "filedescriptor",
     "xkbcommon",
     "open",
@@ -240,6 +242,11 @@ path = "examples/window_shadow.rs"
 [[test]]
 name = "action_macros"
 path = "tests/action_macros.rs"
+
+[[test]]
+name = "test_macro_glob_import"
+path = "tests/test_macro_glob_import.rs"
+required-features = ["test-support"]
 
 [dependencies.anyhow]
 version = "1.0.86"
@@ -503,6 +510,10 @@ default-features = false
 version = "1"
 optional = true
 
+[target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies.bitflags]
+version = "2.6"
+optional = true
+
 [target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies.calloop]
 version = "0.13.0"
 
@@ -567,6 +578,10 @@ optional = true
 [target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies.wayland-protocols-plasma]
 version = "0.2.0"
 features = ["client"]
+optional = true
+
+[target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies.wayland-scanner]
+version = "0.31.2"
 optional = true
 
 [target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies.x11-clipboard]
