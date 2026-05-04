@@ -14,7 +14,7 @@ use crate::{
     Replay, ResizeEdge, SMOOTH_SVG_SCALE_FACTOR, SUBPIXEL_VARIANTS_X, SUBPIXEL_VARIANTS_Y,
     ScaledPixels, Scene, Shadow, SharedString, Size, StrikethroughStyle, Style, SubscriberSet,
     Subscription, SystemWindowTab, SystemWindowTabController, TabStopMap, TaffyLayoutEngine, Task,
-    TextStyle, TextStyleRefinement, TransformationMatrix, Underline, UnderlineStyle,
+    TextStyle, TextStyleRefinement, ThermalState, TransformationMatrix, Underline, UnderlineStyle,
     WindowAppearance, WindowBackgroundAppearance, WindowBounds, WindowControls, WindowDecorations,
     WindowOptions, WindowParams, WindowState, WindowTextSystem, point, prelude::*, px, rems, size,
     transparent_black,
@@ -1186,14 +1186,22 @@ impl Window {
             let input_rate_tracker = input_rate_tracker.clone();
             let last_frame_time = last_frame_time.clone();
             move |request_frame_options| {
-                // Throttle frame rate for inactive windows to ~30fps to save energy.
-                // force_render and require_presentation always bypass throttling.
-                let min_frame_interval = if request_frame_options.force_render
-                    || request_frame_options.require_presentation
+                let thermal_state = handle
+                    .update(&mut cx, |_, _, cx| cx.thermal_state())
+                    .log_err();
+
+                // Throttle frame rate based on conditions:
+                // - Thermal pressure (Serious/Critical): cap to ~60fps
+                // - Inactive window (not focused): cap to ~30fps to save energy
+                let min_frame_interval = if !request_frame_options.force_render
+                    && !request_frame_options.require_presentation
+                    && next_frame_callbacks.borrow().is_empty()
                 {
                     None
                 } else if !active.get() {
                     Some(Duration::from_micros(33333))
+                } else if let Some(ThermalState::Critical | ThermalState::Serious) = thermal_state {
+                    Some(Duration::from_micros(16667))
                 } else {
                     None
                 };
