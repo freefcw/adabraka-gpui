@@ -1150,6 +1150,13 @@ impl PlatformWindow for WaylandWindow {
         self.borrow().renderer.gpu_specs().into()
     }
 
+    fn play_system_bell(&self) {
+        let state = self.borrow();
+        if let Some(bell) = state.globals.system_bell.as_ref() {
+            bell.ring(Some(&state.surface));
+        }
+    }
+
     fn show(&self) {
         let mut state = self.borrow_mut();
         state.visible = true;
