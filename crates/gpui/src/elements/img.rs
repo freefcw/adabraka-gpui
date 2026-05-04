@@ -811,3 +811,85 @@ impl From<image::ImageError> for ImageCacheError {
         Self::Image(Arc::new(value))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        Context, ParentElement as _, Render, TestAppContext, Window, canvas, div, px, size,
+    };
+    use image::{Frame, ImageBuffer, Rgba};
+
+    const TEST_IMG_ID: &str = "test-img";
+
+    fn test_image(frame_count: usize) -> Arc<RenderImage> {
+        let frame = Frame::new(ImageBuffer::from_pixel(1, 1, Rgba([0, 0, 0, 0])));
+        Arc::new(RenderImage::new(SmallVec::from_iter(
+            (0..frame_count).map(|_| frame.clone()),
+        )))
+    }
+
+    /// Overwrites the cached `frame_index` of the sibling `img` during paint.
+    fn seed_frame_index(frame_index: usize) -> impl IntoElement {
+        canvas(
+            |_, _, _| (),
+            move |_, _, window, _| {
+                window.with_global_id(TEST_IMG_ID.into(), |id, window| {
+                    window.with_element_state::<ImgState, _>(id, |state, _| {
+                        let mut state = state.expect("img state should be initialized");
+                        state.frame_index = frame_index;
+                        ((), state)
+                    });
+                });
+            },
+        )
+    }
+
+    struct TestImageView {
+        frame_count: usize,
+        seeded_frame_index: Option<usize>,
+    }
+
+    impl Render for TestImageView {
+        fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+            let mut element =
+                div().child(img(ImageSource::Render(test_image(self.frame_count))).id(TEST_IMG_ID));
+
+            if let Some(frame_index) = self.seeded_frame_index {
+                element = element.child(seed_frame_index(frame_index));
+            }
+
+            element
+        }
+    }
+
+    #[gpui::test]
+    fn zero_frame_image_does_not_panic_on_paint(cx: &mut TestAppContext) {
+        let (view, cx) = cx.add_window_view(|_, _| TestImageView {
+            frame_count: 0,
+            seeded_frame_index: None,
+        });
+        cx.simulate_resize(size(px(100.), px(100.)));
+        view.update(&mut cx.cx, |_, cx| cx.notify());
+        cx.run_until_parked();
+    }
+
+    #[gpui::test]
+    fn stale_frame_index_is_clamped_when_image_changes(cx: &mut TestAppContext) {
+        let (view, cx) = cx.add_window_view(|_, _| TestImageView {
+            frame_count: 5,
+            seeded_frame_index: Some(4),
+        });
+        cx.simulate_resize(size(px(100.), px(100.)));
+
+        // Assert that a cached frame_index from a previous multi-frame image
+        // does not cause an out-of-bounds panic when the image is replaced
+        // with one that has fewer frames.
+        view.update(&mut cx.cx, |view, cx| {
+            view.frame_count = 1;
+            view.seeded_frame_index = None;
+            cx.notify();
+        });
+        cx.run_until_parked();
+    }
+}

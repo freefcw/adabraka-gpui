@@ -3463,7 +3463,7 @@ impl Window {
     }
 
     /// Paint an image into the scene for the next frame at the current z-index.
-    /// This method will panic if the frame_index is not valid
+    /// If `frame_index` is not valid, no image will be painted.
     ///
     /// This method should only be called as part of the paint phase of element drawing.
     pub fn paint_image(
@@ -3481,17 +3481,15 @@ impl Window {
             image_id: data.id,
             frame_index,
         };
+        let Some(bytes) = data.as_bytes(frame_index) else {
+            return Ok(());
+        };
+        let image_size = data.size(frame_index);
 
         let tile = self
             .sprite_atlas
             .get_or_insert_with(&params.into(), &mut || {
-                Ok(Some((
-                    data.size(frame_index),
-                    Cow::Borrowed(
-                        data.as_bytes(frame_index)
-                            .expect("It's the caller's job to pass a valid frame index"),
-                    ),
-                )))
+                Ok(Some((image_size, Cow::Borrowed(bytes))))
             })?
             .expect("Callback above only returns Some");
         let content_mask = self.snapped_content_mask();
