@@ -71,7 +71,11 @@ use xkbcommon::xkb::{self, KEYMAP_COMPILE_NO_FLAGS, Keycode};
 
 use super::{
     display::WaylandDisplay,
+    ext_layer_shell::client::ext_layer_shell_v1,
+    ext_layer_shell::client::ext_layer_surface_v1,
     window::{ImeInput, WaylandWindowStatePtr},
+    wlr_layer_shell::client::zwlr_layer_shell_v1,
+    wlr_layer_shell::client::zwlr_layer_surface_v1,
 };
 
 use crate::platform::{PlatformWindow, wgpu::GpuContext};
@@ -123,6 +127,8 @@ pub struct Globals {
     pub fractional_scale_manager:
         Option<wp_fractional_scale_manager_v1::WpFractionalScaleManagerV1>,
     pub decoration_manager: Option<zxdg_decoration_manager_v1::ZxdgDecorationManagerV1>,
+    pub ext_layer_shell: Option<ext_layer_shell_v1::ExtLayerShellV1>,
+    pub wlr_layer_shell: Option<zwlr_layer_shell_v1::ZwlrLayerShellV1>,
     pub blur_manager: Option<org_kde_kwin_blur_manager::OrgKdeKwinBlurManager>,
     pub text_input_manager: Option<zwp_text_input_manager_v3::ZwpTextInputManagerV3>,
     pub gesture_manager: Option<zwp_pointer_gestures_v1::ZwpPointerGesturesV1>,
@@ -162,6 +168,8 @@ impl Globals {
             viewporter: globals.bind(&qh, 1..=1, ()).ok(),
             fractional_scale_manager: globals.bind(&qh, 1..=1, ()).ok(),
             decoration_manager: globals.bind(&qh, 1..=1, ()).ok(),
+            ext_layer_shell: globals.bind(&qh, 1..=1, ()).ok(),
+            wlr_layer_shell: globals.bind(&qh, 1..=4, ()).ok(),
             blur_manager: globals.bind(&qh, 1..=1, ()).ok(),
             text_input_manager: globals.bind(&qh, 1..=1, ()).ok(),
             gesture_manager: globals.bind(&qh, 1..=3, ()).ok(),
@@ -174,6 +182,7 @@ impl Globals {
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct InProgressOutput {
+    output: Option<wl_output::WlOutput>,
     name: Option<String>,
     scale: Option<i32>,
     position: Option<Point<DevicePixels>>,
@@ -184,7 +193,10 @@ impl InProgressOutput {
     fn complete(&self) -> Option<Output> {
         if let Some((position, size)) = self.position.zip(self.size) {
             let scale = self.scale.unwrap_or(1);
+            let output = self.output.clone()?;
             Some(Output {
+                id: output.id(),
+                output,
                 name: self.name.clone(),
                 scale,
                 bounds: Bounds::new(position, size),
@@ -197,6 +209,8 @@ impl InProgressOutput {
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Output {
+    pub id: ObjectId,
+    pub output: wl_output::WlOutput,
     pub name: Option<String>,
     pub scale: i32,
     pub bounds: Bounds<DevicePixels>,
@@ -548,12 +562,13 @@ impl WaylandClient {
             for global in list {
                 match &global.interface[..] {
                     "wl_seat" => {
-                        seat = Some(globals.registry().bind::<wl_seat::WlSeat, _, _>(
+                        let seat_obj = globals.registry().bind::<wl_seat::WlSeat, _, _>(
                             global.name,
                             wl_seat_version(global.version),
                             &qh,
                             (),
-                        ));
+                        );
+                        seat = Some(seat_obj);
                     }
                     "wl_output" => {
                         let output = globals.registry().bind::<wl_output::WlOutput, _, _>(
@@ -562,7 +577,13 @@ impl WaylandClient {
                             &qh,
                             (),
                         );
-                        in_progress_outputs.insert(output.id(), InProgressOutput::default());
+                        in_progress_outputs.insert(
+                            output.id(),
+                            InProgressOutput {
+                                output: Some(output),
+                                ..Default::default()
+                            },
+                        );
                     }
                     _ => {}
                 }
@@ -733,10 +754,10 @@ impl LinuxClient for WaylandClient {
         self.0
             .borrow()
             .outputs
-            .iter()
-            .map(|(id, output)| {
+            .values()
+            .map(|output| {
                 Rc::new(WaylandDisplay {
-                    id: id.clone(),
+                    id: output.id.clone(),
                     name: output.name.clone(),
                     bounds: output.bounds.to_pixels(output.scale as f32),
                 }) as Rc<dyn PlatformDisplay>
@@ -745,19 +766,15 @@ impl LinuxClient for WaylandClient {
     }
 
     fn display(&self, id: DisplayId) -> Option<Rc<dyn PlatformDisplay>> {
-        self.0
-            .borrow()
-            .outputs
-            .iter()
-            .find_map(|(object_id, output)| {
-                (object_id.protocol_id() == id.0).then(|| {
-                    Rc::new(WaylandDisplay {
-                        id: object_id.clone(),
-                        name: output.name.clone(),
-                        bounds: output.bounds.to_pixels(output.scale as f32),
-                    }) as Rc<dyn PlatformDisplay>
-                })
+        self.0.borrow().outputs.values().find_map(|output| {
+            (output.id.protocol_id() == id.0).then(|| {
+                Rc::new(WaylandDisplay {
+                    id: output.id.clone(),
+                    name: output.name.clone(),
+                    bounds: output.bounds.to_pixels(output.scale as f32),
+                }) as Rc<dyn PlatformDisplay>
             })
+        })
     }
 
     fn primary_display(&self) -> Option<Rc<dyn PlatformDisplay>> {
@@ -794,7 +811,11 @@ impl LinuxClient for WaylandClient {
     ) -> anyhow::Result<Box<dyn PlatformWindow>> {
         let mut state = self.0.borrow_mut();
 
-        let parent = state.keyboard_focused_window.as_ref().map(|w| w.toplevel());
+        let parent = state
+            .keyboard_focused_window
+            .as_ref()
+            .and_then(|w| w.toplevel());
+        let outputs = state.outputs.values().cloned().collect();
 
         let (window, surface_id) = WaylandWindow::new(
             handle,
@@ -804,6 +825,7 @@ impl LinuxClient for WaylandClient {
             params,
             state.common.appearance,
             parent,
+            outputs,
         )?;
         state.windows.insert(surface_id, window.0.clone());
 
@@ -1038,9 +1060,13 @@ impl Dispatch<wl_registry::WlRegistry, GlobalListContents> for WaylandClientStat
                         (),
                     );
 
-                    state
-                        .in_progress_outputs
-                        .insert(output.id(), InProgressOutput::default());
+                    state.in_progress_outputs.insert(
+                        output.id(),
+                        InProgressOutput {
+                            output: Some(output),
+                            ..Default::default()
+                        },
+                    );
                 }
                 _ => {}
             },
@@ -1065,6 +1091,8 @@ delegate_noop!(WaylandClientStatePtr: ignore wl_buffer::WlBuffer);
 delegate_noop!(WaylandClientStatePtr: ignore wl_region::WlRegion);
 delegate_noop!(WaylandClientStatePtr: ignore wp_fractional_scale_manager_v1::WpFractionalScaleManagerV1);
 delegate_noop!(WaylandClientStatePtr: ignore zxdg_decoration_manager_v1::ZxdgDecorationManagerV1);
+delegate_noop!(WaylandClientStatePtr: ignore ext_layer_shell_v1::ExtLayerShellV1);
+delegate_noop!(WaylandClientStatePtr: ignore zwlr_layer_shell_v1::ZwlrLayerShellV1);
 delegate_noop!(WaylandClientStatePtr: ignore org_kde_kwin_blur_manager::OrgKdeKwinBlurManager);
 delegate_noop!(WaylandClientStatePtr: ignore zwp_text_input_manager_v3::ZwpTextInputManagerV3);
 delegate_noop!(WaylandClientStatePtr: ignore org_kde_kwin_blur::OrgKdeKwinBlur);
@@ -1990,6 +2018,50 @@ impl Dispatch<zxdg_toplevel_decoration_v1::ZxdgToplevelDecorationV1, ObjectId>
 
         drop(state);
         window.handle_toplevel_decoration_event(event);
+    }
+}
+
+impl Dispatch<ext_layer_surface_v1::ExtLayerSurfaceV1, ObjectId> for WaylandClientStatePtr {
+    fn event(
+        this: &mut Self,
+        _: &ext_layer_surface_v1::ExtLayerSurfaceV1,
+        event: ext_layer_surface_v1::Event,
+        surface_id: &ObjectId,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        let client = this.get_client();
+        let mut state = client.borrow_mut();
+        let Some(window) = get_window(&mut state, surface_id) else {
+            return;
+        };
+
+        drop(state);
+        if window.handle_ext_layer_surface_event(event) {
+            window.close();
+        }
+    }
+}
+
+impl Dispatch<zwlr_layer_surface_v1::ZwlrLayerSurfaceV1, ObjectId> for WaylandClientStatePtr {
+    fn event(
+        this: &mut Self,
+        _: &zwlr_layer_surface_v1::ZwlrLayerSurfaceV1,
+        event: zwlr_layer_surface_v1::Event,
+        surface_id: &ObjectId,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        let client = this.get_client();
+        let mut state = client.borrow_mut();
+        let Some(window) = get_window(&mut state, surface_id) else {
+            return;
+        };
+
+        drop(state);
+        if window.handle_wlr_layer_surface_event(event) {
+            window.close();
+        }
     }
 }
 

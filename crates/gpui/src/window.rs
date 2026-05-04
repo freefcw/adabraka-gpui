@@ -1107,6 +1107,7 @@ impl Window {
             tabbing_identifier,
             mouse_passthrough,
             icon,
+            layer_shell,
         } = options;
 
         let bounds = window_bounds
@@ -1122,6 +1123,7 @@ impl Window {
                 is_resizable,
                 is_minimizable,
                 focus,
+                app_id: app_id.clone(),
                 show,
                 display_id,
                 window_min_size,
@@ -1129,6 +1131,7 @@ impl Window {
                 tabbing_identifier,
                 mouse_passthrough,
                 icon,
+                layer_shell,
             },
         )?;
 
@@ -3144,7 +3147,7 @@ impl Window {
                         bounds: self.snap_bounds(bounds),
                     }
                 } else {
-                    content_mask.clone()
+                    content_mask
                 },
                 corner_radii: corner_radii.scale(scale_factor),
                 color: shadow.color.opacity(opacity),
