@@ -807,10 +807,15 @@ pub(crate) struct X11Window(pub X11WindowStatePtr);
 
 impl Drop for X11Window {
     fn drop(&mut self) {
-        let mut state = self.0.state.borrow_mut();
-        state.renderer.destroy();
+        let (executor, client_ptr) = {
+            let mut state = self.0.state.borrow_mut();
+            // Stop routing late X11 events as soon as GPUI begins tearing down this window.
+            state.destroyed = true;
+            state.renderer.destroy();
+            (state.executor.clone(), state.client.clone())
+        };
 
-        let destroy_x_window = maybe!({
+        maybe!({
             check_reply(
                 || "X11 DestroyWindow failure.",
                 self.0.xcb.destroy_window(self.0.x_window),
@@ -821,23 +826,15 @@ impl Drop for X11Window {
         })
         .log_err();
 
-        if destroy_x_window.is_some() {
-            // Mark window as destroyed so that we can filter out when X11 events
-            // for it still come in.
-            state.destroyed = true;
-
-            let this_ptr = self.0.clone();
-            let client_ptr = state.client.clone();
-            state
-                .executor
-                .spawn(async move {
-                    this_ptr.close();
-                    client_ptr.drop_window(this_ptr.x_window);
-                })
-                .detach();
-        }
-
-        drop(state);
+        // The Rust window is being dropped regardless of the X server result, so keep
+        // the client-side window table consistent even if destroy_window failed.
+        let this_ptr = self.0.clone();
+        executor
+            .spawn(async move {
+                this_ptr.close();
+                client_ptr.drop_window(this_ptr.x_window);
+            })
+            .detach();
     }
 }
 
@@ -1076,6 +1073,13 @@ impl X11WindowStatePtr {
     }
 
     pub fn close(&self) {
+        {
+            // A close callback removes the GPUI window synchronously; drop this borrow
+            // before invoking it because the callback may re-enter window state.
+            let mut state = self.state.borrow_mut();
+            state.destroyed = true;
+        }
+
         let mut callbacks = self.callbacks.borrow_mut();
         if let Some(fun) = callbacks.close.take() {
             fun()
