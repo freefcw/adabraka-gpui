@@ -1862,3 +1862,83 @@ fn inset_by_tiling(mut bounds: Bounds<Pixels>, inset: Pixels, tiling: Tiling) ->
 
     bounds
 }
+
+#[cfg(test)]
+mod layer_shell_tests {
+    use super::*;
+
+    #[test]
+    fn layer_configure_size_keeps_current_zero_dimensions() {
+        let current_size = size(px(320.0), px(240.0));
+
+        assert_eq!(layer_configure_size(current_size, 0, 0), current_size);
+        assert_eq!(
+            layer_configure_size(current_size, 640, 0),
+            size(px(640.0), px(240.0))
+        );
+        assert_eq!(
+            layer_configure_size(current_size, 0, 480),
+            size(px(320.0), px(480.0))
+        );
+        assert_eq!(
+            layer_configure_size(current_size, 640, 480),
+            size(px(640.0), px(480.0))
+        );
+    }
+
+    #[test]
+    fn layer_exclusive_zone_maps_to_wayland_values() {
+        assert_eq!(LayerShellExclusiveZone::None.to_wayland(), 0);
+        assert_eq!(LayerShellExclusiveZone::Auto.to_wayland(), -1);
+        assert_eq!(LayerShellExclusiveZone::Pixels(24).to_wayland(), 24);
+    }
+
+    #[test]
+    fn layer_keyboard_interactivity_maps_to_wlr_protocol() {
+        assert_eq!(
+            LayerShellKeyboardInteractivity::None.to_wlr(),
+            zwlr_layer_surface_v1::KeyboardInteractivity::None
+        );
+        assert_eq!(
+            LayerShellKeyboardInteractivity::OnDemand.to_wlr(),
+            zwlr_layer_surface_v1::KeyboardInteractivity::OnDemand
+        );
+        assert_eq!(
+            LayerShellKeyboardInteractivity::Exclusive.to_wlr(),
+            zwlr_layer_surface_v1::KeyboardInteractivity::Exclusive
+        );
+    }
+
+    #[test]
+    fn layer_keyboard_interactivity_maps_to_ext_protocol_limits() {
+        assert_eq!(
+            LayerShellKeyboardInteractivity::None.to_ext(),
+            Some(ext_layer_surface_v1::KeyboardInteractivity::None)
+        );
+        assert_eq!(
+            LayerShellKeyboardInteractivity::OnDemand.to_ext(),
+            Some(ext_layer_surface_v1::KeyboardInteractivity::OnDemand)
+        );
+        assert_eq!(LayerShellKeyboardInteractivity::Exclusive.to_ext(), None);
+    }
+
+    #[test]
+    fn layer_values_map_to_both_wayland_protocols() {
+        assert_eq!(
+            LayerShellLayer::Background.to_wlr(),
+            zwlr_layer_shell_v1::Layer::Background
+        );
+        assert_eq!(
+            LayerShellLayer::Bottom.to_ext(),
+            ext_layer_surface_v1::Layer::Bottom
+        );
+        assert_eq!(
+            LayerShellLayer::Top.to_wlr(),
+            zwlr_layer_shell_v1::Layer::Top
+        );
+        assert_eq!(
+            LayerShellLayer::Overlay.to_ext(),
+            ext_layer_surface_v1::Layer::Overlay
+        );
+    }
+}

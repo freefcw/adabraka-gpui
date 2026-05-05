@@ -37,7 +37,7 @@ The crate now exposes `image-format-*` features that map directly to `image` cra
 | Tray menu actions | Yes | Yes | Yes | Yes |
 | Global hotkeys | Yes | Yes (XGrabKey) | No | Yes (RegisterHotKey) |
 | Native notifications | Yes (UNUserNotification) | Yes (notify-rust) | Yes (notify-rust) | Yes (Shell balloon) |
-| Overlay windows (always-on-top) | Yes | Yes | Partial | Yes |
+| Overlay windows (always-on-top) | Yes | Yes | Yes (layer-shell when available) | Yes |
 | Click-through windows | Yes | Yes (Shape ext) | Yes (wl_region) | Yes (WS_EX_TRANSPARENT) |
 | Window show/hide | Yes | Yes | Yes | Yes |
 | Auto-launch at login | Yes (SMAppService) | Yes (XDG autostart) | Yes (XDG autostart) | Yes (Registry) |
@@ -56,6 +56,44 @@ This migration is internal to the `adabraka-gpui` crate. Downstream applications
 `gpui::Application::new()` and the existing `x11`/`wayland` features. See
 [`docs/wgpu-migration.md`](docs/wgpu-migration.md) for implementation notes and verification
 status.
+
+### Wayland Layer-Shell Popups
+
+Wayland popup and overlay windows can opt into layer-shell placement with
+`WindowOptions::layer_shell`. The backend prefers the stable `ext-layer-shell` protocol and falls
+back to `wlr-layer-shell` when the compositor only exposes the older protocol. If neither protocol
+is available, GPUI opens a normal `xdg_toplevel` window and logs a warning.
+
+Use `LayerShellOptions::from_window_bounds` when you already have display-relative window bounds, or
+`LayerShellOptions::tray_panel` for tray popovers positioned near a `TrayAnchor`.
+
+```rust
+use gpui::{
+    Bounds, LayerShellOptions, WindowBounds, WindowKind, WindowOptions, point, px, size,
+};
+
+let display_bounds = Bounds::new(point(px(0.0), px(0.0)), size(px(1920.0), px(1080.0)));
+let popup_bounds = Bounds::new(point(px(1520.0), px(820.0)), size(px(320.0), px(220.0)));
+
+let options = WindowOptions {
+    window_bounds: Some(WindowBounds::Windowed(popup_bounds)),
+    kind: WindowKind::PopUp,
+    layer_shell: Some(LayerShellOptions::from_window_bounds(
+        display_bounds,
+        popup_bounds,
+    )),
+    ..WindowOptions::default()
+};
+```
+
+Automated coverage for this path focuses on protocol-independent behavior: anchor selection,
+edge-margin calculation, layer configure sizing, protocol enum mapping, and X11 window hints. Run:
+
+```sh
+cargo test -p adabraka-gpui --lib --features test-support layer_shell
+cargo test -p adabraka-gpui --lib --features test-support x11::window::tests
+cargo check -p adabraka-gpui --example window_positioning --features wayland,x11
+```
 
 ## Features
 

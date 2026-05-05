@@ -1631,6 +1631,69 @@ impl std::ops::BitOrAssign for LayerShellAnchor {
     }
 }
 
+#[cfg(test)]
+mod layer_shell_tests {
+    use super::*;
+
+    fn display() -> Bounds<Pixels> {
+        Bounds::new(point(px(100.0), px(50.0)), size(px(1920.0), px(1080.0)))
+    }
+
+    #[test]
+    fn layer_shell_anchor_selects_nearest_display_corner() {
+        let display = display();
+
+        assert_eq!(
+            LayerShellAnchor::from_display_nearest_corner(
+                display,
+                Bounds::new(point(px(120.0), px(70.0)), size(px(200.0), px(120.0))),
+            ),
+            LayerShellAnchor::TOP | LayerShellAnchor::LEFT
+        );
+        assert_eq!(
+            LayerShellAnchor::from_display_nearest_corner(
+                display,
+                Bounds::new(point(px(1600.0), px(900.0)), size(px(200.0), px(120.0))),
+            ),
+            LayerShellAnchor::BOTTOM | LayerShellAnchor::RIGHT
+        );
+    }
+
+    #[test]
+    fn layer_shell_window_bounds_become_edge_margins() {
+        let options = LayerShellOptions::from_window_bounds(
+            display(),
+            Bounds::new(point(px(1800.0), px(920.0)), size(px(180.0), px(90.0))),
+        );
+
+        assert_eq!(
+            options.anchor,
+            LayerShellAnchor::BOTTOM | LayerShellAnchor::RIGHT
+        );
+        assert_eq!(options.margin.top, px(0.0));
+        assert_eq!(options.margin.right, px(40.0));
+        assert_eq!(options.margin.bottom, px(120.0));
+        assert_eq!(options.margin.left, px(0.0));
+    }
+
+    #[test]
+    fn tray_panel_uses_display_local_anchor_bounds() {
+        let anchor = TrayAnchor {
+            display_id: DisplayId(7),
+            bounds: Bounds::new(point(px(1700.0), px(1010.0)), size(px(32.0), px(32.0))),
+        };
+        let options = LayerShellOptions::tray_panel(display(), &anchor, size(px(320.0), px(240.0)));
+
+        assert_eq!(
+            options.anchor,
+            LayerShellAnchor::BOTTOM | LayerShellAnchor::RIGHT
+        );
+        assert_eq!(options.margin.right, px(44.0));
+        assert_eq!(options.margin.bottom, px(70.0));
+        assert_eq!(options.namespace.as_ref(), "gpui-tray-panel");
+    }
+}
+
 /// The options that can be configured for a window's titlebar
 #[derive(Debug, Default)]
 pub struct TitlebarOptions {

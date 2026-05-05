@@ -33,6 +33,14 @@ use std::{
 
 use super::{X11Display, XINPUT_ALL_DEVICE_GROUPS, XINPUT_ALL_DEVICES};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum X11WindowType {
+    Normal,
+    Notification,
+    Dialog,
+    Dock,
+}
+
 x11rb::atom_manager! {
     pub XcbAtoms: AtomsCookie {
         XA_ATOM,
@@ -85,6 +93,15 @@ x11rb::atom_manager! {
         _GTK_FRAME_EXTENTS,
         _GTK_EDGE_CONSTRAINTS,
         _NET_CLIENT_LIST_STACKING,
+    }
+}
+
+fn window_type_for_kind(kind: WindowKind) -> X11WindowType {
+    match kind {
+        WindowKind::Normal => X11WindowType::Normal,
+        WindowKind::PopUp => X11WindowType::Notification,
+        WindowKind::Floating => X11WindowType::Dialog,
+        WindowKind::Overlay => X11WindowType::Dock,
     }
 }
 
@@ -293,11 +310,11 @@ impl X11WindowState {
 }
 
 fn window_type_atom(kind: WindowKind, atoms: &XcbAtoms) -> xproto::Atom {
-    match kind {
-        WindowKind::Normal => atoms._NET_WM_WINDOW_TYPE_NORMAL,
-        WindowKind::PopUp => atoms._NET_WM_WINDOW_TYPE_NOTIFICATION,
-        WindowKind::Floating => atoms._NET_WM_WINDOW_TYPE_DIALOG,
-        WindowKind::Overlay => atoms._NET_WM_WINDOW_TYPE_DOCK,
+    match window_type_for_kind(kind) {
+        X11WindowType::Normal => atoms._NET_WM_WINDOW_TYPE_NORMAL,
+        X11WindowType::Notification => atoms._NET_WM_WINDOW_TYPE_NOTIFICATION,
+        X11WindowType::Dialog => atoms._NET_WM_WINDOW_TYPE_DIALOG,
+        X11WindowType::Dock => atoms._NET_WM_WINDOW_TYPE_DOCK,
     }
 }
 
@@ -1883,5 +1900,118 @@ impl PlatformWindow for X11Window {
         )
         .log_err();
         xcb_flush(&self.0.xcb);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::point;
+
+    fn window_params(is_resizable: bool, window_min_size: Option<Size<Pixels>>) -> WindowParams {
+        WindowParams {
+            bounds: Bounds::new(point(px(10.0), px(20.0)), size(px(320.0), px(240.0))),
+            titlebar: None,
+            kind: WindowKind::Normal,
+            is_movable: true,
+            is_resizable,
+            is_minimizable: true,
+            focus: true,
+            app_id: None,
+            show: true,
+            #[cfg(feature = "wayland")]
+            display_id: None,
+            window_min_size,
+            #[cfg(target_os = "macos")]
+            tabbing_identifier: None,
+            mouse_passthrough: false,
+            icon: None,
+            layer_shell: None,
+        }
+    }
+
+    #[test]
+    fn window_kind_maps_to_ewmh_window_type() {
+        assert_eq!(
+            window_type_for_kind(WindowKind::Normal),
+            X11WindowType::Normal
+        );
+        assert_eq!(
+            window_type_for_kind(WindowKind::PopUp),
+            X11WindowType::Notification
+        );
+        assert_eq!(
+            window_type_for_kind(WindowKind::Floating),
+            X11WindowType::Dialog
+        );
+        assert_eq!(
+            window_type_for_kind(WindowKind::Overlay),
+            X11WindowType::Dock
+        );
+    }
+
+    #[test]
+    fn resizable_window_without_min_size_has_no_size_hints() {
+        assert!(normal_size_hints(&window_params(true, None)).is_none());
+    }
+
+    #[test]
+    fn min_size_becomes_normal_size_hint() {
+        let hints = normal_size_hints(&window_params(true, Some(size(px(120.0), px(80.0)))))
+            .expect("min size should produce size hints");
+
+        assert_eq!(hints.min_size, Some((120, 80)));
+        assert_eq!(hints.max_size, None);
+    }
+
+    #[test]
+    fn non_resizable_window_uses_fixed_size_hints() {
+        let hints = normal_size_hints(&window_params(false, None))
+            .expect("fixed size should produce size hints");
+
+        assert_eq!(hints.min_size, Some((320, 240)));
+        assert_eq!(hints.max_size, Some((320, 240)));
+        let Some((WmSizeHintsSpecification::ProgramSpecified, width, height)) = hints.size else {
+            panic!("fixed windows should use program-specified size hints");
+        };
+        assert_eq!((width, height), (320, 240));
+    }
+
+    #[test]
+    fn motif_hints_preserve_close_move_minimize_for_fixed_size_windows() {
+        const MWM_HINTS_FUNCTIONS: u32 = 1 << 0;
+        const MWM_HINTS_DECORATIONS: u32 = 1 << 1;
+        const MWM_FUNC_MOVE: u32 = 1 << 2;
+        const MWM_FUNC_MINIMIZE: u32 = 1 << 3;
+        const MWM_FUNC_CLOSE: u32 = 1 << 5;
+
+        assert_eq!(
+            motif_hints_data(WindowDecorations::Client, false),
+            [
+                MWM_HINTS_FUNCTIONS | MWM_HINTS_DECORATIONS,
+                MWM_FUNC_MOVE | MWM_FUNC_MINIMIZE | MWM_FUNC_CLOSE,
+                0,
+                0,
+                0,
+            ]
+        );
+    }
+
+    #[test]
+    fn motif_hints_allow_all_functions_for_resizable_windows() {
+        const MWM_HINTS_FUNCTIONS: u32 = 1 << 0;
+        const MWM_HINTS_DECORATIONS: u32 = 1 << 1;
+        const MWM_FUNC_ALL: u32 = 1 << 0;
+
+        assert_eq!(
+            motif_hints_data(WindowDecorations::Server, true),
+            [
+                MWM_HINTS_FUNCTIONS | MWM_HINTS_DECORATIONS,
+                MWM_FUNC_ALL,
+                1,
+                0,
+                0,
+            ]
+        );
     }
 }
