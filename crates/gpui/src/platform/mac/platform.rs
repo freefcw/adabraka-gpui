@@ -2614,7 +2614,7 @@ mod tests {
 
     fn build_platform() -> MacPlatform {
         let platform = MacPlatform::new(false);
-        platform.0.lock().pasteboard = unsafe { Objc2NSPasteboard::pasteboardWithUniqueName() };
+        platform.0.lock().pasteboard = Objc2NSPasteboard::pasteboardWithUniqueName();
         platform
     }
 }

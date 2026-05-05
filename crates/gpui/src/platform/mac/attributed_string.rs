@@ -70,10 +70,10 @@ mod tests {
 
     use crate::platform::mac::{NSRange, ns_string};
 
-    type id = *mut Object;
+    type Id = *mut Object;
 
     #[allow(non_upper_case_globals)]
-    const nil: id = ptr::null_mut();
+    const nil: Id = ptr::null_mut();
 
     #[test]
     #[ignore] // This was SIGSEGV-ing on CI but not locally; need to investigate https://github.com/zed-industries/zed/actions/runs/10362363230/job/28684225486?pr=15782#step:4:1348
@@ -81,16 +81,16 @@ mod tests {
         // TODO move these to parent module once it's actually ready to be used
         #[allow(non_snake_case)]
         pub trait NSTextAttachment: Sized {
-            unsafe fn alloc(_: Self) -> id {
+            unsafe fn alloc(_: Self) -> Id {
                 msg_send![class!(NSTextAttachment), alloc]
             }
         }
 
-        impl NSTextAttachment for id {}
+        impl NSTextAttachment for Id {}
 
         unsafe {
-            let image: id = msg_send![class!(NSImage), alloc];
-            let image: id = msg_send![image, initWithContentsOfFile: ns_string("test.jpeg")];
+            let image: Id = msg_send![class!(NSImage), alloc];
+            let image: Id = msg_send![image, initWithContentsOfFile: ns_string("test.jpeg")];
             let _size: crate::platform::mac::NSSize = msg_send![image, size];
 
             let string = ns_string("Test String");

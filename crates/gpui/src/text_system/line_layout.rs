@@ -726,17 +726,7 @@ impl LineLayoutCache {
         }
 
         if let Some(spacing) = letter_spacing {
-            let mut glyph_index: usize = 0;
-            for run in layout.runs.iter_mut() {
-                for glyph in run.glyphs.iter_mut() {
-                    glyph.position.x = glyph.position.x + spacing * glyph_index as f32;
-                    glyph_index += 1;
-                }
-            }
-            let total_glyphs = glyph_index;
-            if total_glyphs > 1 {
-                layout.width = layout.width + spacing * (total_glyphs - 1) as f32;
-            }
+            apply_letter_spacing_to_layout(&mut layout, spacing, force_width);
         }
 
         let key = Arc::new(CacheKey {
@@ -778,6 +768,49 @@ fn apply_force_width_to_layout(layout: &mut LineLayout, force_width: Pixels) {
                 glyph.position.x = last_base_actual_x + (shaped_x - last_base_shaped_x);
             }
         }
+    }
+}
+
+fn apply_letter_spacing_to_layout(
+    layout: &mut LineLayout,
+    spacing: Pixels,
+    force_width: Option<Pixels>,
+) {
+    let glyph_count = if let Some(force_width) = force_width {
+        let mut base_glyph_count: usize = 0;
+        let mut last_base_x = px(f32::NEG_INFINITY);
+        let mut last_base_spacing = px(0.);
+
+        for run in layout.runs.iter_mut() {
+            for glyph in run.glyphs.iter_mut() {
+                let x = glyph.position.x;
+
+                if x > last_base_x + force_width * 0.5 {
+                    last_base_spacing = spacing * base_glyph_count as f32;
+                    glyph.position.x = x + last_base_spacing;
+                    last_base_x = x;
+                    base_glyph_count += 1;
+                } else {
+                    glyph.position.x = x + last_base_spacing;
+                }
+            }
+        }
+
+        base_glyph_count
+    } else {
+        let mut glyph_count: usize = 0;
+        for run in layout.runs.iter_mut() {
+            for glyph in run.glyphs.iter_mut() {
+                glyph.position.x = glyph.position.x + spacing * glyph_count as f32;
+                glyph_count += 1;
+            }
+        }
+
+        glyph_count
+    };
+
+    if glyph_count > 1 {
+        layout.width = layout.width + spacing * (glyph_count - 1) as f32;
     }
 }
 
@@ -860,5 +893,119 @@ impl<'a> Borrow<dyn AsCacheKeyRef + 'a> for Arc<CacheKey> {
 impl AsCacheKeyRef for CacheKeyRef<'_> {
     fn as_cache_key_ref(&self) -> CacheKeyRef<'_> {
         *self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::GlyphId;
+
+    fn glyph_at(x: f32, index: usize) -> ShapedGlyph {
+        ShapedGlyph {
+            id: GlyphId(0),
+            position: point(px(x), px(0.)),
+            index,
+            is_emoji: false,
+        }
+    }
+
+    fn make_layout(glyphs: Vec<ShapedGlyph>) -> LineLayout {
+        LineLayout {
+            font_size: px(16.),
+            width: px(100.),
+            ascent: px(12.),
+            descent: px(4.),
+            runs: vec![ShapedRun {
+                font_id: FontId(0),
+                glyphs,
+            }],
+            len: 0,
+        }
+    }
+
+    fn glyph_x_positions(layout: &LineLayout) -> Vec<f32> {
+        layout.runs[0]
+            .glyphs
+            .iter()
+            .map(|glyph| f32::from(glyph.position.x))
+            .collect()
+    }
+
+    #[test]
+    fn test_force_width_latin_unchanged() {
+        let cell_width = px(8.);
+        let mut layout = make_layout(vec![glyph_at(0., 0), glyph_at(8., 1), glyph_at(16., 2)]);
+
+        apply_force_width_to_layout(&mut layout, cell_width);
+
+        assert_eq!(glyph_x_positions(&layout), vec![0., 8., 16.]);
+    }
+
+    #[test]
+    fn test_force_width_combining_marks_not_advanced() {
+        let cell_width = px(8.);
+        let mut layout = make_layout(vec![glyph_at(0., 0), glyph_at(0., 3)]);
+
+        apply_force_width_to_layout(&mut layout, cell_width);
+
+        assert_eq!(glyph_x_positions(&layout), vec![0., 0.]);
+    }
+
+    #[test]
+    fn test_force_width_base_after_combining_mark() {
+        let cell_width = px(8.);
+        let mut layout = make_layout(vec![glyph_at(0., 0), glyph_at(0., 3), glyph_at(8., 6)]);
+
+        apply_force_width_to_layout(&mut layout, cell_width);
+
+        assert_eq!(glyph_x_positions(&layout), vec![0., 0., 8.]);
+    }
+
+    #[test]
+    fn test_force_width_multiple_combining_marks() {
+        let cell_width = px(8.);
+        let mut layout = make_layout(vec![
+            glyph_at(0., 0),
+            glyph_at(0., 3),
+            glyph_at(0., 6),
+            glyph_at(8., 9),
+        ]);
+
+        apply_force_width_to_layout(&mut layout, cell_width);
+
+        assert_eq!(glyph_x_positions(&layout), vec![0., 0., 0., 8.]);
+    }
+
+    #[test]
+    fn test_force_width_corrects_drifted_base_positions() {
+        let cell_width = px(8.);
+        let mut layout = make_layout(vec![glyph_at(0.5, 0), glyph_at(10.2, 1), glyph_at(19.8, 2)]);
+
+        apply_force_width_to_layout(&mut layout, cell_width);
+
+        assert_eq!(glyph_x_positions(&layout), vec![0.5, 8., 16.]);
+    }
+
+    #[test]
+    fn test_force_width_combining_mark_after_within_tolerance_base() {
+        let cell_width = px(8.);
+        let mut layout = make_layout(vec![glyph_at(0.5, 0), glyph_at(0.5, 3)]);
+
+        apply_force_width_to_layout(&mut layout, cell_width);
+
+        assert_eq!(glyph_x_positions(&layout), vec![0.5, 0.5]);
+    }
+
+    #[test]
+    fn test_force_width_with_letter_spacing_keeps_combining_marks_anchored() {
+        let cell_width = px(8.);
+        let mut layout = make_layout(vec![glyph_at(0., 0), glyph_at(0., 3), glyph_at(8., 6)]);
+
+        apply_force_width_to_layout(&mut layout, cell_width);
+        apply_letter_spacing_to_layout(&mut layout, px(1.), Some(cell_width));
+
+        assert_eq!(glyph_x_positions(&layout), vec![0., 0., 9.]);
+        assert_eq!(layout.width, px(101.));
     }
 }
