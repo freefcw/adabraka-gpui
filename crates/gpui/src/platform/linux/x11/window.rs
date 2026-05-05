@@ -16,7 +16,7 @@ use x11rb::{
     connection::Connection,
     cookie::{Cookie, VoidCookie},
     errors::ConnectionError,
-    properties::WmSizeHints,
+    properties::{WmSizeHints, WmSizeHintsSpecification},
     protocol::{
         sync,
         xinput::{self, ConnectionExt as _},
@@ -27,8 +27,8 @@ use x11rb::{
 };
 
 use std::{
-    cell::RefCell, ffi::c_void, fmt::Display, num::NonZeroU32, ops::Div, ptr::NonNull, rc::Rc,
-    sync::Arc,
+    cell::RefCell, ffi::c_void, fmt::Display, mem::size_of, num::NonZeroU32, ops::Div,
+    ptr::NonNull, rc::Rc, sync::Arc,
 };
 
 use super::{X11Display, XINPUT_ALL_DEVICE_GROUPS, XINPUT_ALL_DEVICES};
@@ -73,6 +73,7 @@ x11rb::atom_manager! {
         _NET_WM_BYPASS_COMPOSITOR,
         _NET_WM_MOVERESIZE,
         _NET_WM_WINDOW_TYPE,
+        _NET_WM_WINDOW_TYPE_NORMAL,
         _NET_WM_WINDOW_TYPE_NOTIFICATION,
         _NET_WM_WINDOW_TYPE_DIALOG,
         _NET_WM_WINDOW_TYPE_DOCK,
@@ -277,6 +278,7 @@ pub struct X11WindowState {
     hovered: bool,
     force_render_after_recovery: bool,
     fullscreen: bool,
+    is_resizable: bool,
     client_side_decorations_supported: bool,
     decorations: WindowDecorations,
     edge_constraints: Option<EdgeConstraints>,
@@ -288,6 +290,60 @@ impl X11WindowState {
     fn is_transparent(&self) -> bool {
         self.background_appearance != WindowBackgroundAppearance::Opaque
     }
+}
+
+fn window_type_atom(kind: WindowKind, atoms: &XcbAtoms) -> xproto::Atom {
+    match kind {
+        WindowKind::Normal => atoms._NET_WM_WINDOW_TYPE_NORMAL,
+        WindowKind::PopUp => atoms._NET_WM_WINDOW_TYPE_NOTIFICATION,
+        WindowKind::Floating => atoms._NET_WM_WINDOW_TYPE_DIALOG,
+        WindowKind::Overlay => atoms._NET_WM_WINDOW_TYPE_DOCK,
+    }
+}
+
+fn normal_size_hints(params: &WindowParams) -> Option<WmSizeHints> {
+    let mut size_hints = WmSizeHints::new();
+
+    if let Some(size) = params.window_min_size {
+        size_hints.min_size = Some((size.width.0 as i32, size.height.0 as i32));
+    }
+
+    if !params.is_resizable {
+        let size = params.bounds.size;
+        let fixed_size = (size.width.0 as i32, size.height.0 as i32);
+        size_hints.size = Some((
+            WmSizeHintsSpecification::ProgramSpecified,
+            fixed_size.0,
+            fixed_size.1,
+        ));
+        size_hints.min_size = Some(fixed_size);
+        size_hints.max_size = Some(fixed_size);
+    }
+
+    (size_hints.size.is_some() || size_hints.min_size.is_some() || size_hints.max_size.is_some())
+        .then_some(size_hints)
+}
+
+fn motif_hints_data(decorations: WindowDecorations, is_resizable: bool) -> [u32; 5] {
+    const MWM_HINTS_FUNCTIONS: u32 = 1 << 0;
+    const MWM_HINTS_DECORATIONS: u32 = 1 << 1;
+    const MWM_FUNC_ALL: u32 = 1 << 0;
+    const MWM_FUNC_MOVE: u32 = 1 << 2;
+    const MWM_FUNC_MINIMIZE: u32 = 1 << 3;
+    const MWM_FUNC_CLOSE: u32 = 1 << 5;
+
+    let flags = MWM_HINTS_FUNCTIONS | MWM_HINTS_DECORATIONS;
+    let functions = if is_resizable {
+        MWM_FUNC_ALL
+    } else {
+        MWM_FUNC_MOVE | MWM_FUNC_MINIMIZE | MWM_FUNC_CLOSE
+    };
+    let decorations = match decorations {
+        WindowDecorations::Server => 1,
+        WindowDecorations::Client => 0,
+    };
+
+    [flags, functions, decorations, 0, 0]
 }
 
 #[derive(Clone)]
@@ -500,15 +556,12 @@ impl X11WindowState {
                 ),
             )?;
 
-            if let Some(size) = params.window_min_size {
-                let mut size_hints = WmSizeHints::new();
-                let min_size = (size.width.0 as i32, size.height.0 as i32);
-                size_hints.min_size = Some(min_size);
+            if let Some(size_hints) = normal_size_hints(&params) {
                 check_reply(
                     || {
                         format!(
-                            "X11 change of WM_SIZE_HINTS failed. min_size: {:?}",
-                            min_size
+                            "X11 change of WM_SIZE_HINTS failed. size_hints: {:?}",
+                            size_hints
                         )
                     },
                     size_hints.set_normal_hints(xcb, x_window),
@@ -543,18 +596,17 @@ impl X11WindowState {
                 )?;
             }
 
-            if params.kind == WindowKind::PopUp {
-                check_reply(
-                    || "X11 ChangeProperty32 setting window type for pop-up failed.",
-                    xcb.change_property32(
-                        xproto::PropMode::REPLACE,
-                        x_window,
-                        atoms._NET_WM_WINDOW_TYPE,
-                        xproto::AtomEnum::ATOM,
-                        &[atoms._NET_WM_WINDOW_TYPE_NOTIFICATION],
-                    ),
-                )?;
-            }
+            let window_type = window_type_atom(params.kind, atoms);
+            check_reply(
+                || "X11 ChangeProperty32 setting window type failed.",
+                xcb.change_property32(
+                    xproto::PropMode::REPLACE,
+                    x_window,
+                    atoms._NET_WM_WINDOW_TYPE,
+                    xproto::AtomEnum::ATOM,
+                    &[window_type],
+                ),
+            )?;
 
             if params.kind == WindowKind::Floating {
                 if let Some(parent_window) = parent_window {
@@ -573,32 +625,7 @@ impl X11WindowState {
                         ),
                     )?;
                 }
-
-                // _NET_WM_WINDOW_TYPE_DIALOG indicates that this is a dialog (floating) window
-                // https://specifications.freedesktop.org/wm-spec/1.4/ar01s05.html
-                check_reply(
-                    || "X11 ChangeProperty32 setting window type for floating window failed.",
-                    xcb.change_property32(
-                        xproto::PropMode::REPLACE,
-                        x_window,
-                        atoms._NET_WM_WINDOW_TYPE,
-                        xproto::AtomEnum::ATOM,
-                        &[atoms._NET_WM_WINDOW_TYPE_DIALOG],
-                    ),
-                )?;
-            }
-
-            if params.kind == WindowKind::Overlay {
-                check_reply(
-                    || "X11 ChangeProperty32 setting window type for overlay failed.",
-                    xcb.change_property32(
-                        xproto::PropMode::REPLACE,
-                        x_window,
-                        atoms._NET_WM_WINDOW_TYPE,
-                        xproto::AtomEnum::ATOM,
-                        &[atoms._NET_WM_WINDOW_TYPE_DOCK],
-                    ),
-                )?;
+            } else if params.kind == WindowKind::Overlay {
                 check_reply(
                     || "X11 ChangeProperty32 setting _NET_WM_STATE_ABOVE for overlay failed.",
                     xcb.change_property32(
@@ -739,6 +766,7 @@ impl X11WindowState {
                 hovered: false,
                 force_render_after_recovery: false,
                 fullscreen: false,
+                is_resizable: params.is_resizable,
                 maximized_vertical: false,
                 maximized_horizontal: false,
                 hidden: false,
@@ -1623,6 +1651,10 @@ impl PlatformWindow for X11Window {
     }
 
     fn start_window_resize(&self, edge: ResizeEdge) {
+        if !self.0.state.borrow().is_resizable {
+            return;
+        }
+
         self.send_moveresize(edge.to_moveresize()).log_err();
     }
 
@@ -1714,11 +1746,7 @@ impl PlatformWindow for X11Window {
             decorations = crate::WindowDecorations::Server;
         }
 
-        // https://github.com/rust-windowing/winit/blob/master/src/platform_impl/linux/x11/util/hint.rs#L53-L87
-        let hints_data: [u32; 5] = match decorations {
-            WindowDecorations::Server => [1 << 1, 0, 1, 0, 0],
-            WindowDecorations::Client => [1 << 1, 0, 0, 0, 0],
-        };
+        let hints_data = motif_hints_data(decorations, state.is_resizable);
 
         let success = check_reply(
             || "X11 ChangeProperty for _MOTIF_WM_HINTS failed.",
