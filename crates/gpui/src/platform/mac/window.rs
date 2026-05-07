@@ -811,6 +811,8 @@ impl MacWindow {
             tabbing_identifier,
             mouse_passthrough,
             icon: _,
+            app_id: _app_id,
+            layer_shell: _layer_shell,
         }: WindowParams,
         executor: ForegroundExecutor,
         renderer_context: renderer::Context,
