@@ -198,7 +198,7 @@ impl WaylandWindowState {
                 transparent: true,
                 preferred_present_mode: None,
             };
-            WgpuRenderer::new(gpu_context, &raw_window, config, None)?
+            WgpuRenderer::new(gpu_context, &raw_window, config, None, options.atlas_initial_size)?
         };
 
         Ok(Self {

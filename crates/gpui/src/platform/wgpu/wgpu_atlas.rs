@@ -34,6 +34,7 @@ struct WgpuAtlasState {
     device: Arc<wgpu::Device>,
     queue: Arc<wgpu::Queue>,
     max_texture_size: u32,
+    atlas_initial_size: Size<DevicePixels>,
     color_texture_format: wgpu::TextureFormat,
     storage: WgpuAtlasStorage,
     tiles_by_key: FxHashMap<AtlasKey, AtlasTile>,
@@ -49,12 +50,14 @@ impl WgpuAtlas {
         device: Arc<wgpu::Device>,
         queue: Arc<wgpu::Queue>,
         color_texture_format: wgpu::TextureFormat,
+        atlas_initial_size: Size<DevicePixels>,
     ) -> Self {
         let max_texture_size = device.limits().max_texture_dimension_2d;
         WgpuAtlas(Mutex::new(WgpuAtlasState {
             device,
             queue,
             max_texture_size,
+            atlas_initial_size,
             color_texture_format,
             storage: WgpuAtlasStorage::default(),
             tiles_by_key: Default::default(),
@@ -62,11 +65,12 @@ impl WgpuAtlas {
         }))
     }
 
-    pub fn from_context(context: &WgpuContext) -> Self {
+    pub fn from_context(context: &WgpuContext, atlas_initial_size: Size<DevicePixels>) -> Self {
         Self::new(
             context.device.clone(),
             context.queue.clone(),
             context.color_texture_format(),
+            atlas_initial_size,
         )
     }
 
@@ -181,17 +185,13 @@ impl WgpuAtlasState {
         min_size: Size<DevicePixels>,
         kind: AtlasTextureKind,
     ) -> &mut WgpuAtlasTexture {
-        const DEFAULT_ATLAS_SIZE: Size<DevicePixels> = Size {
-            width: DevicePixels(1024),
-            height: DevicePixels(1024),
-        };
         let max_texture_size = self.max_texture_size as i32;
         let max_atlas_size = Size {
             width: DevicePixels(max_texture_size),
             height: DevicePixels(max_texture_size),
         };
 
-        let size = min_size.min(&max_atlas_size).max(&DEFAULT_ATLAS_SIZE);
+        let size = min_size.max(&self.atlas_initial_size).min(&max_atlas_size);
         let format = match kind {
             AtlasTextureKind::Monochrome => wgpu::TextureFormat::R8Unorm,
             AtlasTextureKind::Polychrome => self.color_texture_format,
@@ -437,7 +437,11 @@ mod tests {
     fn before_frame_skips_uploads_for_removed_texture() -> anyhow::Result<()> {
         let (device, queue) = test_device_and_queue()?;
 
-        let atlas = WgpuAtlas::new(device, queue, wgpu::TextureFormat::Bgra8Unorm);
+        let default_atlas_size = Size {
+            width: DevicePixels(1024),
+            height: DevicePixels(1024),
+        };
+        let atlas = WgpuAtlas::new(device, queue, wgpu::TextureFormat::Bgra8Unorm, default_atlas_size);
         let key = AtlasKey::Image(RenderImageParams {
             image_id: ImageId(1),
             frame_index: 0,

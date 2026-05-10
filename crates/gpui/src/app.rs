@@ -34,18 +34,18 @@ use util::{ResultExt, debug_panic};
 #[cfg(any(feature = "inspector", debug_assertions))]
 use crate::InspectorElementRegistry;
 use crate::{
-    Action, ActionBuildError, ActionRegistry, Any, AnyView, AnyWindowHandle, AppContext, Asset,
-    AssetSource, AttentionType, BackgroundExecutor, BiometricStatus, Bounds, ClipboardItem,
-    CrashReport, CursorStyle, DialogOptions, DispatchPhase, DisplayId, EventEmitter, FocusHandle,
-    FocusMap, FocusedWindowInfo, ForegroundExecutor, Global, KeyBinding, KeyContext, Keymap,
-    Keystroke, LayoutId, MediaKeyEvent, Menu, MenuItem, NetworkStatus, OsInfo, OwnedMenu,
-    PathPromptOptions, PermissionStatus, Pixels, Platform, PlatformDisplay, PlatformKeyboardLayout,
-    PlatformKeyboardMapper, Point, PowerSaveBlockerKind, PromptBuilder, PromptButton, PromptHandle,
-    PromptLevel, Render, RenderImage, RenderablePromptHandle, Reservation, ScreenCaptureSource,
-    SharedString, Size, SubscriberSet, Subscription, SvgRenderer, SystemPowerEvent, Task,
-    TextSystem, ThermalState, TrayAnchor, TrayIconClickEvent, TrayIconEvent, TrayIconRenderingMode,
-    TrayMenuItem, Window, WindowAppearance, WindowHandle, WindowId, WindowInvalidator,
-    WindowPosition,
+    Action, ActionBuildError, ActionRegistry, Any, AnyView, AnyWindowHandle, AppContext,
+    AppResourceProfile, Asset, AssetSource, AttentionType, BackgroundExecutor, BiometricStatus,
+    Bounds, ClipboardItem, CrashReport, CursorStyle, DialogOptions, DispatchPhase, DisplayId,
+    EventEmitter, FocusHandle, FocusMap, FocusedWindowInfo, ForegroundExecutor, Global, KeyBinding,
+    KeyContext, Keymap, Keystroke, LayoutId, MediaKeyEvent, Menu, MenuItem, NetworkStatus, OsInfo,
+    OwnedMenu, PathPromptOptions, PermissionStatus, Pixels, Platform, PlatformDisplay,
+    PlatformKeyboardLayout, PlatformKeyboardMapper, Point, PowerSaveBlockerKind, PromptBuilder,
+    PromptButton, PromptHandle, PromptLevel, Render, RenderImage, RenderablePromptHandle,
+    Reservation, ScreenCaptureSource, SharedString, Size, SubscriberSet, Subscription, SvgRenderer,
+    SystemPowerEvent, Task, TextSystem, ThermalState, TrayAnchor, TrayIconClickEvent,
+    TrayIconEvent, TrayIconRenderingMode, TrayMenuItem, Window, WindowAppearance, WindowHandle,
+    WindowId, WindowInvalidator, WindowPosition,
     colors::{Colors, GlobalColors},
     current_platform, hash, init_app_menus, point, px, size,
 };
@@ -141,6 +141,7 @@ impl Application {
             current_platform(false),
             Arc::new(()),
             Arc::new(NullHttpClient),
+            AppResourceProfile::default(),
         ))
     }
 
@@ -152,6 +153,7 @@ impl Application {
             current_platform(true),
             Arc::new(()),
             Arc::new(NullHttpClient),
+            AppResourceProfile::default(),
         ))
     }
 
@@ -169,6 +171,35 @@ impl Application {
     pub fn with_http_client(self, http_client: Arc<dyn HttpClient>) -> Self {
         let mut context_lock = self.0.borrow_mut();
         context_lock.http_client = http_client;
+        drop(context_lock);
+        self
+    }
+
+    /// Sets the resource profile for the application.
+    ///
+    /// The resource profile controls internal cache sizes and GPU resource
+    /// allocation. Use [`AppProfile`] presets for common scenarios, or provide
+    /// a custom [`AppResourceProfile`] for fine-grained control.
+    ///
+    /// **Must be called before [`Application::run`]** — this rebuilds text
+    /// caches with the configured budget. Atlas configuration takes effect for
+    /// subsequently opened windows.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// Application::new()
+    ///     .with_resource_profile(AppProfile::Minimal)
+    ///     .run(|cx| { /* ... */ });
+    /// ```
+    pub fn with_resource_profile(self, profile: impl Into<AppResourceProfile>) -> Self {
+        let profile = profile.into();
+        let mut context_lock = self.0.borrow_mut();
+        context_lock.text_system = Arc::new(TextSystem::new(
+            context_lock.platform.text_system(),
+            &profile.text,
+        ));
+        context_lock.resource_profile = profile;
         drop(context_lock);
         self
     }
@@ -545,6 +576,7 @@ impl SystemWindowTabController {
 pub struct App {
     pub(crate) this: Weak<AppCell>,
     pub(crate) platform: Rc<dyn Platform>,
+    pub(crate) resource_profile: AppResourceProfile,
     text_system: Arc<TextSystem>,
     flushing_effects: bool,
     pending_updates: usize,
@@ -605,6 +637,7 @@ impl App {
         platform: Rc<dyn Platform>,
         asset_source: Arc<dyn AssetSource>,
         http_client: Arc<dyn HttpClient>,
+        resource_profile: AppResourceProfile,
     ) -> Rc<AppCell> {
         let executor = platform.background_executor();
         let foreground_executor = platform.foreground_executor();
@@ -613,7 +646,10 @@ impl App {
             "must construct App on main thread"
         );
 
-        let text_system = Arc::new(TextSystem::new(platform.text_system()));
+        let text_system = Arc::new(TextSystem::new(
+            platform.text_system(),
+            &resource_profile.text,
+        ));
         let entities = EntityMap::new();
         let keyboard_layout = platform.keyboard_layout();
         let keyboard_mapper = platform.keyboard_mapper();
@@ -622,6 +658,7 @@ impl App {
             app: RefCell::new(App {
                 this: this.clone(),
                 platform: platform.clone(),
+                resource_profile,
                 text_system,
                 actions: Rc::new(ActionRegistry::default()),
                 flushing_effects: false,
@@ -2800,12 +2837,72 @@ impl<'a, T> Drop for GpuiBorrow<'a, T> {
 
 #[cfg(test)]
 mod test {
-    use std::{cell::RefCell, rc::Rc};
+    use std::{cell::RefCell, rc::Rc, sync::Arc};
 
+    use rand::{SeedableRng, rngs::StdRng};
+
+    use super::{Application, NullHttpClient};
     use crate::{
-        AppContext, TestAppContext, TrayIconClickEvent, TrayIconEvent, TrayIconRenderingMode,
+        AppContext, AppResourceProfile, BackgroundExecutor, ForegroundExecutor, TestAppContext,
+        TestDispatcher, TestPlatform, TrayIconClickEvent, TrayIconEvent, TrayIconRenderingMode,
         point, px,
     };
+
+    #[test]
+    fn test_with_resource_profile_rebuilds_text_system_budget() {
+        let dispatcher = Arc::new(TestDispatcher::new(StdRng::seed_from_u64(0)));
+        let platform = TestPlatform::new(
+            BackgroundExecutor::new(dispatcher.clone()),
+            ForegroundExecutor::new(dispatcher),
+        );
+        let mut profile = AppResourceProfile::default();
+        profile.text.line_layout_cache_max_entries = 7;
+        profile.text.line_layout_cache_low_watermark = 3;
+        profile.text.raster_bounds_cache_max_entries = Some(11);
+        profile.element_arena_size =
+            crate::window::ELEMENT_ARENA_SIZE.load(std::sync::atomic::Ordering::Relaxed);
+
+        let application = Application(super::App::new_app(
+            platform,
+            Arc::new(()),
+            Arc::new(NullHttpClient),
+            AppResourceProfile::default(),
+        ))
+        .with_resource_profile(profile);
+
+        let app = application.0.borrow();
+        assert_eq!(app.text_system.resource_budget_for_test(), (7, 3, Some(11)));
+        assert_eq!(app.resource_profile.text.line_layout_cache_max_entries, 7);
+    }
+
+    #[test]
+    fn test_with_resource_profile_clamps_line_layout_cache_to_one_entry() {
+        let dispatcher = Arc::new(TestDispatcher::new(StdRng::seed_from_u64(0)));
+        let platform = TestPlatform::new(
+            BackgroundExecutor::new(dispatcher.clone()),
+            ForegroundExecutor::new(dispatcher),
+        );
+        let mut profile = AppResourceProfile::default();
+        profile.text.line_layout_cache_max_entries = 0;
+        profile.text.line_layout_cache_low_watermark = 5;
+        profile.element_arena_size =
+            crate::window::ELEMENT_ARENA_SIZE.load(std::sync::atomic::Ordering::Relaxed);
+
+        let application = Application(super::App::new_app(
+            platform,
+            Arc::new(()),
+            Arc::new(NullHttpClient),
+            AppResourceProfile::default(),
+        ))
+        .with_resource_profile(profile);
+
+        let app = application.0.borrow();
+        assert_eq!(
+            app.text_system.resource_budget_for_test(),
+            (1, 0, None),
+            "line layout caches should retain a valid minimum capacity"
+        );
+    }
 
     #[test]
     fn test_gpui_borrow() {

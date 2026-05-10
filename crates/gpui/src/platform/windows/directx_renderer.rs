@@ -133,6 +133,7 @@ impl DirectXRenderer {
         hwnd: HWND,
         directx_devices: &DirectXDevices,
         disable_direct_composition: bool,
+        atlas_initial_size: crate::Size<crate::DevicePixels>,
     ) -> Result<Self> {
         if disable_direct_composition {
             log::info!("Direct Composition is disabled.");
@@ -140,7 +141,11 @@ impl DirectXRenderer {
 
         let devices = DirectXRendererDevices::new(directx_devices, disable_direct_composition)
             .context("Creating DirectX devices")?;
-        let atlas = Arc::new(DirectXAtlas::new(&devices.device, &devices.device_context));
+        let atlas = Arc::new(DirectXAtlas::new(
+            &devices.device,
+            &devices.device_context,
+            atlas_initial_size,
+        ));
 
         let resources = DirectXResources::new(&devices, 1, 1, hwnd, disable_direct_composition)
             .context("Creating DirectX resources")?;

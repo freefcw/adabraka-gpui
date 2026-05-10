@@ -19,6 +19,7 @@ pub(crate) struct DirectXAtlas(Mutex<DirectXAtlasState>);
 struct DirectXAtlasState {
     device: ID3D11Device,
     device_context: ID3D11DeviceContext,
+    atlas_initial_size: Size<DevicePixels>,
     monochrome_textures: AtlasTextureList<DirectXAtlasTexture>,
     polychrome_textures: AtlasTextureList<DirectXAtlasTexture>,
     tiles_by_key: FxHashMap<AtlasKey, AtlasTile>,
@@ -34,10 +35,15 @@ struct DirectXAtlasTexture {
 }
 
 impl DirectXAtlas {
-    pub(crate) fn new(device: &ID3D11Device, device_context: &ID3D11DeviceContext) -> Self {
+    pub(crate) fn new(
+        device: &ID3D11Device,
+        device_context: &ID3D11DeviceContext,
+        atlas_initial_size: Size<DevicePixels>,
+    ) -> Self {
         DirectXAtlas(Mutex::new(DirectXAtlasState {
             device: device.clone(),
             device_context: device_context.clone(),
+            atlas_initial_size,
             monochrome_textures: Default::default(),
             polychrome_textures: Default::default(),
             tiles_by_key: Default::default(),
@@ -150,17 +156,13 @@ impl DirectXAtlasState {
         min_size: Size<DevicePixels>,
         kind: AtlasTextureKind,
     ) -> Option<&mut DirectXAtlasTexture> {
-        const DEFAULT_ATLAS_SIZE: Size<DevicePixels> = Size {
-            width: DevicePixels(1024),
-            height: DevicePixels(1024),
-        };
         // Max texture size for DirectX. See:
         // https://learn.microsoft.com/en-us/windows/win32/direct3d11/overviews-direct3d-11-resources-limits
         const MAX_ATLAS_SIZE: Size<DevicePixels> = Size {
             width: DevicePixels(16384),
             height: DevicePixels(16384),
         };
-        let size = min_size.min(&MAX_ATLAS_SIZE).max(&DEFAULT_ATLAS_SIZE);
+        let size = min_size.max(&self.atlas_initial_size).min(&MAX_ATLAS_SIZE);
         let pixel_format;
         let bind_flag;
         let bytes_per_pixel;

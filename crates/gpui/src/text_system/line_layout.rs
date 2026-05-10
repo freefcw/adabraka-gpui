@@ -392,26 +392,37 @@ impl WrappedLineLayout {
     }
 }
 
-const GLOBAL_CACHE_MAX_ENTRIES: usize = 10_000;
-
 struct GlobalCacheEntry<T> {
     value: T,
     last_access: AtomicU64,
 }
 
 pub(crate) struct GlobalLineLayoutCache {
+    max_entries: usize,
+    low_watermark: usize,
     lines: RwLock<FxHashMap<Arc<CacheKey>, GlobalCacheEntry<Arc<LineLayout>>>>,
     wrapped_lines: RwLock<FxHashMap<Arc<CacheKey>, GlobalCacheEntry<Arc<WrappedLineLayout>>>>,
     access_counter: AtomicU64,
 }
 
 impl GlobalLineLayoutCache {
-    pub fn new() -> Self {
+    pub fn new(max_entries: usize, low_watermark: usize) -> Self {
+        let max_entries = max_entries.max(1);
+        // Ensure low_watermark is always less than max_entries to avoid
+        // degenerate eviction behaviour.
+        let low_watermark = low_watermark.min(max_entries.saturating_sub(1));
         Self {
+            max_entries,
+            low_watermark,
             lines: RwLock::new(FxHashMap::default()),
             wrapped_lines: RwLock::new(FxHashMap::default()),
             access_counter: AtomicU64::new(0),
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn budget_for_test(&self) -> (usize, usize) {
+        (self.max_entries, self.low_watermark)
     }
 
     fn get_line(&self, key: &dyn AsCacheKeyRef) -> Option<Arc<LineLayout>> {
@@ -430,8 +441,8 @@ impl GlobalLineLayoutCache {
 
     fn insert_line(&self, key: Arc<CacheKey>, layout: Arc<LineLayout>) {
         let mut lines = self.lines.write();
-        if lines.len() >= GLOBAL_CACHE_MAX_ENTRIES {
-            Self::evict_oldest(&mut lines);
+        if lines.len() >= self.max_entries {
+            Self::evict_to_watermark(&mut lines, self.low_watermark);
         }
         lines.insert(
             key,
@@ -457,8 +468,8 @@ impl GlobalLineLayoutCache {
 
     fn insert_wrapped_line(&self, key: Arc<CacheKey>, layout: Arc<WrappedLineLayout>) {
         let mut wrapped = self.wrapped_lines.write();
-        if wrapped.len() >= GLOBAL_CACHE_MAX_ENTRIES {
-            Self::evict_oldest(&mut wrapped);
+        if wrapped.len() >= self.max_entries {
+            Self::evict_to_watermark(&mut wrapped, self.low_watermark);
         }
         wrapped.insert(
             key,
@@ -469,19 +480,21 @@ impl GlobalLineLayoutCache {
         );
     }
 
-    fn evict_oldest<V>(map: &mut FxHashMap<Arc<CacheKey>, GlobalCacheEntry<V>>) {
-        let half = map.len() / 2;
+    /// Evict oldest entries until the map size is at or below `target_size`.
+    fn evict_to_watermark<V>(
+        map: &mut FxHashMap<Arc<CacheKey>, GlobalCacheEntry<V>>,
+        target_size: usize,
+    ) {
+        if map.len() <= target_size {
+            return;
+        }
+        let to_remove = map.len() - target_size;
         let mut entries: Vec<_> = map
-            .keys()
-            .map(|k| {
-                (
-                    k.clone(),
-                    map.get(k).unwrap().last_access.load(Ordering::Relaxed),
-                )
-            })
+            .iter()
+            .map(|(k, entry)| (k.clone(), entry.last_access.load(Ordering::Relaxed)))
             .collect();
         entries.sort_by_key(|(_, access)| *access);
-        for (key, _) in entries.into_iter().take(half) {
+        for (key, _) in entries.into_iter().take(to_remove) {
             map.remove(&key);
         }
     }

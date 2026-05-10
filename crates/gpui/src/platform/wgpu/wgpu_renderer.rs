@@ -184,6 +184,7 @@ impl WgpuRenderer {
         window: &W,
         config: WgpuSurfaceConfig,
         compositor_gpu: Option<CompositorGpuHint>,
+        atlas_initial_size: Size<DevicePixels>,
     ) -> anyhow::Result<Self>
     where
         W: HasWindowHandle + HasDisplayHandle + std::fmt::Debug + Send + Sync + Clone + 'static,
@@ -225,7 +226,7 @@ impl WgpuRenderer {
             None => ctx_ref.insert(WgpuContext::new(instance, &surface, compositor_gpu)?),
         };
 
-        let atlas = Arc::new(WgpuAtlas::from_context(context));
+        let atlas = Arc::new(WgpuAtlas::from_context(context, atlas_initial_size));
 
         Self::new_internal(
             Some(Rc::clone(&gpu_context)),

@@ -128,10 +128,11 @@ impl TestAppContext {
         let platform = TestPlatform::new(background_executor.clone(), foreground_executor.clone());
         let asset_source = Arc::new(());
         let http_client = http_client::FakeHttpClient::with_404_response();
-        let text_system = Arc::new(TextSystem::new(platform.text_system()));
+        let default_profile = crate::AppResourceProfile::default();
+        let text_system = Arc::new(TextSystem::new(platform.text_system(), &default_profile.text));
 
         Self {
-            app: App::new_app(platform.clone(), asset_source, http_client),
+            app: App::new_app(platform.clone(), asset_source, http_client, default_profile),
             background_executor,
             foreground_executor,
             dispatcher,

@@ -1316,6 +1316,9 @@ pub struct WindowOptions {
 pub(crate) struct WindowParams {
     pub bounds: Bounds<Pixels>,
 
+    /// Atlas initial texture size (width = height, in device pixels).
+    pub atlas_initial_size: Size<DevicePixels>,
+
     /// The titlebar configuration of the window
     #[cfg_attr(feature = "wayland", allow(dead_code))]
     pub titlebar: Option<TitlebarOptions>,

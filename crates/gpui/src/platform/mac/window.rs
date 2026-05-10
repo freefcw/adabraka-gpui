@@ -799,6 +799,7 @@ impl MacWindow {
         handle: AnyWindowHandle,
         WindowParams {
             bounds,
+            atlas_initial_size,
             titlebar,
             kind,
             is_movable,
@@ -930,6 +931,7 @@ impl MacWindow {
                         native_view as *mut _,
                         bounds.size.map(|pixels| pixels.0),
                         false,
+                        atlas_initial_size,
                     ),
                     request_frame_callback: None,
                     event_callback: None,

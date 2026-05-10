@@ -1,5 +1,15 @@
 ## Unreleased
 
+### Features
+
+- **App resource profiles** — new `AppResourceProfile` / `AppProfile` system lets
+  callers tune internal cache sizes and GPU atlas allocation at startup via
+  `Application::new().with_resource_profile(AppProfile::Minimal)`. Three presets
+  are provided (`Desktop`, `Utility`, `Minimal`) plus a `Custom` variant for
+  fine-grained control. The global line-layout cache now uses a configurable
+  watermark-based eviction strategy instead of the previous fixed 50%-drop
+  approach, which is significantly smoother for small caches.
+
 ### Fixes
 
 - **Linux/WGPU rendering** — aligned the WGPU shader's `Quad`/`Background` layout with the Rust `repr(C)` scene structs so that borders, rounded corners, gradients, separators, and toggle tracks no longer drop intermittently on Linux (`fix(wgpu): align Quad/Background ABI with Rust scene struct`).

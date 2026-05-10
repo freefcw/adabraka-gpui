@@ -1117,6 +1117,7 @@ impl Window {
             handle,
             WindowParams {
                 bounds,
+                atlas_initial_size: cx.resource_profile.atlas_size(),
                 titlebar,
                 kind,
                 is_movable,

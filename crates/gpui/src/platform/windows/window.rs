@@ -90,6 +90,7 @@ impl WindowsWindowState {
         min_size: Option<Size<Pixels>>,
         appearance: WindowAppearance,
         disable_direct_composition: bool,
+        atlas_initial_size: crate::Size<DevicePixels>,
     ) -> Result<Self> {
         let scale_factor = {
             let monitor_dpi = unsafe { GetDpiForWindow(hwnd) } as f32;
@@ -109,8 +110,9 @@ impl WindowsWindowState {
         };
         let border_offset = WindowBorderOffset::default();
         let restore_from_minimized = None;
-        let renderer = DirectXRenderer::new(hwnd, directx_devices, disable_direct_composition)
-            .context("Creating DirectX renderer")?;
+        let renderer =
+            DirectXRenderer::new(hwnd, directx_devices, disable_direct_composition, atlas_initial_size)
+                .context("Creating DirectX renderer")?;
         let callbacks = Callbacks::default();
         let input_handler = None;
         let pending_surrogate = None;
@@ -223,6 +225,7 @@ impl WindowsWindowInner {
             context.min_size,
             context.appearance,
             context.disable_direct_composition,
+            context.atlas_initial_size,
         )?);
 
         Ok(Rc::new_cyclic(|this| Self {
@@ -355,6 +358,7 @@ struct WindowCreateContext {
     appearance: WindowAppearance,
     disable_direct_composition: bool,
     directx_devices: DirectXDevices,
+    atlas_initial_size: crate::Size<DevicePixels>,
 }
 
 impl WindowsWindow {
@@ -439,6 +443,7 @@ impl WindowsWindow {
             appearance,
             disable_direct_composition,
             directx_devices,
+            atlas_initial_size: params.atlas_initial_size,
         };
         let creation_result = unsafe {
             CreateWindowExW(

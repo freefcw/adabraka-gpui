@@ -47,8 +47,9 @@ pub unsafe fn new_renderer(
     _native_view: *mut c_void,
     _bounds: crate::Size<f32>,
     _transparent: bool,
+    atlas_initial_size: crate::Size<crate::DevicePixels>,
 ) -> Renderer {
-    MetalRenderer::new(context)
+    MetalRenderer::new(context, atlas_initial_size)
 }
 
 pub(crate) struct InstanceBufferPool {
@@ -129,7 +130,10 @@ pub struct PathRasterizationVertex {
 }
 
 impl MetalRenderer {
-    pub fn new(instance_buffer_pool: Arc<Mutex<InstanceBufferPool>>) -> Self {
+    pub fn new(
+        instance_buffer_pool: Arc<Mutex<InstanceBufferPool>>,
+        atlas_initial_size: crate::Size<crate::DevicePixels>,
+    ) -> Self {
         // Prefer low‐power integrated GPUs on Intel Mac. On Apple
         // Silicon, there is only ever one GPU, so this is equivalent to
         // `metal::Device::system_default()`.
@@ -248,7 +252,7 @@ impl MetalRenderer {
         );
 
         let command_queue = device.new_command_queue();
-        let sprite_atlas = Arc::new(MetalAtlas::new(device.clone()));
+        let sprite_atlas = Arc::new(MetalAtlas::new(device.clone(), atlas_initial_size));
         let core_video_texture_cache =
             CVMetalTextureCache::new(None, device.clone(), None).unwrap();
 

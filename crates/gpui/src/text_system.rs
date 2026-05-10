@@ -58,10 +58,16 @@ pub struct TextSystem {
 }
 
 impl TextSystem {
-    pub(crate) fn new(platform_text_system: Arc<dyn PlatformTextSystem>) -> Self {
+    pub(crate) fn new(
+        platform_text_system: Arc<dyn PlatformTextSystem>,
+        text_budget: &crate::TextResourceBudget,
+    ) -> Self {
         TextSystem {
             platform_text_system,
-            global_line_layout_cache: Arc::new(GlobalLineLayoutCache::new()),
+            global_line_layout_cache: Arc::new(GlobalLineLayoutCache::new(
+                text_budget.line_layout_cache_max_entries,
+                text_budget.line_layout_cache_low_watermark,
+            )),
             font_metrics: RwLock::default(),
             raster_bounds: RwLock::default(),
             font_ids_by_font: RwLock::default(),
@@ -79,6 +85,12 @@ impl TextSystem {
                 font("DejaVu Sans")
             ],
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn resource_budget_for_test(&self) -> (usize, usize, Option<usize>) {
+        let (max_entries, low_watermark) = self.global_line_layout_cache.budget_for_test();
+        (max_entries, low_watermark, self.raster_bounds_max_entries)
     }
 
     /// Get a list of all available font names from the operating system.
