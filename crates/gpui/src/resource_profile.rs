@@ -97,6 +97,17 @@ pub struct AppResourceProfile {
 
     /// GPU / Atlas resource configuration.
     pub gpu: GpuResourceBudget,
+
+    /// Initial capacity (in bytes) of the per-thread element arena.
+    ///
+    /// The element arena is a bump allocator used during each frame's layout
+    /// and paint phases. It is cleared after every frame, so the initial size
+    /// only determines how much memory is pre-allocated to avoid mid-frame
+    /// reallocations.
+    ///
+    /// Default: 1 048 576 (1 MiB). For minimal applications, 256 KiB or
+    /// 512 KiB is recommended.
+    pub element_arena_size: usize,
 }
 
 impl AppResourceProfile {
@@ -106,10 +117,12 @@ impl AppResourceProfile {
             text: TextResourceBudget {
                 line_layout_cache_max_entries: 10_000,
                 line_layout_cache_low_watermark: 5_000,
+                raster_bounds_cache_max_entries: None,
             },
             gpu: GpuResourceBudget {
                 atlas_initial_size: 1024,
             },
+            element_arena_size: 1024 * 1024,
         }
     }
 
@@ -119,10 +132,12 @@ impl AppResourceProfile {
             text: TextResourceBudget {
                 line_layout_cache_max_entries: 3_000,
                 line_layout_cache_low_watermark: 2_000,
+                raster_bounds_cache_max_entries: Some(5_000),
             },
             gpu: GpuResourceBudget {
                 atlas_initial_size: 1024,
             },
+            element_arena_size: 512 * 1024,
         }
     }
 
@@ -132,10 +147,12 @@ impl AppResourceProfile {
             text: TextResourceBudget {
                 line_layout_cache_max_entries: 500,
                 line_layout_cache_low_watermark: 400,
+                raster_bounds_cache_max_entries: Some(2_000),
             },
             gpu: GpuResourceBudget {
                 atlas_initial_size: 512,
             },
+            element_arena_size: 256 * 1024,
         }
     }
 
@@ -174,6 +191,19 @@ pub struct TextResourceBudget {
     /// max and low watermark reduces eviction frequency but allows more peak
     /// memory usage. Default: 5 000.
     pub line_layout_cache_low_watermark: usize,
+
+    /// Maximum number of entries in the glyph raster-bounds cache.
+    ///
+    /// This cache maps `RenderGlyphParams → Bounds<DevicePixels>`. Each entry
+    /// is small (~120 bytes), but without a limit the cache can grow unbounded
+    /// when many distinct font/size/glyph combinations are used. When the
+    /// limit is reached the entire cache is cleared (a simple generational
+    /// strategy, since re-computing raster bounds is inexpensive compared to
+    /// full text shaping).
+    ///
+    /// Default: `None` (legacy behavior). Preset profiles may set a finite
+    /// limit.
+    pub raster_bounds_cache_max_entries: Option<usize>,
 }
 
 /// GPU resource budget.

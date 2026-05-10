@@ -52,6 +52,7 @@ pub struct TextSystem {
     font_ids_by_font: RwLock<FxHashMap<Font, Result<FontId>>>,
     font_metrics: RwLock<FxHashMap<FontId, FontMetrics>>,
     raster_bounds: RwLock<FxHashMap<RenderGlyphParams, Bounds<DevicePixels>>>,
+    raster_bounds_max_entries: Option<usize>,
     wrapper_pool: Mutex<FxHashMap<FontIdWithSize, Vec<LineWrapper>>>,
     font_runs_pool: Mutex<Vec<Vec<FontRun>>>,
     fallback_font_stack: SmallVec<[Font; 2]>,
@@ -70,6 +71,7 @@ impl TextSystem {
             )),
             font_metrics: RwLock::default(),
             raster_bounds: RwLock::default(),
+            raster_bounds_max_entries: text_budget.raster_bounds_cache_max_entries,
             font_ids_by_font: RwLock::default(),
             wrapper_pool: Mutex::default(),
             font_runs_pool: Mutex::default(),
@@ -326,6 +328,14 @@ impl TextSystem {
             Ok(*bounds)
         } else {
             let mut raster_bounds = RwLockUpgradableReadGuard::upgrade(raster_bounds);
+            // If a limit is set and we've exceeded it, clear the cache to
+            // reclaim memory. This is a simple generational approach since
+            // glyph_raster_bounds is cheap to recompute.
+            if let Some(max) = self.raster_bounds_max_entries {
+                if raster_bounds.len() >= max {
+                    raster_bounds.clear();
+                }
+            }
             let bounds = self.platform_text_system.glyph_raster_bounds(params)?;
             raster_bounds.insert(params.clone(), bounds);
             Ok(bounds)

@@ -225,8 +225,15 @@ slotmap::new_key_type! {
     pub struct FocusId;
 }
 
+/// Global element arena initial size, set by [`Application::with_resource_profile`]
+/// before any windows are opened. Defaults to 1 MiB.
+pub(crate) static ELEMENT_ARENA_SIZE: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(1024 * 1024);
+
 thread_local! {
-    pub(crate) static ELEMENT_ARENA: RefCell<Arena> = RefCell::new(Arena::new(1024 * 1024));
+    pub(crate) static ELEMENT_ARENA: RefCell<Arena> = RefCell::new(
+        Arena::new(ELEMENT_ARENA_SIZE.load(std::sync::atomic::Ordering::Relaxed))
+    );
 }
 
 /// Returned when the element arena has been used and so must be cleared before the next draw.

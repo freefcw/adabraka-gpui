@@ -194,6 +194,15 @@ impl Application {
     /// ```
     pub fn with_resource_profile(self, profile: impl Into<AppResourceProfile>) -> Self {
         let profile = profile.into();
+        // Set the element arena size before any windows (and thus thread-local
+        // arenas) are created. This must happen on the main thread, which is
+        // guaranteed by the `Application` API. Clamp to >= 1 because the
+        // underlying `Arena::new` requires a non-zero chunk size and would
+        // otherwise panic lazily on first use in another thread.
+        crate::window::ELEMENT_ARENA_SIZE.store(
+            profile.element_arena_size.max(1),
+            std::sync::atomic::Ordering::Relaxed,
+        );
         let mut context_lock = self.0.borrow_mut();
         context_lock.text_system = Arc::new(TextSystem::new(
             context_lock.platform.text_system(),
