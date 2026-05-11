@@ -178,7 +178,7 @@ impl Application {
     /// Sets the resource profile for the application.
     ///
     /// The resource profile controls internal cache sizes and GPU resource
-    /// allocation. Use [`AppProfile`] presets for common scenarios, or provide
+    /// allocation. Use [`crate::AppProfile`] presets for common scenarios, or provide
     /// a custom [`AppResourceProfile`] for fine-grained control.
     ///
     /// **Must be called before [`Application::run`]** — this rebuilds text
