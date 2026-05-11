@@ -8,9 +8,9 @@ use super::{
 };
 use crate::{
     Action, AnyWindowHandle, BackgroundExecutor, ClipboardEntry, ClipboardItem, ClipboardString,
-    CursorStyle, ForegroundExecutor, Image, ImageFormat, KeyContext, Keymap, MacDispatcher,
-    MacDisplay, MacWindow, Menu, MenuItem, OsMenu, OwnedMenu, PathPromptOptions, Platform,
-    PlatformDisplay, PlatformKeyboardLayout, PlatformKeyboardMapper, PlatformTextSystem,
+    CursorStyle, ForegroundExecutor, GpuResourceBudget, Image, ImageFormat, KeyContext, Keymap,
+    MacDispatcher, MacDisplay, MacWindow, Menu, MenuItem, OsMenu, OwnedMenu, PathPromptOptions,
+    Platform, PlatformDisplay, PlatformKeyboardLayout, PlatformKeyboardMapper, PlatformTextSystem,
     PlatformWindow, RendererCacheStats, Result, SemanticVersion, SharedString, SystemMenuType,
     Task, ThermalState, TrayAnchor, TrayIconClickEvent, TrayIconEvent, TrayIconRenderingMode,
     TrayMenuItem, WindowAppearance, WindowParams, hash,
@@ -775,6 +775,13 @@ impl Platform for MacPlatform {
     fn trim_renderer_caches(&self) {
         let context = self.0.lock().renderer_context.clone();
         context.lock().trim();
+    }
+
+    fn configure_gpu_resources(&self, gpu: &GpuResourceBudget) {
+        let context = self.0.lock().renderer_context.clone();
+        context
+            .lock()
+            .configure_initial_buffer_size(gpu.instance_buffer_initial_size);
     }
 
     fn renderer_cache_stats(&self) -> RendererCacheStats {

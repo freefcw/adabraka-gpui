@@ -37,6 +37,9 @@ const SHADERS_SOURCE_FILE: &str = include_str!(concat!(env!("OUT_DIR"), "/stitch
 // https://developer.apple.com/documentation/metal/mtldevice/1433355-supportstexturesamplecount
 const PATH_SAMPLE_COUNT: u32 = 4;
 const LAYER_AUTOSIZING_MASK: u32 = (1 << 1) | (1 << 4);
+const MIN_INSTANCE_BUFFER_SIZE: usize = 256 * 1024;
+const DEFAULT_INSTANCE_BUFFER_SIZE: usize = 2 * 1024 * 1024;
+const MAX_INSTANCE_BUFFER_SIZE: usize = 256 * 1024 * 1024;
 
 pub type Context = Arc<Mutex<InstanceBufferPool>>;
 pub type Renderer = MetalRenderer;
@@ -61,7 +64,7 @@ pub(crate) struct InstanceBufferPool {
 impl Default for InstanceBufferPool {
     fn default() -> Self {
         Self {
-            buffer_size: 2 * 1024 * 1024,
+            buffer_size: DEFAULT_INSTANCE_BUFFER_SIZE,
             generation: 0,
             buffers: Vec::new(),
         }
@@ -75,8 +78,15 @@ pub(crate) struct InstanceBuffer {
 }
 
 impl InstanceBufferPool {
+    pub(crate) fn configure_initial_buffer_size(&mut self, buffer_size: usize) {
+        let buffer_size = buffer_size.clamp(MIN_INSTANCE_BUFFER_SIZE, MAX_INSTANCE_BUFFER_SIZE);
+        if self.buffer_size != buffer_size {
+            self.reset(buffer_size);
+        }
+    }
+
     pub(crate) fn reset(&mut self, buffer_size: usize) {
-        self.buffer_size = buffer_size;
+        self.buffer_size = buffer_size.clamp(MIN_INSTANCE_BUFFER_SIZE, MAX_INSTANCE_BUFFER_SIZE);
         self.generation = self.generation.wrapping_add(1);
         self.buffers.clear();
     }
@@ -432,7 +442,7 @@ impl MetalRenderer {
                     );
                     let mut instance_buffer_pool = self.instance_buffer_pool.lock();
                     let buffer_size = instance_buffer_pool.buffer_size;
-                    if buffer_size >= 256 * 1024 * 1024 {
+                    if buffer_size >= MAX_INSTANCE_BUFFER_SIZE {
                         log::error!("instance buffer size grew too large: {}", buffer_size);
                         break;
                     }
@@ -469,7 +479,7 @@ impl MetalRenderer {
             while new_size < required {
                 new_size *= 2;
             }
-            new_size = new_size.min(256 * 1024 * 1024);
+            new_size = new_size.min(MAX_INSTANCE_BUFFER_SIZE);
             pool.reset(new_size);
         }
     }

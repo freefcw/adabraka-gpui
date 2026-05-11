@@ -33,6 +33,10 @@
 //!   GPU textures allocated for the glyph/image atlas. Each 1024×1024 BGRA
 //!   texture costs 4 MB of GPU memory; a 512×512 texture costs 1 MB. These are
 //!   **GPU** resources, not regular heap allocations.
+//!
+//! - **Instance buffer initial size** (`instance_buffer_initial_size`):
+//!   Controls the initial capacity of renderer instance buffers where supported.
+//!   Renderers may grow beyond this value automatically when a scene requires it.
 
 use crate::{DevicePixels, Size};
 
@@ -121,6 +125,7 @@ impl AppResourceProfile {
             },
             gpu: GpuResourceBudget {
                 atlas_initial_size: 1024,
+                instance_buffer_initial_size: 2 * 1024 * 1024,
             },
             element_arena_size: 1024 * 1024,
         }
@@ -136,6 +141,7 @@ impl AppResourceProfile {
             },
             gpu: GpuResourceBudget {
                 atlas_initial_size: 1024,
+                instance_buffer_initial_size: 1024 * 1024,
             },
             element_arena_size: 512 * 1024,
         }
@@ -151,6 +157,7 @@ impl AppResourceProfile {
             },
             gpu: GpuResourceBudget {
                 atlas_initial_size: 512,
+                instance_buffer_initial_size: 512 * 1024,
             },
             element_arena_size: 256 * 1024,
         }
@@ -223,4 +230,14 @@ pub struct GpuResourceBudget {
     /// - Monochrome (R8): `size × size × 1` bytes
     /// - Polychrome (BGRA): `size × size × 4` bytes
     pub atlas_initial_size: u32,
+
+    /// Initial renderer instance buffer capacity in bytes, where supported.
+    ///
+    /// Instance buffers hold per-frame draw data uploaded to the GPU. This is an
+    /// initial budget, not a hard cap: renderers may grow the buffer on demand
+    /// for complex scenes. Lower values reduce idle GPU memory for small apps,
+    /// while larger values avoid early reallocations for heavy UIs.
+    ///
+    /// Default: 2 MiB for desktop applications.
+    pub instance_buffer_initial_size: usize,
 }

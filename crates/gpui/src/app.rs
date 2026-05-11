@@ -204,6 +204,7 @@ impl Application {
             std::sync::atomic::Ordering::Relaxed,
         );
         let mut context_lock = self.0.borrow_mut();
+        context_lock.platform.configure_gpu_resources(&profile.gpu);
         context_lock.text_system = Arc::new(TextSystem::new(
             context_lock.platform.text_system(),
             &profile.text,
@@ -659,6 +660,7 @@ impl App {
             platform.text_system(),
             &resource_profile.text,
         ));
+        platform.configure_gpu_resources(&resource_profile.gpu);
         let entities = EntityMap::new();
         let keyboard_layout = platform.keyboard_layout();
         let keyboard_mapper = platform.keyboard_mapper();
@@ -2907,6 +2909,37 @@ mod test {
         let app = application.0.borrow();
         assert_eq!(app.text_system.resource_budget_for_test(), (7, 3, Some(11)));
         assert_eq!(app.resource_profile.text.line_layout_cache_max_entries, 7);
+        assert_eq!(
+            app.resource_profile.gpu.instance_buffer_initial_size,
+            2 * 1024 * 1024
+        );
+    }
+
+    #[test]
+    fn test_with_resource_profile_updates_gpu_budget() {
+        let dispatcher = Arc::new(TestDispatcher::new(StdRng::seed_from_u64(0)));
+        let platform = TestPlatform::new(
+            BackgroundExecutor::new(dispatcher.clone()),
+            ForegroundExecutor::new(dispatcher),
+        );
+        let mut profile = AppResourceProfile::default();
+        profile.gpu.instance_buffer_initial_size = 768 * 1024;
+        profile.element_arena_size =
+            crate::window::ELEMENT_ARENA_SIZE.load(std::sync::atomic::Ordering::Relaxed);
+
+        let application = Application(super::App::new_app(
+            platform,
+            Arc::new(()),
+            Arc::new(NullHttpClient),
+            AppResourceProfile::default(),
+        ))
+        .with_resource_profile(profile);
+
+        let app = application.0.borrow();
+        assert_eq!(
+            app.resource_profile.gpu.instance_buffer_initial_size,
+            768 * 1024
+        );
     }
 
     #[test]

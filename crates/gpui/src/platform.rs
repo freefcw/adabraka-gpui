@@ -39,10 +39,10 @@ pub(crate) mod scap_screen_capture;
 use crate::{
     Action, AnyWindowHandle, App, AsyncWindowContext, BackgroundExecutor, Bounds,
     DEFAULT_WINDOW_SIZE, DevicePixels, DispatchEventResult, Edges, Font, FontId, FontMetrics,
-    FontRun, ForegroundExecutor, GlyphId, GpuSpecs, Hsla, ImageSource, Keymap, LineLayout, Pixels,
-    PlatformInput, Point, RenderGlyphParams, RenderImage, RenderImageParams, RenderSvgParams,
-    Scene, ShapedGlyph, ShapedRun, SharedString, Size, SvgRenderer, SystemWindowTab, Task,
-    TaskLabel, Window, WindowControlArea, hash, point, px, size,
+    FontRun, ForegroundExecutor, GlyphId, GpuResourceBudget, GpuSpecs, Hsla, ImageSource, Keymap,
+    LineLayout, Pixels, PlatformInput, Point, RenderGlyphParams, RenderImage, RenderImageParams,
+    RenderSvgParams, Scene, ShapedGlyph, ShapedRun, SharedString, Size, SvgRenderer,
+    SystemWindowTab, Task, TaskLabel, Window, WindowControlArea, hash, point, px, size,
 };
 use anyhow::Result;
 use async_task::Runnable;
@@ -233,6 +233,10 @@ pub(crate) trait Platform: 'static {
     /// configuration. Default implementation is a no-op for platforms that do
     /// not maintain such pools.
     fn trim_renderer_caches(&self) {}
+
+    /// Apply renderer GPU resource budgets. Default implementation is a no-op
+    /// for platforms that do not expose configurable renderer pools.
+    fn configure_gpu_resources(&self, _gpu: &GpuResourceBudget) {}
 
     /// Snapshot of the renderer's pooled GPU resource usage. Default
     /// implementation reports an empty snapshot for platforms that do not
