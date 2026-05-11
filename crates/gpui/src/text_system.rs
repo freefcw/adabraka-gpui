@@ -45,6 +45,23 @@ pub(crate) const SUBPIXEL_VARIANTS_X: u8 = 4;
 
 pub(crate) const SUBPIXEL_VARIANTS_Y: u8 = 1;
 
+/// Snapshot of the long-lived text-system cache sizes returned by
+/// [`TextSystem::layout_cache_stats`].
+///
+/// All fields are entry counts (not bytes). Use these together with the
+/// configured caps in [`crate::TextResourceBudget`] to understand how
+/// saturated the caches are before deciding to call
+/// [`TextSystem::clear_layout_cache`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TextSystemCacheStats {
+    /// Number of shaped, unwrapped line layouts in the global cache.
+    pub lines: usize,
+    /// Number of shaped, wrapped line layouts in the global cache.
+    pub wrapped_lines: usize,
+    /// Number of glyph raster-bounds entries.
+    pub raster_bounds: usize,
+}
+
 /// The GPUI text rendering sub system.
 pub struct TextSystem {
     platform_text_system: Arc<dyn PlatformTextSystem>,
@@ -93,6 +110,34 @@ impl TextSystem {
     pub(crate) fn resource_budget_for_test(&self) -> (usize, usize, Option<usize>) {
         let (max_entries, low_watermark) = self.global_line_layout_cache.budget_for_test();
         (max_entries, low_watermark, self.raster_bounds_max_entries)
+    }
+
+    /// Drop every entry held by the long-lived text caches.
+    ///
+    /// This releases the global line-layout cache (shaped lines and wrapped
+    /// lines) and the glyph raster-bounds cache. The caches will repopulate
+    /// naturally as text is laid out again, at the cost of a one-time shaping
+    /// pass on the next render.
+    ///
+    /// Intended for use by long-running applications that experience an idle
+    /// or hidden state (e.g. tray apps when the popup closes) and want to
+    /// reclaim heap memory. Per-frame caches owned by [`WindowTextSystem`] are
+    /// not affected — they are cleared on every frame already and dropped
+    /// with the window.
+    pub fn clear_layout_cache(&self) {
+        self.global_line_layout_cache.clear();
+        self.raster_bounds.write().clear();
+    }
+
+    /// Snapshot of the current sizes of the long-lived text caches, primarily
+    /// for diagnostics and benchmarking. Counts are entry counts, not bytes.
+    pub fn layout_cache_stats(&self) -> TextSystemCacheStats {
+        let (lines, wrapped_lines) = self.global_line_layout_cache.entry_counts();
+        TextSystemCacheStats {
+            lines,
+            wrapped_lines,
+            raster_bounds: self.raster_bounds.read().len(),
+        }
     }
 
     /// Get a list of all available font names from the operating system.

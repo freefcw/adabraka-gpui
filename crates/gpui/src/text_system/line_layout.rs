@@ -425,6 +425,22 @@ impl GlobalLineLayoutCache {
         (self.max_entries, self.low_watermark)
     }
 
+    /// Drop every cached line and wrapped-line layout.
+    ///
+    /// Useful when an application enters a low-memory state (for example, the
+    /// last visible window is hidden) and wants to release the heap held by
+    /// shaped text. The cache will repopulate naturally as text is laid out
+    /// again.
+    pub fn clear(&self) {
+        self.lines.write().clear();
+        self.wrapped_lines.write().clear();
+    }
+
+    /// Returns `(line_entries, wrapped_line_entries)` for diagnostics.
+    pub fn entry_counts(&self) -> (usize, usize) {
+        (self.lines.read().len(), self.wrapped_lines.read().len())
+    }
+
     fn get_line(&self, key: &dyn AsCacheKeyRef) -> Option<Arc<LineLayout>> {
         let lines = self.lines.read();
         if let Some(entry) = lines.get(key) {
@@ -943,6 +959,31 @@ mod tests {
             .iter()
             .map(|glyph| f32::from(glyph.position.x))
             .collect()
+    }
+
+    fn make_global_cache_key(text: &str) -> Arc<CacheKey> {
+        Arc::new(CacheKey {
+            text: SharedString::from(text.to_owned()),
+            font_size: px(16.),
+            runs: SmallVec::new(),
+            wrap_width: None,
+            force_width: None,
+            letter_spacing: None,
+        })
+    }
+
+    #[test]
+    fn test_global_layout_cache_clear_drops_all_entries() {
+        let cache = GlobalLineLayoutCache::new(64, 32);
+        let layout = Arc::new(make_layout(vec![glyph_at(0., 0)]));
+        cache.insert_line(make_global_cache_key("hello"), layout.clone());
+        cache.insert_line(make_global_cache_key("world"), layout);
+
+        assert_eq!(cache.entry_counts(), (2, 0));
+
+        cache.clear();
+
+        assert_eq!(cache.entry_counts(), (0, 0));
     }
 
     #[test]
