@@ -166,6 +166,19 @@ pub(crate) fn current_platform(_headless: bool) -> Rc<dyn Platform> {
     )
 }
 
+/// Snapshot of the renderer's pooled GPU resource usage.
+///
+/// Returned by [`App::renderer_cache_stats`]. Use together with
+/// [`App::trim_gpu_caches`] to decide whether reclaiming idle GPU memory is
+/// worthwhile. Platforms that do not maintain such pools report zero.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct RendererCacheStats {
+    /// Number of idle GPU instance buffers held by the renderer pool.
+    pub idle_gpu_buffers: usize,
+    /// Configured size in bytes of each pooled GPU instance buffer.
+    pub gpu_buffer_size_bytes: usize,
+}
+
 pub(crate) trait Platform: 'static {
     fn background_executor(&self) -> BackgroundExecutor;
     fn foreground_executor(&self) -> ForegroundExecutor;
@@ -213,6 +226,18 @@ pub(crate) trait Platform: 'static {
         handle: AnyWindowHandle,
         options: WindowParams,
     ) -> anyhow::Result<Box<dyn PlatformWindow>>;
+
+    /// Drop any idle GPU buffers held by the renderer's pools, retaining
+    /// configuration. Default implementation is a no-op for platforms that do
+    /// not maintain such pools.
+    fn trim_renderer_caches(&self) {}
+
+    /// Snapshot of the renderer's pooled GPU resource usage. Default
+    /// implementation reports an empty snapshot for platforms that do not
+    /// maintain such pools.
+    fn renderer_cache_stats(&self) -> RendererCacheStats {
+        RendererCacheStats::default()
+    }
 
     /// Returns the appearance of the application's windows.
     fn window_appearance(&self) -> WindowAppearance;

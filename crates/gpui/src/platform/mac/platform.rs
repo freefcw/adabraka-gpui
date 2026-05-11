@@ -11,9 +11,9 @@ use crate::{
     CursorStyle, ForegroundExecutor, Image, ImageFormat, KeyContext, Keymap, MacDispatcher,
     MacDisplay, MacWindow, Menu, MenuItem, OsMenu, OwnedMenu, PathPromptOptions, Platform,
     PlatformDisplay, PlatformKeyboardLayout, PlatformKeyboardMapper, PlatformTextSystem,
-    PlatformWindow, Result, SemanticVersion, SharedString, SystemMenuType, Task, ThermalState,
-    TrayAnchor, TrayIconClickEvent, TrayIconEvent, TrayIconRenderingMode, TrayMenuItem,
-    WindowAppearance, WindowParams, hash,
+    PlatformWindow, RendererCacheStats, Result, SemanticVersion, SharedString, SystemMenuType,
+    Task, ThermalState, TrayAnchor, TrayIconClickEvent, TrayIconEvent, TrayIconRenderingMode,
+    TrayMenuItem, WindowAppearance, WindowParams, hash,
 };
 use anyhow::{Context as _, anyhow};
 use block::ConcreteBlock;
@@ -770,6 +770,20 @@ impl Platform for MacPlatform {
             self.foreground_executor(),
             renderer_context,
         )))
+    }
+
+    fn trim_renderer_caches(&self) {
+        let context = self.0.lock().renderer_context.clone();
+        context.lock().trim();
+    }
+
+    fn renderer_cache_stats(&self) -> RendererCacheStats {
+        let context = self.0.lock().renderer_context.clone();
+        let (idle_gpu_buffers, gpu_buffer_size_bytes) = context.lock().stats();
+        RendererCacheStats {
+            idle_gpu_buffers,
+            gpu_buffer_size_bytes,
+        }
     }
 
     fn window_appearance(&self) -> WindowAppearance {

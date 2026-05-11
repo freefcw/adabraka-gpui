@@ -77,6 +77,23 @@ impl InstanceBufferPool {
         self.buffers.clear();
     }
 
+    /// Drop every idle GPU buffer currently held by the pool while keeping the
+    /// configured `buffer_size` intact. Future calls to [`Self::acquire`] will
+    /// allocate fresh buffers on demand.
+    ///
+    /// Intended for long-running applications that want to release GPU memory
+    /// during idle periods (for example, after the last visible window is
+    /// hidden). Re-allocation cost on the next frame is sub-millisecond.
+    pub(crate) fn trim(&mut self) {
+        self.buffers.clear();
+    }
+
+    /// Returns `(idle_buffer_count, configured_buffer_size_bytes)` for
+    /// diagnostics.
+    pub(crate) fn stats(&self) -> (usize, usize) {
+        (self.buffers.len(), self.buffer_size)
+    }
+
     pub(crate) fn acquire(&mut self, device: &metal::Device) -> InstanceBuffer {
         let buffer = self.buffers.pop().unwrap_or_else(|| {
             device.new_buffer(

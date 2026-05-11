@@ -838,6 +838,28 @@ impl App {
         self.platform.quit();
     }
 
+    /// Drop any idle GPU buffers held by the renderer's pools.
+    ///
+    /// Intended for long-running applications (tray icons, notification
+    /// popups) that want to reclaim GPU memory during idle periods such as
+    /// after the last visible window is hidden. The renderer will re-allocate
+    /// fresh buffers on demand on the next frame.
+    ///
+    /// On platforms that do not maintain such pools this is a no-op.
+    pub fn trim_gpu_caches(&self) {
+        self.platform.trim_renderer_caches();
+    }
+
+    /// Snapshot of the renderer's pooled GPU resource usage. See
+    /// [`RendererCacheStats`].
+    ///
+    /// Intended primarily for diagnostics and benchmarking. Useful as a guard
+    /// before calling [`App::trim_gpu_caches`] when callers want to skip the
+    /// trim if no buffers are idle.
+    pub fn renderer_cache_stats(&self) -> crate::RendererCacheStats {
+        self.platform.renderer_cache_stats()
+    }
+
     /// Schedules all windows in the application to be redrawn. This can be called
     /// multiple times in an update cycle and still result in a single redraw.
     pub fn refresh_windows(&mut self) {
