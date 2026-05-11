@@ -107,6 +107,7 @@ cargo check -p adabraka-gpui --example window_positioning --features wayland,x11
 - Async executor integrated with the platform event loop
 - Action system for keyboard shortcuts
 - Test framework with `#[gpui::test]`
+- **Resource profiles** — tune cache sizes and GPU allocations for different app types (desktop, utility, minimal)
 
 ### Daemon & Background App Support
 - **System tray** — icon, tooltip, and nested menus with action callbacks
@@ -153,6 +154,30 @@ fn main() {
 ```
 
 See [`crates/gpui/examples/daemon_app.rs`](crates/gpui/examples/daemon_app.rs) for a full example with overlay windows, settings window, global hotkeys, and notifications.
+
+### Resource Profiles
+
+For lightweight applications (tray icons, status bars, small popups), you can reduce memory usage by selecting an appropriate resource profile:
+
+```rust
+use gpui::{Application, AppProfile};
+
+// Minimal profile for tray icons and status bars
+Application::new()
+    .with_resource_profile(AppProfile::Minimal)
+    .run(|cx| {
+        // ... your app logic
+    });
+
+// Utility profile for settings panels and dialogs
+Application::new()
+    .with_resource_profile(AppProfile::Utility)
+    .run(|cx| {
+        // ... your app logic
+    });
+```
+
+See [`docs/resource-profiles.md`](docs/resource-profiles.md) for detailed guidance on choosing and tuning resource profiles.
 
 ## Dependencies
 
