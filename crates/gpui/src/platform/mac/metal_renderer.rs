@@ -54,6 +54,7 @@ pub unsafe fn new_renderer(
 
 pub(crate) struct InstanceBufferPool {
     buffer_size: usize,
+    generation: u64,
     buffers: Vec<metal::Buffer>,
 }
 
@@ -61,6 +62,7 @@ impl Default for InstanceBufferPool {
     fn default() -> Self {
         Self {
             buffer_size: 2 * 1024 * 1024,
+            generation: 0,
             buffers: Vec::new(),
         }
     }
@@ -69,11 +71,13 @@ impl Default for InstanceBufferPool {
 pub(crate) struct InstanceBuffer {
     metal_buffer: metal::Buffer,
     size: usize,
+    generation: u64,
 }
 
 impl InstanceBufferPool {
     pub(crate) fn reset(&mut self, buffer_size: usize) {
         self.buffer_size = buffer_size;
+        self.generation = self.generation.wrapping_add(1);
         self.buffers.clear();
     }
 
@@ -81,10 +85,10 @@ impl InstanceBufferPool {
     /// configured `buffer_size` intact. Future calls to [`Self::acquire`] will
     /// allocate fresh buffers on demand.
     ///
-    /// Intended for long-running applications that want to release GPU memory
-    /// during idle periods (for example, after the last visible window is
-    /// hidden). Re-allocation cost on the next frame is sub-millisecond.
+    /// Buffers that are still in use by in-flight command buffers are also
+    /// prevented from re-entering the pool once those commands complete.
     pub(crate) fn trim(&mut self) {
+        self.generation = self.generation.wrapping_add(1);
         self.buffers.clear();
     }
 
@@ -104,11 +108,12 @@ impl InstanceBufferPool {
         InstanceBuffer {
             metal_buffer: buffer,
             size: self.buffer_size,
+            generation: self.generation,
         }
     }
 
     pub(crate) fn release(&mut self, buffer: InstanceBuffer) {
-        if buffer.size == self.buffer_size {
+        if buffer.size == self.buffer_size && buffer.generation == self.generation {
             self.buffers.push(buffer.metal_buffer)
         }
     }

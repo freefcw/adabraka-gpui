@@ -170,8 +170,10 @@ pub(crate) fn current_platform(_headless: bool) -> Rc<dyn Platform> {
 ///
 /// Returned by [`App::renderer_cache_stats`]. Use together with
 /// [`App::trim_gpu_caches`] to decide whether reclaiming idle GPU memory is
-/// worthwhile. Platforms that do not maintain such pools report zero.
+/// worthwhile. This is a best-effort diagnostic snapshot; platforms that do
+/// not maintain trimmable GPU pools report zero.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct RendererCacheStats {
     /// Number of idle GPU instance buffers held by the renderer pool.
     pub idle_gpu_buffers: usize,

@@ -838,20 +838,23 @@ impl App {
         self.platform.quit();
     }
 
-    /// Drop any idle GPU buffers held by the renderer's pools.
+    /// Ask the platform renderer to drop idle pooled GPU resources where
+    /// supported.
     ///
     /// Intended for long-running applications (tray icons, notification
     /// popups) that want to reclaim GPU memory during idle periods such as
     /// after the last visible window is hidden. The renderer will re-allocate
-    /// fresh buffers on demand on the next frame.
+    /// resources on demand on the next frame.
     ///
-    /// On platforms that do not maintain such pools this is a no-op.
+    /// This is a best-effort operation. Platforms that do not maintain
+    /// trimmable GPU pools may no-op, and active renderer resources are kept
+    /// alive until they can be safely released.
     pub fn trim_gpu_caches(&self) {
         self.platform.trim_renderer_caches();
     }
 
     /// Snapshot of the renderer's pooled GPU resource usage. See
-    /// [`RendererCacheStats`].
+    /// [`crate::RendererCacheStats`].
     ///
     /// Intended primarily for diagnostics and benchmarking. Useful as a guard
     /// before calling [`App::trim_gpu_caches`] when callers want to skip the
