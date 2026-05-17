@@ -25,6 +25,6 @@ cargo test -p adabraka-gpui --lib --features test-support -- elements::list
 cargo test -p adabraka-gpui --lib --features test-support -- keymap
 
 echo "[6/6] Full lib test..."
-cargo test -p adabraka-gpui --lib --features test-support
+cargo test -p adabraka-gpui --lib --features test-support -- --test-threads=1
 
 echo "=== 004 ALL PASSED ==="
