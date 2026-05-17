@@ -657,6 +657,10 @@ impl Drop for Scope<'_> {
 mod tests {
     use super::*;
     use crate::{TestAppContext, profiler};
+    use std::sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    };
 
     fn reset_profiler() {
         profiler::set_enabled(false);
@@ -740,5 +744,148 @@ mod tests {
         assert!(!profiler::profiler_collect_timings(&mut collector).is_empty());
 
         reset_profiler();
+    }
+
+    #[test]
+    fn baseline_foreground_task_runs_on_main_thread() {
+        let mut cx = TestAppContext::single();
+        let executor = cx.executor();
+        let ran_on_main_thread = Arc::new(AtomicBool::new(false));
+
+        cx.foreground_executor()
+            .spawn({
+                let ran_on_main_thread = ran_on_main_thread.clone();
+                async move {
+                    ran_on_main_thread.store(executor.is_main_thread(), Ordering::SeqCst);
+                }
+            })
+            .detach();
+        cx.run_until_parked();
+
+        assert!(ran_on_main_thread.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn baseline_background_task_completes_after_run_until_parked() {
+        let mut cx = TestAppContext::single();
+        let completed = Arc::new(AtomicBool::new(false));
+
+        cx.executor()
+            .spawn({
+                let completed = completed.clone();
+                async move {
+                    completed.store(true, Ordering::SeqCst);
+                }
+            })
+            .detach();
+        cx.run_until_parked();
+
+        assert!(completed.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn baseline_timer_fires_after_advance_clock() {
+        let cx = TestAppContext::single();
+        let executor = cx.executor();
+        let fired = Arc::new(AtomicBool::new(false));
+
+        executor
+            .spawn({
+                let executor = executor.clone();
+                let fired = fired.clone();
+                async move {
+                    executor.timer(Duration::from_millis(10)).await;
+                    fired.store(true, Ordering::SeqCst);
+                }
+            })
+            .detach();
+
+        executor.advance_clock(Duration::from_millis(10));
+        assert!(fired.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn baseline_deprioritize_delays_labeled_task() {
+        let mut cx = TestAppContext::single();
+        let executor = cx.executor();
+        let label = TaskLabel::new();
+        let order = Arc::new(Mutex::new(Vec::new()));
+
+        executor.deprioritize(label);
+        executor
+            .spawn_labeled(label, {
+                let order = order.clone();
+                async move {
+                    order.lock().unwrap().push("labeled");
+                }
+            })
+            .detach();
+        executor
+            .spawn({
+                let order = order.clone();
+                async move {
+                    order.lock().unwrap().push("normal");
+                }
+            })
+            .detach();
+        cx.run_until_parked();
+
+        assert_eq!(&*order.lock().unwrap(), &["normal", "labeled"]);
+    }
+
+    #[test]
+    fn baseline_block_with_timeout_returns_bounded_pending_future() {
+        let cx = TestAppContext::single();
+        let executor = cx.executor();
+        executor.set_block_on_ticks(0..=0);
+
+        let result = executor.block_with_timeout(
+            Duration::from_millis(1),
+            futures::future::pending::<()>(),
+        );
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn baseline_headless_app_tasks_complete_without_window() {
+        let mut cx = TestAppContext::single();
+        let completed = Arc::new(AtomicBool::new(false));
+
+        cx.executor()
+            .spawn({
+                let completed = completed.clone();
+                async move {
+                    completed.store(true, Ordering::SeqCst);
+                }
+            })
+            .detach();
+        cx.run_until_parked();
+
+        assert!(completed.load(Ordering::SeqCst));
+        assert!(cx.windows().is_empty());
+    }
+
+    #[test]
+    fn baseline_scoped_tasks_complete_before_scope_returns() {
+        let cx = TestAppContext::single();
+        let executor = cx.executor();
+        let completed = Arc::new(AtomicBool::new(false));
+
+        executor.block_test({
+            let executor = executor.clone();
+            let completed = completed.clone();
+            async move {
+                executor
+                    .scoped(|scope| {
+                        scope.spawn(async move {
+                            completed.store(true, Ordering::SeqCst);
+                        });
+                    })
+                    .await;
+            }
+        });
+
+        assert!(completed.load(Ordering::SeqCst));
     }
 }

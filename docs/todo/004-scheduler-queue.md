@@ -277,6 +277,22 @@ cargo test -p adabraka-gpui --lib --features test-support
 - 触发 background asset/image load。
 - 观察 profiler 中高/中/低 priority task 是否按预期。
 
+## 当前状态
+
+进行中（2026-05-17）：
+
+- 已完成 Step 0 行为基线测试，覆盖 foreground main-thread、background drain、fake-clock timer、`TaskLabel::deprioritize`、`block_with_timeout` bounded pending、no-window headless task、scoped task。
+- 尚未引入 `TaskPriority`，尚未改造 dispatcher queue，尚未引入 scheduler crate。
+- 验证脚本：`scripts/verify-004.sh`。
+
+已验证：
+
+```bash
+cargo test -p adabraka-gpui --lib --features test-support -- baseline_
+```
+
+结果：通过。
+
 ## 完成标准
 
 - 现有 public executor API 兼容。
