@@ -491,9 +491,21 @@ pub struct ScreenCaptureFrame(pub PlatformScreenCaptureFrame);
 
 /// An opaque identifier for a hardware display
 #[derive(PartialEq, Eq, Hash, Copy, Clone)]
-pub struct DisplayId(pub(crate) u32);
+pub struct DisplayId(pub(crate) u64);
+
+impl DisplayId {
+    pub(crate) fn new(id: u64) -> Self {
+        Self(id)
+    }
+}
 
 impl From<DisplayId> for u32 {
+    fn from(id: DisplayId) -> Self {
+        id.0 as u32
+    }
+}
+
+impl From<DisplayId> for u64 {
     fn from(id: DisplayId) -> Self {
         id.0
     }
@@ -1731,7 +1743,7 @@ mod layer_shell_tests {
     #[test]
     fn tray_panel_uses_display_local_anchor_bounds() {
         let anchor = TrayAnchor {
-            display_id: DisplayId(7),
+            display_id: DisplayId::new(7),
             bounds: Bounds::new(point(px(1700.0), px(1010.0)), size(px(32.0), px(32.0))),
         };
         let options = LayerShellOptions::tray_panel(display(), &anchor, size(px(320.0), px(240.0)));

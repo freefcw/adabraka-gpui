@@ -78,7 +78,7 @@ unsafe fn screen_number(screen: &NSScreen) -> CGDirectDisplayID {
 pub(crate) unsafe fn display_id_for_screen(screen: *mut Object) -> DisplayId {
     unsafe {
         let screen = as_screen(screen).expect("display_id_for_screen received a null NSScreen");
-        DisplayId(screen_number(screen))
+        DisplayId::new(screen_number(screen) as u64)
     }
 }
 
@@ -113,7 +113,7 @@ pub(crate) unsafe fn screen_frame_to_tray_anchor(
             screen_frame.origin.y + screen_frame.size.height - frame.origin.y - frame.size.height;
 
         Some(TrayAnchor {
-            display_id: DisplayId(screen_number(screen)),
+            display_id: DisplayId::new(screen_number(screen) as u64),
             bounds: Bounds::new(
                 point(px(local_x as f32), px(local_y as f32)),
                 size(px(frame.size.width as f32), px(frame.size.height as f32)),
@@ -129,7 +129,7 @@ unsafe extern "C" {
 
 impl PlatformDisplay for MacDisplay {
     fn id(&self) -> DisplayId {
-        DisplayId(self.0)
+        DisplayId::new(self.0 as u64)
     }
 
     fn uuid(&self) -> Result<Uuid> {

@@ -471,7 +471,7 @@ fn output_for_layer_shell(
     params.display_id.and_then(|display_id| {
         outputs
             .iter()
-            .find(|output| output.id.protocol_id() == display_id.0)
+            .find(|output| output.id.protocol_id() as u64 == display_id.0)
             .map(|output| output.output.clone())
     })
 }
@@ -569,7 +569,7 @@ fn find_output_for_params<'a>(params: &WindowParams, outputs: &'a [Output]) -> O
         .and_then(|display_id| {
             outputs
                 .iter()
-                .find(|output| output.id.protocol_id() == display_id.0)
+                .find(|output| output.id.protocol_id() as u64 == display_id.0)
         })
         .or_else(|| {
             outputs.iter().find(|output| {

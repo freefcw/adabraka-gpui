@@ -708,7 +708,7 @@ impl MacWindowState {
             window_state: self.self_ref.clone(),
         });
         if let Some(mut display_link) = DisplayLink::new(
-            display_id.0,
+            display_id.0 as u32,
             Box::into_raw(frame_request_context) as *mut c_void,
             step,
             drop_frame_request_context,

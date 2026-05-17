@@ -53,6 +53,7 @@ pub struct WindowsWindowState {
     pub direct_manipulation: DirectManipulationHandler,
 
     pub renderer: DirectXRenderer,
+    pub force_render_after_recovery: bool,
 
     pub click_state: ClickState,
     pub system_settings: WindowsSystemSettings,
@@ -110,9 +111,13 @@ impl WindowsWindowState {
         };
         let border_offset = WindowBorderOffset::default();
         let restore_from_minimized = None;
-        let renderer =
-            DirectXRenderer::new(hwnd, directx_devices, disable_direct_composition, atlas_initial_size)
-                .context("Creating DirectX renderer")?;
+        let renderer = DirectXRenderer::new(
+            hwnd,
+            directx_devices,
+            disable_direct_composition,
+            atlas_initial_size,
+        )
+        .context("Creating DirectX renderer")?;
         let callbacks = Callbacks::default();
         let input_handler = None;
         let pending_surrogate = None;
@@ -146,6 +151,7 @@ impl WindowsWindowState {
             hovered,
             direct_manipulation,
             renderer,
+            force_render_after_recovery: false,
             click_state,
             system_settings,
             current_cursor,
@@ -419,12 +425,11 @@ impl WindowsWindow {
         }
 
         let hinstance = get_module_handle();
-        let display = if let Some(display_id) = params.display_id {
-            // if we obtain a display_id, then this ID must be valid.
-            WindowsDisplay::new(display_id).unwrap()
-        } else {
-            WindowsDisplay::primary_monitor().unwrap()
-        };
+        let display = params
+            .display_id
+            .and_then(WindowsDisplay::new)
+            .or_else(WindowsDisplay::primary_monitor)
+            .context("failed to find any monitor")?;
         let appearance = system_appearance().unwrap_or_default();
         let mut context = WindowCreateContext {
             inner: None,

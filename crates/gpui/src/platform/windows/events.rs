@@ -147,7 +147,9 @@ impl WindowsWindowInner {
             // monitor is invalid, we do nothing.
             if !monitor.is_invalid() && lock.display.handle != monitor {
                 // we will get the same monitor if we only have one
-                lock.display = WindowsDisplay::new_with_handle(monitor);
+                if let Some(display) = WindowsDisplay::new_with_handle(monitor) {
+                    lock.display = display;
+                }
             }
         }
         if let Some(mut callback) = lock.callbacks.moved.take() {
@@ -760,6 +762,22 @@ impl WindowsWindowInner {
     fn handle_activate_msg(self: &Rc<Self>, wparam: WPARAM) -> Option<isize> {
         let activated = wparam.loword() > 0;
         let this = self.clone();
+
+        if activated {
+            let mut lock = this.state.borrow_mut();
+            lock.last_reported_modifiers = None;
+            lock.last_reported_capslock = None;
+
+            if let Some(mut func) = lock.callbacks.input.take() {
+                drop(lock);
+                func(PlatformInput::ModifiersChanged(ModifiersChangedEvent {
+                    modifiers: current_modifiers(),
+                    capslock: current_capslock(),
+                }));
+                this.state.borrow_mut().callbacks.input = Some(func);
+            }
+        }
+
         self.executor
             .spawn(async move {
                 let mut lock = this.state.borrow_mut();
@@ -860,8 +878,9 @@ impl WindowsWindowInner {
             log::error!("No monitor detected!");
             return None;
         }
-        let new_display = WindowsDisplay::new_with_handle(new_monitor);
-        self.state.borrow_mut().display = new_display;
+        if let Some(new_display) = WindowsDisplay::new_with_handle(new_monitor) {
+            self.state.borrow_mut().display = new_display;
+        }
         Some(0)
     }
 
@@ -1233,6 +1252,7 @@ impl WindowsWindowInner {
         let devices = lparam.0 as *const DirectXDevices;
         let devices = unsafe { &*devices };
         lock.renderer.handle_device_lost(&devices);
+        lock.force_render_after_recovery = true;
         Some(0)
     }
 
@@ -1247,6 +1267,12 @@ impl WindowsWindowInner {
     #[inline]
     fn draw_window(&self, handle: HWND, force_render: bool) -> Option<isize> {
         let mut request_frame = self.state.borrow_mut().callbacks.request_frame.take()?;
+        let force_render = {
+            let mut lock = self.state.borrow_mut();
+            let force_render_after_recovery = lock.force_render_after_recovery;
+            lock.force_render_after_recovery = false;
+            force_render || force_render_after_recovery
+        };
         let events = {
             let lock = self.state.borrow();
             lock.direct_manipulation.update();
