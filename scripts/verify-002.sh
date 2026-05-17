@@ -20,6 +20,6 @@ cargo test -p adabraka-gpui --lib --features test-support -- executor
 cargo test -p adabraka-gpui --lib --features test-support -- text_system
 
 echo "[5/5] Full lib test..."
-cargo test -p adabraka-gpui --lib --features test-support
+cargo test -p adabraka-gpui --lib --features test-support -- --test-threads=1
 
 echo "=== 002 ALL PASSED ==="
