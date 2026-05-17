@@ -431,12 +431,21 @@ pub trait PlatformDisplay: Send + Sync + Debug {
     /// Get the bounds for this display
     fn bounds(&self) -> Bounds<Pixels>;
 
+    /// Get the visible bounds for this display, excluding taskbar/dock areas.
+    /// Defaults to the full display bounds if the platform does not expose a
+    /// separate work area.
+    fn visible_bounds(&self) -> Bounds<Pixels> {
+        self.bounds()
+    }
+
     /// Get the default bounds for this display to place a window
     fn default_bounds(&self) -> Bounds<Pixels> {
-        let center = self.bounds().center();
-        let offset = DEFAULT_WINDOW_SIZE / 2.0;
+        let bounds = self.visible_bounds();
+        let center = bounds.center();
+        let window_size = DEFAULT_WINDOW_SIZE.min(&bounds.size);
+        let offset = window_size / 2.0;
         let origin = point(center.x - offset.width, center.y - offset.height);
-        Bounds::new(origin, DEFAULT_WINDOW_SIZE)
+        Bounds::new(origin, window_size)
     }
 }
 

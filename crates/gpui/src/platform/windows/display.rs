@@ -15,7 +15,9 @@ use windows::{
     core::*,
 };
 
-use crate::{Bounds, DevicePixels, DisplayId, Pixels, PlatformDisplay, logical_point, point, size};
+use crate::{
+    Bounds, DevicePixels, DisplayId, Pixels, PlatformDisplay, logical_point, point, px, size,
+};
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct WindowsDisplay {
@@ -23,6 +25,7 @@ pub(crate) struct WindowsDisplay {
     pub display_id: DisplayId,
     scale_factor: f32,
     bounds: Bounds<Pixels>,
+    visible_bounds: Bounds<Pixels>,
     physical_bounds: Bounds<DevicePixels>,
     uuid: Uuid,
 }
@@ -52,6 +55,7 @@ impl WindowsDisplay {
         info: MONITORINFOEXW,
     ) -> Option<Self> {
         let monitor_size = info.monitorInfo.rcMonitor;
+        let work_area = info.monitorInfo.rcWork;
         let uuid = generate_uuid(&info.szDevice);
         let scale_factor = get_scale_factor_for_monitor(handle).log_err()?;
         let physical_size = size(
@@ -70,6 +74,14 @@ impl WindowsDisplay {
                     scale_factor,
                 ),
                 size: physical_size.to_pixels(scale_factor),
+            },
+            visible_bounds: Bounds {
+                origin: logical_point(work_area.left as f32, work_area.top as f32, scale_factor),
+                size: size(
+                    (work_area.right - work_area.left) as f32 / scale_factor,
+                    (work_area.bottom - work_area.top) as f32 / scale_factor,
+                )
+                .map(px),
             },
             physical_bounds: Bounds {
                 origin: point(monitor_size.left.into(), monitor_size.top.into()),
@@ -142,6 +154,10 @@ impl PlatformDisplay for WindowsDisplay {
 
     fn bounds(&self) -> Bounds<Pixels> {
         self.bounds
+    }
+
+    fn visible_bounds(&self) -> Bounds<Pixels> {
+        self.visible_bounds
     }
 }
 

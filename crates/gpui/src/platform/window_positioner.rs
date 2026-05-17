@@ -11,17 +11,20 @@ pub fn compute_window_bounds(
     match position {
         WindowPosition::Center => {
             if let Some(display) = primary_display {
-                center_in(size, display.bounds())
+                center_in(size, display.visible_bounds())
             } else {
                 Bounds::new(Point::default(), size)
             }
         }
         WindowPosition::CenterOnDisplay(id) => {
-            let display_bounds = displays.iter().find(|d| d.id() == *id).map(|d| d.bounds());
+            let display_bounds = displays
+                .iter()
+                .find(|d| d.id() == *id)
+                .map(|d| d.visible_bounds());
             if let Some(bounds) = display_bounds {
                 center_in(size, bounds)
             } else if let Some(display) = primary_display {
-                center_in(size, display.bounds())
+                center_in(size, display.visible_bounds())
             } else {
                 Bounds::new(Point::default(), size)
             }
@@ -67,7 +70,7 @@ fn corner_position(
     bottom: bool,
 ) -> Bounds<Pixels> {
     if let Some(display) = primary_display {
-        let db = display.bounds();
+        let db = display.visible_bounds();
         let x = if right {
             db.origin.x + db.size.width - size.width - margin
         } else {
@@ -81,5 +84,78 @@ fn corner_position(
         Bounds::new(point(x, y), size)
     } else {
         Bounds::new(Point::default(), size)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{DisplayId, px, size};
+    use anyhow::Result;
+    use uuid::Uuid;
+
+    #[derive(Debug)]
+    struct FakeDisplay {
+        id: DisplayId,
+        bounds: Bounds<Pixels>,
+        visible_bounds: Bounds<Pixels>,
+    }
+
+    impl PlatformDisplay for FakeDisplay {
+        fn id(&self) -> DisplayId {
+            self.id
+        }
+
+        fn uuid(&self) -> Result<Uuid> {
+            Ok(Uuid::nil())
+        }
+
+        fn bounds(&self) -> Bounds<Pixels> {
+            self.bounds
+        }
+
+        fn visible_bounds(&self) -> Bounds<Pixels> {
+            self.visible_bounds
+        }
+    }
+
+    fn display() -> Rc<dyn PlatformDisplay> {
+        Rc::new(FakeDisplay {
+            id: DisplayId::new(1),
+            bounds: Bounds::new(point(px(0.), px(0.)), size(px(1000.), px(800.))),
+            visible_bounds: Bounds::new(point(px(0.), px(40.)), size(px(1000.), px(700.))),
+        })
+    }
+
+    #[test]
+    fn centers_windows_in_visible_bounds() {
+        let display = display();
+        let bounds = compute_window_bounds(
+            size(px(200.), px(100.)),
+            &WindowPosition::Center,
+            &[display.clone()],
+            Some(&display),
+        );
+
+        assert_eq!(
+            bounds,
+            Bounds::new(point(px(400.), px(340.)), size(px(200.), px(100.)))
+        );
+    }
+
+    #[test]
+    fn corners_windows_in_visible_bounds() {
+        let display = display();
+        let bounds = compute_window_bounds(
+            size(px(200.), px(100.)),
+            &WindowPosition::BottomRight { margin: px(10.) },
+            &[display.clone()],
+            Some(&display),
+        );
+
+        assert_eq!(
+            bounds,
+            Bounds::new(point(px(790.), px(630.)), size(px(200.), px(100.)))
+        );
     }
 }

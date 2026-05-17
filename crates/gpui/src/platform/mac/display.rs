@@ -172,4 +172,47 @@ impl PlatformDisplay for MacDisplay {
             }
         }
     }
+
+    fn visible_bounds(&self) -> Bounds<Pixels> {
+        unsafe {
+            let Some(screen) = self.ns_screen() else {
+                return self.bounds();
+            };
+
+            let screen_frame = screen.frame();
+            let visible_frame = screen.visibleFrame();
+
+            // AppKit uses a bottom-left origin. GPUI display-local coordinates
+            // use top-left origin.
+            let origin_y =
+                screen_frame.size.height - visible_frame.origin.y - visible_frame.size.height
+                    + screen_frame.origin.y;
+
+            Bounds {
+                origin: point(
+                    px(visible_frame.origin.x as f32 - screen_frame.origin.x as f32),
+                    px(origin_y as f32),
+                ),
+                size: size(
+                    px(visible_frame.size.width as f32),
+                    px(visible_frame.size.height as f32),
+                ),
+            }
+        }
+    }
+}
+
+impl MacDisplay {
+    unsafe fn ns_screen(&self) -> Option<objc2::rc::Retained<NSScreen>> {
+        unsafe {
+            let screens = NSScreen::screens(MainThreadMarker::new_unchecked());
+            for i in 0..screens.len() {
+                let screen = screens.objectAtIndex(i);
+                if screen_number(&screen) == self.0 {
+                    return Some(screen);
+                }
+            }
+            None
+        }
+    }
 }
