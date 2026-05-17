@@ -1,4 +1,4 @@
-use crate::{PlatformDispatcher, TaskLabel};
+use crate::{PlatformDispatcher, TaskLabel, TaskPriority};
 use async_task::Runnable;
 use backtrace::Backtrace;
 use collections::{HashMap, HashSet, VecDeque};
@@ -29,6 +29,7 @@ pub struct TestDispatcher {
 struct TestDispatcherState {
     random: StdRng,
     foreground: HashMap<TestDispatcherId, VecDeque<Runnable>>,
+    high_background: Vec<Runnable>,
     background: Vec<Runnable>,
     deprioritized_background: Vec<Runnable>,
     delayed: Vec<(Duration, Runnable)>,
@@ -49,6 +50,7 @@ impl TestDispatcher {
         let state = TestDispatcherState {
             random,
             foreground: HashMap::default(),
+            high_background: Vec::new(),
             background: Vec::new(),
             deprioritized_background: Vec::new(),
             delayed: Vec::new(),
@@ -142,11 +144,13 @@ impl TestDispatcher {
                 .map(|runnables| runnables.len())
                 .sum()
         };
+        let high_background_len = state.high_background.len();
         let background_len = state.background.len();
+        let ready_background_len = high_background_len + background_len;
 
         let runnable;
         let main_thread;
-        if foreground_len == 0 && background_len == 0 {
+        if foreground_len == 0 && ready_background_len == 0 {
             let deprioritized_background_len = state.deprioritized_background.len();
             if deprioritized_background_len == 0 {
                 return false;
@@ -157,7 +161,7 @@ impl TestDispatcher {
         } else {
             main_thread = state.random.random_ratio(
                 foreground_len as u32,
-                (foreground_len + background_len) as u32,
+                (foreground_len + ready_background_len) as u32,
             );
             if main_thread {
                 let state = &mut *state;
@@ -169,6 +173,9 @@ impl TestDispatcher {
                     .unwrap()
                     .pop_front()
                     .unwrap();
+            } else if high_background_len > 0 {
+                let ix = state.random.random_range(0..high_background_len);
+                runnable = state.high_background.swap_remove(ix);
             } else {
                 let ix = state.random.random_range(0..background_len);
                 runnable = state.background.swap_remove(ix);
@@ -273,7 +280,11 @@ impl PlatformDispatcher for TestDispatcher {
             if label.is_some_and(|label| state.deprioritized_task_labels.contains(&label)) {
                 state.deprioritized_background.push(runnable);
             } else {
-                state.background.push(runnable);
+                match label.map(TaskLabel::priority).unwrap_or_default() {
+                    TaskPriority::High => state.high_background.push(runnable),
+                    TaskPriority::Medium => state.background.push(runnable),
+                    TaskPriority::Low => state.deprioritized_background.push(runnable),
+                }
             }
         }
         self.unparker.unpark();

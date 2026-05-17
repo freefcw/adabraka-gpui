@@ -108,10 +108,36 @@ impl<T> Future for Task<T> {
     }
 }
 
-/// A task label is an opaque identifier that you can use to
-/// refer to a task in tests.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub struct TaskLabel(NonZeroUsize);
+/// The scheduling priority for a task.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum TaskPriority {
+    /// Work that should be preferred over ordinary background work.
+    High,
+    /// Ordinary background work. This is the default and matches existing behavior.
+    #[default]
+    Medium,
+    /// Work that can run after ordinary background work.
+    Low,
+}
+
+/// A task label is an opaque identifier that you can use to refer to a task in tests.
+#[derive(Clone, Copy, Debug, Eq)]
+pub struct TaskLabel {
+    id: NonZeroUsize,
+    priority: TaskPriority,
+}
+
+impl PartialEq for TaskLabel {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+impl std::hash::Hash for TaskLabel {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+    }
+}
 
 impl Default for TaskLabel {
     fn default() -> Self {
@@ -122,8 +148,20 @@ impl Default for TaskLabel {
 impl TaskLabel {
     /// Construct a new task label.
     pub fn new() -> Self {
+        Self::new_with_priority(TaskPriority::Medium)
+    }
+
+    fn new_with_priority(priority: TaskPriority) -> Self {
         static NEXT_TASK_LABEL: AtomicUsize = AtomicUsize::new(1);
-        Self(NEXT_TASK_LABEL.fetch_add(1, SeqCst).try_into().unwrap())
+        Self {
+            id: NEXT_TASK_LABEL.fetch_add(1, SeqCst).try_into().unwrap(),
+            priority,
+        }
+    }
+
+    #[doc(hidden)]
+    pub fn priority(self) -> TaskPriority {
+        self.priority
     }
 }
 
@@ -208,6 +246,22 @@ impl BackgroundExecutor {
         R: Send + 'static,
     {
         self.spawn_internal::<R>(Box::pin(future), Some(label))
+    }
+
+    #[track_caller]
+    #[doc(hidden)]
+    pub fn spawn_with_priority<R>(
+        &self,
+        priority: TaskPriority,
+        future: impl Future<Output = R> + Send + 'static,
+    ) -> Task<R>
+    where
+        R: Send + 'static,
+    {
+        self.spawn_internal::<R>(
+            Box::pin(future),
+            Some(TaskLabel::new_with_priority(priority)),
+        )
     }
 
     #[track_caller]
@@ -885,6 +939,74 @@ mod tests {
                     .await;
             }
         });
+
+        assert!(completed.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn spawn_with_priority_defaults_to_medium_behavior() {
+        let mut cx = TestAppContext::single();
+        let completed = Arc::new(AtomicBool::new(false));
+
+        cx.executor()
+            .spawn_with_priority(TaskPriority::Medium, {
+                let completed = completed.clone();
+                async move {
+                    completed.store(true, Ordering::SeqCst);
+                }
+            })
+            .detach();
+        cx.run_until_parked();
+
+        assert!(completed.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn spawn_with_priority_high_is_observable_in_test_dispatcher() {
+        let mut cx = TestAppContext::single();
+        let executor = cx.executor();
+        let order = Arc::new(Mutex::new(Vec::new()));
+
+        executor
+            .spawn_with_priority(TaskPriority::Low, {
+                let order = order.clone();
+                async move {
+                    order.lock().unwrap().push("low");
+                }
+            })
+            .detach();
+        executor
+            .spawn_with_priority(TaskPriority::High, {
+                let order = order.clone();
+                async move {
+                    order.lock().unwrap().push("high");
+                }
+            })
+            .detach();
+        cx.run_until_parked();
+
+        assert_eq!(&*order.lock().unwrap(), &["high", "low"]);
+    }
+
+    #[test]
+    fn spawn_labeled_deprioritize_still_works_after_priority_addition() {
+        baseline_deprioritize_delays_labeled_task();
+    }
+
+    #[test]
+    fn low_priority_task_eventually_runs() {
+        let mut cx = TestAppContext::single();
+        let completed = Arc::new(AtomicBool::new(false));
+
+        cx.executor()
+            .spawn_with_priority(TaskPriority::Low, {
+                let completed = completed.clone();
+                async move {
+                    completed.store(true, Ordering::SeqCst);
+                }
+            })
+            .detach();
+        cx.run_until_parked();
 
         assert!(completed.load(Ordering::SeqCst));
     }

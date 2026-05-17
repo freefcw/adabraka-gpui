@@ -282,13 +282,17 @@ cargo test -p adabraka-gpui --lib --features test-support
 进行中（2026-05-17）：
 
 - 已完成 Step 0 行为基线测试，覆盖 foreground main-thread、background drain、fake-clock timer、`TaskLabel::deprioritize`、`block_with_timeout` bounded pending、no-window headless task、scoped task。
-- 尚未引入 `TaskPriority`，尚未改造 dispatcher queue，尚未引入 scheduler crate。
+- 已完成本地 `TaskPriority::{High, Medium, Low}` 试点；默认 `spawn` 仍为 Medium，`PlatformDispatcher` trait 未改变。
+- `TestDispatcher` 已增加 high / medium / low background queue，`TaskLabel::deprioritize` 仍映射为 low queue。
+- 尚未引入 scheduler crate，尚未替换 `Task<T>`。
 - 验证脚本：`scripts/verify-004.sh`。
 
 已验证：
 
 ```bash
 cargo test -p adabraka-gpui --lib --features test-support -- baseline_
+cargo test -p adabraka-gpui --lib --features test-support -- spawn_with_priority
+cargo test -p adabraka-gpui --lib --features test-support -- priority
 ```
 
 结果：通过。
