@@ -594,6 +594,7 @@ impl TestApp {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn with_platform_text_system(
         platform_text_system: Arc<dyn PlatformTextSystem>,
     ) -> Self {
@@ -910,7 +911,7 @@ impl VisualTestCapabilities {
     pub fn detect() -> Self {
         Self {
             real_renderer: detect_real_visual_renderer(),
-            screenshot_capture: cfg!(target_os = "macos"),
+            screenshot_capture: false,
             offscreen_positioned_window: cfg!(target_os = "macos"),
             deterministic_clock: true,
         }
@@ -940,6 +941,147 @@ fn detect_real_visual_renderer() -> bool {
 )))]
 fn detect_real_visual_renderer() -> bool {
     false
+}
+
+/// A macOS-only visual test context backed by the real platform renderer.
+///
+/// Windows opened through this context use screen-outside coordinates so manual
+/// real renderer smoke tests can run without placing a visible window in the
+/// user's normal workspace.
+#[cfg(all(target_os = "macos", any(test, feature = "test-support")))]
+pub struct RealVisualTestContext {
+    /// The underlying app cell.
+    pub app: Rc<AppCell>,
+    background_executor: BackgroundExecutor,
+    foreground_executor: ForegroundExecutor,
+    dispatcher: TestDispatcher,
+    platform: Rc<crate::VisualTestPlatform>,
+    text_system: Arc<TextSystem>,
+}
+
+#[cfg(all(target_os = "macos", any(test, feature = "test-support")))]
+impl RealVisualTestContext {
+    /// Creates a real visual test context when the current platform reports support.
+    pub fn new_if_supported() -> Option<Self> {
+        VisualTestCapabilities::detect()
+            .real_renderer
+            .then(Self::new)
+    }
+
+    /// Creates a real visual test context using the default empty asset source.
+    pub fn new() -> Self {
+        Self::with_asset_source(Arc::new(()))
+    }
+
+    /// Starts the real platform run loop and invokes the callback after launch.
+    pub fn run<F>(self, on_finish_launching: F)
+    where
+        F: 'static + FnOnce(&mut Self),
+    {
+        let platform = self.platform.clone();
+        let mut cx = Some(self);
+        platform.run(Box::new(move || {
+            if let Some(mut cx) = cx.take() {
+                on_finish_launching(&mut cx);
+            }
+        }));
+    }
+
+    /// Creates a real visual test context with a custom asset source.
+    pub fn with_asset_source(asset_source: Arc<dyn crate::AssetSource>) -> Self {
+        let seed = std::env::var("SEED")
+            .ok()
+            .and_then(|seed| seed.parse().ok())
+            .unwrap_or(0);
+        let platform = Rc::new(crate::VisualTestPlatform::new(
+            crate::current_platform(false),
+            seed,
+        ));
+        let dispatcher = platform.dispatcher().clone();
+        let background_executor = platform.background_executor();
+        let foreground_executor = platform.foreground_executor();
+        let default_profile = crate::AppResourceProfile::default();
+        let text_system = Arc::new(TextSystem::new(
+            platform.text_system(),
+            &default_profile.text,
+        ));
+        let http_client = http_client::FakeHttpClient::with_404_response();
+        let app = App::new_app(platform.clone(), asset_source, http_client, default_profile);
+
+        Self {
+            app,
+            background_executor,
+            foreground_executor,
+            dispatcher,
+            platform,
+            text_system,
+        }
+    }
+
+    /// Opens a real platform window at screen-outside coordinates.
+    pub fn open_offscreen_window<V: 'static + Render>(
+        &mut self,
+        size: Size<Pixels>,
+        build_root_view: impl FnOnce(&mut Window, &mut App) -> Entity<V>,
+    ) -> Result<WindowHandle<V>> {
+        let bounds = Bounds::new(crate::point(crate::px(-10000.0), crate::px(-10000.0)), size);
+        let mut app = self.app.borrow_mut();
+        app.open_window(
+            WindowOptions {
+                window_bounds: Some(WindowBounds::Windowed(bounds)),
+                focus: false,
+                show: true,
+                ..Default::default()
+            },
+            build_root_view,
+        )
+    }
+
+    /// Runs pending deterministic app tasks until parked.
+    pub fn run_until_parked(&self) {
+        self.dispatcher.run_until_parked();
+    }
+
+    /// Advances deterministic app time and drains tasks that become ready.
+    pub fn advance_clock(&self, duration: Duration) {
+        self.dispatcher.advance_clock(duration);
+    }
+
+    /// Gives mutable access to a window.
+    pub fn update_window<T, F>(&mut self, window: AnyWindowHandle, f: F) -> Result<T>
+    where
+        F: FnOnce(AnyView, &mut Window, &mut App) -> T,
+    {
+        self.app.borrow_mut().update_window(window, f)
+    }
+
+    /// Gracefully quits the underlying real platform app.
+    pub fn quit(&self) {
+        self.app.borrow().quit();
+    }
+
+    /// Spawns a task on the deterministic foreground executor.
+    pub fn spawn<R>(&self, future: impl Future<Output = R> + 'static) -> Task<R>
+    where
+        R: 'static,
+    {
+        self.foreground_executor.spawn(future)
+    }
+
+    /// Returns the deterministic background executor.
+    pub fn executor(&self) -> BackgroundExecutor {
+        self.background_executor.clone()
+    }
+
+    /// Returns the text system used by this context.
+    pub fn text_system(&self) -> &Arc<TextSystem> {
+        &self.text_system
+    }
+
+    /// Returns whether the real platform supports screen capture APIs.
+    pub fn is_screen_capture_supported(&self) -> bool {
+        self.platform.is_screen_capture_supported()
+    }
 }
 
 #[derive(Deref, DerefMut, Clone)]
@@ -1329,8 +1471,9 @@ mod test_app_tests {
     use crate::{Styled as _, TextRun, font, px};
     use std::sync::{
         Arc,
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     };
+    use std::time::Duration;
 
     struct TestView {
         value: usize,
@@ -1430,6 +1573,31 @@ mod test_app_tests {
         assert!(artifact.quads > 0);
     }
 
+    #[cfg(target_os = "macos")]
+    #[test]
+    #[ignore]
+    fn real_visual_context_advance_clock_works() {
+        let Some(cx) = RealVisualTestContext::new_if_supported() else {
+            eprintln!("skipping: real visual renderer is not available");
+            return;
+        };
+        let completed = Arc::new(AtomicBool::new(false));
+        let timer = cx.executor().timer(Duration::from_secs(1));
+        let completed_task = completed.clone();
+        cx.spawn(async move {
+            timer.await;
+            completed_task.store(true, Ordering::SeqCst);
+        })
+        .detach();
+
+        cx.run_until_parked();
+        assert!(!completed.load(Ordering::SeqCst));
+
+        cx.advance_clock(Duration::from_secs(1));
+        cx.run_until_parked();
+        assert!(completed.load(Ordering::SeqCst));
+    }
+
     #[test]
     fn test_app_flush_with_no_windows_succeeds() {
         let mut app = TestApp::new();
@@ -1493,7 +1661,7 @@ mod test_app_tests {
     fn visual_test_capabilities_macos_has_real_renderer() {
         let capabilities = VisualTestCapabilities::detect();
         assert!(capabilities.real_renderer);
-        assert!(capabilities.screenshot_capture);
+        assert!(!capabilities.screenshot_capture);
         assert!(capabilities.offscreen_positioned_window);
     }
 }

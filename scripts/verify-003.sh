@@ -23,6 +23,6 @@ cargo test -p adabraka-gpui --lib --features test-support
 
 echo ""
 echo "(Optional) Real renderer smoke:"
-echo "  cargo test -p adabraka-gpui --lib --features test-support -- real_visual --ignored"
+echo "  cargo test -p adabraka-gpui --test real_visual_smoke --features test-support -- --ignored"
 
 echo "=== 003 ALL PASSED ==="

@@ -248,6 +248,12 @@ name = "test_macro_glob_import"
 path = "tests/test_macro_glob_import.rs"
 required-features = ["test-support"]
 
+[[test]]
+name = "real_visual_smoke"
+path = "tests/real_visual_smoke.rs"
+harness = false
+required-features = ["test-support"]
+
 [dependencies.anyhow]
 version = "1.0.86"
 
