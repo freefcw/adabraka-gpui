@@ -216,24 +216,24 @@ cargo test -p adabraka-gpui --test real_visual_smoke --features test-support -- 
 进行中（2026-05-17）：
 
 - 已新增 `VisualTestCapabilities::detect()`，用于报告 `real_renderer`、`screenshot_capture`、`offscreen_positioned_window`、`deterministic_clock`。
-- macOS 当前报告真实 renderer 和屏幕外坐标窗口可用；`screenshot_capture` 在 `render_to_image` 落地前保持 false。Linux/FreeBSD 根据 `DISPLAY` / `WAYLAND_DISPLAY` 探测真实 renderer；Windows 当前报告真实 renderer 可用。
+- macOS 当前报告真实 renderer、截图和屏幕外坐标窗口可用；Linux/FreeBSD 根据 `DISPLAY` / `WAYLAND_DISPLAY` 探测真实 renderer；Windows 当前报告真实 renderer 可用。
 - 已新增 capability detection 自动测试，不创建真实窗口、不触发 GPU smoke。
 - 已新增 mock visual render artifact：`TestWindow::draw(scene)` 会记录场景结构，`TestAppWindow::visual_render_artifact()` 可读取最近一次 mock draw 的 primitive 统计。
 - 已新增 macOS `RealVisualTestContext` / `VisualTestPlatform` 试点，并通过 `harness = false` 的 `real_visual_smoke` 在主线程打开屏外坐标窗口、绘制 simple div、调用真实 renderer present。
-- 已新增上游同名 `Window::render_to_image()` / `PlatformWindow::render_to_image(scene)` 接口；当前默认返回 unsupported，避免在 Metal readback 实现前误报截图能力。
+- 已新增上游同名 `Window::render_to_image()` / `PlatformWindow::render_to_image(scene)` 接口；macOS Metal 已实现 scene-to-image readback，其他平台默认返回 unsupported。
 - 验证脚本：`scripts/verify-003.sh`。
 
-当前 screenshot smoke 尚未落地，原因：
+当前 screenshot 后续边界：
 
-- 上游 `VisualTestAppContext::capture_screenshot` 依赖 `Window::render_to_image()` / `PlatformWindow::render_to_image()`。
-- macOS/Windows/Linux renderer 还没有具体 scene-to-image 读回实现。
-- `real_visual_smoke` 已覆盖真实 renderer present，但不读取像素，因此不能替代 screenshot nonblank 断言。
+- `real_visual_smoke` 已覆盖 macOS 截图尺寸、非透明和非纯色断言。
+- Windows/Linux renderer 还没有具体 scene-to-image 读回实现。
+- 后续如需 golden snapshot，应另行加入阈值比较，不放进首版 smoke。
 
 下一步建议拆成独立小切片：
 
-1. 在 macOS Metal renderer 先实现 `PlatformWindow::render_to_image(scene)`。
-2. 添加 `real_visual_screenshot_* --ignored` smoke，unsupported 环境返回 skip。
-3. 再评估 Linux wgpu headless surface 或 readback 路径。
+1. 再评估 Linux wgpu headless surface 或 readback 路径。
+2. Windows DirectX readback 可以按同一 `PlatformWindow::render_to_image(scene)` 接口补。
+3. 如需 snapshot，再添加局部 golden baseline 和阈值工具。
 
 已验证：
 
@@ -245,7 +245,7 @@ cargo test -p adabraka-gpui --test real_visual_smoke --features test-support
 cargo test -p adabraka-gpui --test real_visual_smoke --features test-support -- --ignored
 ```
 
-结果：通过。当前 003 已完成 capability detection、mock structural artifact、macOS real renderer smoke 和 render-to-image unsupported 接口；screenshot smoke 仍待后续切片实现。
+结果：通过。当前 003 已完成 capability detection、mock structural artifact、macOS real renderer smoke 和 macOS screenshot readback smoke；跨平台 readback / snapshot 属后续扩展。
 
 ## 完成标准
 

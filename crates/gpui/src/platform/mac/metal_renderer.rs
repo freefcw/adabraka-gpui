@@ -456,6 +456,99 @@ impl MetalRenderer {
         }
     }
 
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn render_scene_to_image(
+        &mut self,
+        scene: &Scene,
+        viewport_size: Size<DevicePixels>,
+    ) -> Result<image::RgbaImage> {
+        if viewport_size.width.0 <= 0 || viewport_size.height.0 <= 0 {
+            anyhow::bail!("invalid render_to_image size: {:?}", viewport_size);
+        }
+
+        self.update_path_intermediate_textures(viewport_size);
+        self.ensure_buffer_size(scene);
+
+        let texture_descriptor = metal::TextureDescriptor::new();
+        texture_descriptor.set_width(viewport_size.width.0 as u64);
+        texture_descriptor.set_height(viewport_size.height.0 as u64);
+        texture_descriptor.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
+        texture_descriptor
+            .set_usage(metal::MTLTextureUsage::RenderTarget | metal::MTLTextureUsage::ShaderRead);
+        texture_descriptor.set_storage_mode(metal::MTLStorageMode::Managed);
+        let target_texture = self.device.new_texture(&texture_descriptor);
+
+        loop {
+            let mut instance_buffer = self.instance_buffer_pool.lock().acquire(&self.device);
+            let command_buffer = self.draw_primitives_to_texture(
+                scene,
+                &mut instance_buffer,
+                &target_texture,
+                viewport_size,
+            );
+
+            match command_buffer {
+                Ok(command_buffer) => {
+                    let instance_buffer_pool = self.instance_buffer_pool.clone();
+                    let instance_buffer = Cell::new(Some(instance_buffer));
+                    let block = ConcreteBlock::new(move |_| {
+                        if let Some(instance_buffer) = instance_buffer.take() {
+                            instance_buffer_pool.lock().release(instance_buffer);
+                        }
+                    });
+                    let block = block.copy();
+                    command_buffer.add_completed_handler(&block);
+
+                    let blit_encoder = command_buffer.new_blit_command_encoder();
+                    blit_encoder.synchronize_resource(&target_texture);
+                    blit_encoder.end_encoding();
+
+                    command_buffer.commit();
+                    command_buffer.wait_until_completed();
+
+                    let width = viewport_size.width.0 as u32;
+                    let height = viewport_size.height.0 as u32;
+                    let bytes_per_row = width as usize * 4;
+                    let mut pixels = vec![0; height as usize * bytes_per_row];
+                    let region = metal::MTLRegion {
+                        origin: metal::MTLOrigin { x: 0, y: 0, z: 0 },
+                        size: metal::MTLSize {
+                            width: width as u64,
+                            height: height as u64,
+                            depth: 1,
+                        },
+                    };
+                    target_texture.get_bytes(
+                        pixels.as_mut_ptr() as *mut c_void,
+                        bytes_per_row as u64,
+                        region,
+                        0,
+                    );
+
+                    for pixel in pixels.chunks_exact_mut(4) {
+                        pixel.swap(0, 2);
+                    }
+
+                    return image::RgbaImage::from_raw(width, height, pixels).ok_or_else(|| {
+                        anyhow::anyhow!("failed to create image from rendered Metal texture")
+                    });
+                }
+                Err(err) => {
+                    log::error!(
+                        "failed to render image: {}. retrying with larger instance buffer size",
+                        err
+                    );
+                    let mut instance_buffer_pool = self.instance_buffer_pool.lock();
+                    let buffer_size = instance_buffer_pool.buffer_size;
+                    if buffer_size >= MAX_INSTANCE_BUFFER_SIZE {
+                        anyhow::bail!("instance buffer size grew too large: {}", buffer_size);
+                    }
+                    instance_buffer_pool.reset(buffer_size * 2);
+                }
+            }
+        }
+    }
+
     fn ensure_buffer_size(&self, scene: &Scene) {
         const ALIGN: usize = 256;
         let align_up = |size: usize| size.div_ceil(ALIGN) * ALIGN;
@@ -491,14 +584,24 @@ impl MetalRenderer {
         drawable: &metal::MetalDrawableRef,
         viewport_size: Size<DevicePixels>,
     ) -> Result<metal::CommandBuffer> {
+        self.draw_primitives_to_texture(scene, instance_buffer, drawable.texture(), viewport_size)
+    }
+
+    fn draw_primitives_to_texture(
+        &mut self,
+        scene: &Scene,
+        instance_buffer: &mut InstanceBuffer,
+        texture: &metal::TextureRef,
+        viewport_size: Size<DevicePixels>,
+    ) -> Result<metal::CommandBuffer> {
         let command_queue = self.command_queue.clone();
         let command_buffer = command_queue.new_command_buffer();
         let alpha = if self.layer.is_opaque() { 1. } else { 0. };
         let mut instance_offset = 0;
 
-        let mut command_encoder = new_command_encoder(
+        let mut command_encoder = new_command_encoder_for_texture(
             command_buffer,
-            drawable,
+            texture,
             viewport_size,
             |color_attachment| {
                 color_attachment.set_load_action(metal::MTLLoadAction::Clear);
@@ -518,10 +621,10 @@ impl MetalRenderer {
                 PrimitiveBatch::Quads(quads) => {
                     if quads.len() == 1 && quads[0].blend_mode != 0 {
                         command_encoder.end_encoding();
-                        self.copy_framebuffer_to_texture(drawable, command_buffer);
-                        command_encoder = new_command_encoder(
+                        self.copy_framebuffer_to_texture(texture, command_buffer);
+                        command_encoder = new_command_encoder_for_texture(
                             command_buffer,
-                            drawable,
+                            texture,
                             viewport_size,
                             |color_attachment| {
                                 color_attachment.set_load_action(metal::MTLLoadAction::Load);
@@ -547,9 +650,9 @@ impl MetalRenderer {
                         command_buffer,
                     );
 
-                    command_encoder = new_command_encoder(
+                    command_encoder = new_command_encoder_for_texture(
                         command_buffer,
-                        drawable,
+                        texture,
                         viewport_size,
                         |color_attachment| {
                             color_attachment.set_load_action(metal::MTLLoadAction::Load);
@@ -845,26 +948,21 @@ impl MetalRenderer {
 
     fn copy_framebuffer_to_texture(
         &self,
-        drawable: &metal::MetalDrawableRef,
+        texture: &metal::TextureRef,
         command_buffer: &metal::CommandBufferRef,
     ) -> bool {
         let Some(framebuffer_copy_texture) = &self.framebuffer_copy_texture else {
             return false;
         };
-        let drawable_texture = drawable.texture();
-        let width = drawable_texture
-            .width()
-            .min(framebuffer_copy_texture.width());
-        let height = drawable_texture
-            .height()
-            .min(framebuffer_copy_texture.height());
+        let width = texture.width().min(framebuffer_copy_texture.width());
+        let height = texture.height().min(framebuffer_copy_texture.height());
         if width == 0 || height == 0 {
             return false;
         }
 
         let blit_encoder = command_buffer.new_blit_command_encoder();
         blit_encoder.copy_from_texture(
-            drawable_texture,
+            texture,
             0,
             0,
             MTLOrigin { x: 0, y: 0, z: 0 },
@@ -1283,9 +1381,9 @@ impl MetalRenderer {
     }
 }
 
-fn new_command_encoder<'a>(
+fn new_command_encoder_for_texture<'a>(
     command_buffer: &'a metal::CommandBufferRef,
-    drawable: &'a metal::MetalDrawableRef,
+    texture: &'a metal::TextureRef,
     viewport_size: Size<DevicePixels>,
     configure_color_attachment: impl Fn(&RenderPassColorAttachmentDescriptorRef),
 ) -> &'a metal::RenderCommandEncoderRef {
@@ -1294,7 +1392,7 @@ fn new_command_encoder<'a>(
         .color_attachments()
         .object_at(0)
         .unwrap();
-    color_attachment.set_texture(Some(drawable.texture()));
+    color_attachment.set_texture(Some(texture));
     color_attachment.set_store_action(metal::MTLStoreAction::Store);
     configure_color_attachment(color_attachment);
 

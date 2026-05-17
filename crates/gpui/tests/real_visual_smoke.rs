@@ -20,7 +20,7 @@ fn main() {
 fn run() -> anyhow::Result<()> {
     use gpui::{
         AppContext as _, Context, IntoElement, RealVisualTestContext, Render, Styled as _, Window,
-        black, div, px, size,
+        div, px, red, size,
     };
     use std::{cell::RefCell, rc::Rc};
 
@@ -28,7 +28,7 @@ fn run() -> anyhow::Result<()> {
 
     impl Render for PaintedView {
         fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-            div().w(px(20.0)).h(px(20.0)).bg(black())
+            div().w(px(20.0)).h(px(20.0)).bg(red())
         }
     }
 
@@ -44,14 +44,18 @@ fn run() -> anyhow::Result<()> {
             let window = cx.open_offscreen_window(size(px(64.0), px(64.0)), |_, app| {
                 app.new(|_| PaintedView)
             })?;
-            let bounds = cx.update_window(window.into(), |_, window, app| {
+            let window = window.into();
+            let (bounds, scale_factor) = cx.update_window(window, |_, window, app| {
                 let clear = window.draw(app);
                 window.present_for_visual_test();
                 clear.clear();
-                window.bounds()
+                (window.bounds(), window.scale_factor())
             })?;
+            let image = cx.capture_screenshot(window)?;
             let expected_origin = gpui::point(px(-10000.0), px(-10000.0));
             let expected_size = size(px(64.0), px(64.0));
+            let expected_width = (64.0 * scale_factor).round() as u32;
+            let expected_height = (64.0 * scale_factor).round() as u32;
 
             anyhow::ensure!(
                 bounds.origin == expected_origin,
@@ -64,6 +68,29 @@ fn run() -> anyhow::Result<()> {
                 "expected size {:?}, got {:?}",
                 expected_size,
                 bounds.size
+            );
+            anyhow::ensure!(
+                image.width() == expected_width,
+                "expected image width {}, got {}",
+                expected_width,
+                image.width()
+            );
+            anyhow::ensure!(
+                image.height() == expected_height,
+                "expected image height {}, got {}",
+                expected_height,
+                image.height()
+            );
+            anyhow::ensure!(
+                image.pixels().any(|pixel| pixel[3] > 0),
+                "screenshot is fully transparent"
+            );
+            let Some(first_pixel) = image.pixels().next().copied() else {
+                anyhow::bail!("screenshot is empty");
+            };
+            anyhow::ensure!(
+                image.pixels().any(|pixel| *pixel != first_pixel),
+                "screenshot is a solid color"
             );
             Ok(())
         })();

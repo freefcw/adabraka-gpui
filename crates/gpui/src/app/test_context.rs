@@ -911,7 +911,7 @@ impl VisualTestCapabilities {
     pub fn detect() -> Self {
         Self {
             real_renderer: detect_real_visual_renderer(),
-            screenshot_capture: false,
+            screenshot_capture: cfg!(target_os = "macos"),
             offscreen_positioned_window: cfg!(target_os = "macos"),
             deterministic_clock: true,
         }
@@ -1688,7 +1688,7 @@ mod test_app_tests {
     fn visual_test_capabilities_macos_has_real_renderer() {
         let capabilities = VisualTestCapabilities::detect();
         assert!(capabilities.real_renderer);
-        assert!(!capabilities.screenshot_capture);
+        assert!(capabilities.screenshot_capture);
         assert!(capabilities.offscreen_positioned_window);
     }
 }
