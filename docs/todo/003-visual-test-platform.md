@@ -218,6 +218,7 @@ cargo test -p adabraka-gpui real_visual --features test-support -- --ignored
 - 已新增 `VisualTestCapabilities::detect()`，用于报告 `real_renderer`、`screenshot_capture`、`offscreen_positioned_window`、`deterministic_clock`。
 - macOS 当前报告真实 renderer、截图和屏幕外坐标窗口可用；Linux/FreeBSD 根据 `DISPLAY` / `WAYLAND_DISPLAY` 探测真实 renderer；Windows 当前报告真实 renderer 可用。
 - 已新增 capability detection 自动测试，不创建真实窗口、不触发 GPU smoke。
+- 已新增 mock visual render artifact：`TestWindow::draw(scene)` 会记录场景结构，`TestAppWindow::visual_render_artifact()` 可读取最近一次 mock draw 的 primitive 统计。
 - 验证脚本：`scripts/verify-003.sh`。
 
 当前真实 renderer / screenshot smoke 尚未落地，原因：
@@ -228,17 +229,18 @@ cargo test -p adabraka-gpui real_visual --features test-support -- --ignored
 
 下一步建议拆成独立小切片：
 
-1. 先为 mock `TestWindow` 增加结构化 render artifact 或 nonblank 检测，不声称真实 renderer。
-2. 再评估 `PlatformWindow::render_to_image` 是否能以默认 unsupported 方法引入，并只在 macOS Metal 先实现。
-3. 最后添加 `real_visual_* --ignored` smoke，unsupported 环境返回 skip。
+1. 评估 `PlatformWindow::render_to_image` 是否能以默认 unsupported 方法引入，并只在 macOS Metal 先实现。
+2. 建立真实 `RealVisualTestContext` / `VisualTestPlatform` 代理。
+3. 添加 `real_visual_* --ignored` smoke，unsupported 环境返回 skip。
 
 已验证：
 
 ```bash
 cargo test -p adabraka-gpui --lib --features test-support -- visual_test_capabilities
+cargo test -p adabraka-gpui --lib --features test-support -- visual_test_mock_render_artifact
 ```
 
-结果：通过。真实 renderer context / screenshot smoke 仍待后续切片实现。
+结果：通过。当前 003 只完成 capability detection 与 mock structural artifact 分层；真实 renderer context / screenshot smoke 仍待后续切片实现。
 
 ## 完成标准
 

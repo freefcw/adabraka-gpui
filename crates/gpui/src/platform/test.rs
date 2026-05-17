@@ -9,3 +9,4 @@ pub(crate) use platform::*;
 pub(crate) use window::*;
 
 pub use platform::{TestScreenCaptureSource, TestScreenCaptureStream};
+pub use window::VisualRenderArtifact;

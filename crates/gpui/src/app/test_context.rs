@@ -745,6 +745,16 @@ impl<V: 'static + Render> TestAppWindow<V> {
         self.flush();
     }
 
+    /// Returns the structural render artifact from the most recent mock draw.
+    pub fn visual_render_artifact(&mut self) -> Option<crate::VisualRenderArtifact> {
+        let window: AnyWindowHandle = self.handle.into();
+        self.cx.test_window(window).render_artifact().or_else(|| {
+            self.cx
+                .update_window(window, |_, window, _| window.visual_render_artifact())
+                .ok()
+        })
+    }
+
     /// Flushes pending effects through the underlying test app context.
     pub fn flush(&mut self) {
         self.cx.run_until_parked();
@@ -1316,7 +1326,7 @@ impl AnyWindowHandle {
 #[cfg(test)]
 mod test_app_tests {
     use super::*;
-    use crate::{TextRun, font, px};
+    use crate::{Styled as _, TextRun, font, px};
     use std::sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
@@ -1326,6 +1336,8 @@ mod test_app_tests {
         value: usize,
     }
 
+    struct PaintedView;
+
     impl Render for TestView {
         fn render(
             &mut self,
@@ -1333,6 +1345,16 @@ mod test_app_tests {
             _cx: &mut Context<Self>,
         ) -> impl crate::IntoElement {
             Empty
+        }
+    }
+
+    impl Render for PaintedView {
+        fn render(
+            &mut self,
+            _window: &mut Window,
+            _cx: &mut Context<Self>,
+        ) -> impl crate::IntoElement {
+            crate::div().w(px(20.)).h(px(20.)).bg(crate::black())
         }
     }
 
@@ -1392,6 +1414,20 @@ mod test_app_tests {
         let mut window = app.open_window(|_, _| TestView { value: 1 });
 
         window.draw();
+    }
+
+    #[test]
+    fn visual_test_mock_render_artifact_reports_nonblank_scene() {
+        let mut app = TestApp::new();
+        let mut window = app.open_window(|_, _| PaintedView);
+
+        window.draw();
+
+        let artifact = window
+            .visual_render_artifact()
+            .expect("draw should produce a render artifact");
+        assert!(artifact.is_nonblank());
+        assert!(artifact.quads > 0);
     }
 
     #[test]

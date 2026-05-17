@@ -89,7 +89,9 @@ pub(crate) use test::*;
 pub(crate) use windows::*;
 
 #[cfg(any(test, feature = "test-support"))]
-pub use test::{TestDispatcher, TestScreenCaptureSource, TestScreenCaptureStream};
+pub use test::{
+    TestDispatcher, TestScreenCaptureSource, TestScreenCaptureStream, VisualRenderArtifact,
+};
 
 /// Returns a background executor for the current platform.
 pub fn background_executor() -> BackgroundExecutor {

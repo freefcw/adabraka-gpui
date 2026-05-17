@@ -2313,6 +2313,12 @@ impl Window {
         ArenaClearNeeded
     }
 
+    /// Returns a structural summary of the current rendered frame for tests.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn visual_render_artifact(&self) -> crate::VisualRenderArtifact {
+        crate::VisualRenderArtifact::from_scene(&self.rendered_frame.scene)
+    }
+
     fn record_entities_accessed(&mut self, cx: &mut App) {
         let mut entities_ref = cx.entities.accessed_entities.borrow_mut();
         let mut entities = mem::take(entities_ref.deref_mut());

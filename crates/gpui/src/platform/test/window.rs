@@ -29,10 +29,59 @@ pub(crate) struct TestWindowState {
     moved_callback: Option<Box<dyn FnMut()>>,
     input_handler: Option<PlatformInputHandler>,
     is_fullscreen: bool,
+    render_artifact: Option<VisualRenderArtifact>,
 }
 
 #[derive(Clone)]
 pub(crate) struct TestWindow(pub(crate) Rc<Mutex<TestWindowState>>);
+
+/// A structural summary of the most recent mock visual render.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct VisualRenderArtifact {
+    /// Number of paint operations in the rendered scene.
+    pub paint_operations: usize,
+    /// Number of quad primitives.
+    pub quads: usize,
+    /// Number of shadow primitives.
+    pub shadows: usize,
+    /// Number of path primitives.
+    pub paths: usize,
+    /// Number of underline primitives.
+    pub underlines: usize,
+    /// Number of monochrome sprite primitives.
+    pub monochrome_sprites: usize,
+    /// Number of polychrome sprite primitives.
+    pub polychrome_sprites: usize,
+    /// Number of surface primitives.
+    pub surfaces: usize,
+}
+
+impl VisualRenderArtifact {
+    pub(crate) fn from_scene(scene: &crate::Scene) -> Self {
+        Self {
+            paint_operations: scene.len(),
+            quads: scene.quads.len(),
+            shadows: scene.shadows.len(),
+            paths: scene.paths.len(),
+            underlines: scene.underlines.len(),
+            monochrome_sprites: scene.monochrome_sprites.len(),
+            polychrome_sprites: scene.polychrome_sprites.len(),
+            surfaces: scene.surfaces.len(),
+        }
+    }
+
+    /// Returns true when the render produced any scene primitive.
+    pub fn is_nonblank(self) -> bool {
+        self.quads
+            + self.shadows
+            + self.paths
+            + self.underlines
+            + self.monochrome_sprites
+            + self.polychrome_sprites
+            + self.surfaces
+            > 0
+    }
+}
 
 impl HasWindowHandle for TestWindow {
     fn window_handle(
@@ -74,6 +123,7 @@ impl TestWindow {
             moved_callback: None,
             input_handler: None,
             is_fullscreen: false,
+            render_artifact: None,
         })))
     }
 
@@ -108,6 +158,10 @@ impl TestWindow {
         let result = callback(event);
         self.0.lock().input_callback = Some(callback);
         !result.propagate
+    }
+
+    pub(crate) fn render_artifact(&self) -> Option<VisualRenderArtifact> {
+        self.0.lock().render_artifact
     }
 }
 
@@ -266,7 +320,9 @@ impl PlatformWindow for TestWindow {
 
     fn on_appearance_changed(&self, _callback: Box<dyn FnMut()>) {}
 
-    fn draw(&self, _scene: &crate::Scene) {}
+    fn draw(&self, scene: &crate::Scene) {
+        self.0.lock().render_artifact = Some(VisualRenderArtifact::from_scene(scene));
+    }
 
     fn sprite_atlas(&self) -> sync::Arc<dyn crate::PlatformAtlas> {
         self.0.lock().sprite_atlas.clone()
