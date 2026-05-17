@@ -878,6 +878,60 @@ impl<V> Entity<V> {
 use derive_more::{Deref, DerefMut};
 
 use super::{Context, Entity};
+
+/// Runtime capability flags for visual tests.
+///
+/// These flags describe what the current process can safely attempt without
+/// assuming a GPU runner or display server is available.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct VisualTestCapabilities {
+    /// True when the current platform is expected to support a real renderer.
+    pub real_renderer: bool,
+    /// True when screenshot capture is supported by the visual test layer.
+    pub screenshot_capture: bool,
+    /// True when real windows can be placed at screen-outside coordinates for smoke tests.
+    pub offscreen_positioned_window: bool,
+    /// True when tests can use deterministic dispatcher time.
+    pub deterministic_clock: bool,
+}
+
+impl VisualTestCapabilities {
+    /// Detects visual test capabilities for the current platform and environment.
+    pub fn detect() -> Self {
+        Self {
+            real_renderer: detect_real_visual_renderer(),
+            screenshot_capture: cfg!(target_os = "macos"),
+            offscreen_positioned_window: cfg!(target_os = "macos"),
+            deterministic_clock: true,
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn detect_real_visual_renderer() -> bool {
+    true
+}
+
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+fn detect_real_visual_renderer() -> bool {
+    std::env::var_os("DISPLAY").is_some() || std::env::var_os("WAYLAND_DISPLAY").is_some()
+}
+
+#[cfg(target_os = "windows")]
+fn detect_real_visual_renderer() -> bool {
+    true
+}
+
+#[cfg(not(any(
+    target_os = "macos",
+    target_os = "linux",
+    target_os = "freebsd",
+    target_os = "windows"
+)))]
+fn detect_real_visual_renderer() -> bool {
+    false
+}
+
 #[derive(Deref, DerefMut, Clone)]
 /// A VisualTestContext is the test-equivalent of a `Window` and `App`. It allows you to
 /// run window-specific test code. It can be dereferenced to a `TextAppContext`.
@@ -1386,5 +1440,24 @@ mod test_app_tests {
     fn headless_cosmic_text_layout_produces_nonzero_metrics() {
         let app = TestApp::with_platform_text_system(Arc::new(crate::CosmicTextSystem::new()));
         assert_headless_text_layout_has_real_metrics(&app);
+    }
+
+    #[test]
+    fn visual_test_capabilities_detect_does_not_panic() {
+        let _ = VisualTestCapabilities::detect();
+    }
+
+    #[test]
+    fn visual_test_capabilities_reports_deterministic_clock_true() {
+        assert!(VisualTestCapabilities::detect().deterministic_clock);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn visual_test_capabilities_macos_has_real_renderer() {
+        let capabilities = VisualTestCapabilities::detect();
+        assert!(capabilities.real_renderer);
+        assert!(capabilities.screenshot_capture);
+        assert!(capabilities.offscreen_positioned_window);
     }
 }

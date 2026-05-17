@@ -14,7 +14,7 @@
 | --- | --- | --- | --- | --- | --- |
 | 1 | Profiler / Observability | `001-profiler-observability.md` | 已完成首版 | 无 | 最高 |
 | 2 | TestApp / Headless | `002-test-app-headless.md` | 已完成首版 | 可独立，建议在 profiler 后 | 高 |
-| 3 | Visual Test Platform | `003-visual-test-platform.md` | 待实现 | TestDispatcher deterministic clock 能力稳定 | 中 |
+| 3 | Visual Test Platform | `003-visual-test-platform.md` | 进行中（能力探测已完成） | TestDispatcher deterministic clock 能力稳定 | 中 |
 | 4 | Scheduler / Queue | `004-scheduler-queue.md` | 待设计与试点 | profiler + test 基线 | 最高风险，最后做 |
 
 ## 执行原则

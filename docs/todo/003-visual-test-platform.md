@@ -211,6 +211,23 @@ cargo test -p adabraka-gpui real_visual --features test-support,wayland,x11 -- -
 cargo test -p adabraka-gpui real_visual --features test-support -- --ignored
 ```
 
+## 当前状态
+
+进行中（2026-05-17）：
+
+- 已新增 `VisualTestCapabilities::detect()`，用于报告 `real_renderer`、`screenshot_capture`、`offscreen_positioned_window`、`deterministic_clock`。
+- macOS 当前报告真实 renderer、截图和屏幕外坐标窗口可用；Linux/FreeBSD 根据 `DISPLAY` / `WAYLAND_DISPLAY` 探测真实 renderer；Windows 当前报告真实 renderer 可用。
+- 已新增 capability detection 自动测试，不创建真实窗口、不触发 GPU smoke。
+- 验证脚本：`scripts/verify-003.sh`。
+
+已验证：
+
+```bash
+cargo test -p adabraka-gpui --lib --features test-support -- visual_test_capabilities
+```
+
+结果：通过。真实 renderer context / screenshot smoke 仍待后续切片实现。
+
 ## 完成标准
 
 - 真实 visual test capability detection 可用。
