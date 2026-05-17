@@ -1,7 +1,8 @@
 use crate::{
-    Bounds, DevicePixels, Font, FontFeatures, FontId, FontMetrics, FontRun, FontStyle, FontWeight,
-    GlyphId, LineLayout, Pixels, PlatformTextSystem, Point, RenderGlyphParams, SUBPIXEL_VARIANTS_X,
-    SUBPIXEL_VARIANTS_Y, ShapedGlyph, ShapedRun, SharedString, Size, point, size,
+    Bounds, DevicePixels, Font, FontFallbacks, FontFeatures, FontId, FontMetrics, FontRun,
+    FontStyle, FontWeight, GlyphId, LineLayout, Pixels, PlatformTextSystem, Point,
+    RenderGlyphParams, SUBPIXEL_VARIANTS_X, SUBPIXEL_VARIANTS_Y, ShapedGlyph, ShapedRun,
+    SharedString, Size, point, size,
 };
 use anyhow::{Context as _, Ok, Result};
 use collections::HashMap;
@@ -650,6 +651,53 @@ fn charmap_covers(loaded_fonts: &[LoadedFont], id: FontId, ch: char) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{font, px};
+    use std::borrow::Cow;
+
+    const IBM_PLEX_SANS: &[u8] =
+        include_bytes!("../../../assets/fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf");
+    const LILEX: &[u8] = include_bytes!("../../../assets/fonts/lilex/Lilex-Regular.ttf");
+
+    #[test]
+    fn layout_line_uses_configured_font_fallbacks_for_missing_glyphs() {
+        let text_system = CosmicTextSystem::new();
+        text_system
+            .add_fonts(vec![Cow::Borrowed(IBM_PLEX_SANS), Cow::Borrowed(LILEX)])
+            .unwrap();
+
+        let primary_family = family_name(IBM_PLEX_SANS);
+        let fallback_family = family_name(LILEX);
+        let fallback_only = fallback_only_char(IBM_PLEX_SANS, LILEX);
+
+        let fallback_id = text_system.font_id(&font(fallback_family.clone())).unwrap();
+        let mut primary_font = font(primary_family);
+        primary_font.fallbacks = Some(FontFallbacks::from_fonts(vec![fallback_family]));
+        let primary_id = text_system.font_id(&primary_font).unwrap();
+
+        assert_eq!(text_system.glyph_for_char(primary_id, fallback_only), None);
+        assert!(
+            text_system
+                .glyph_for_char(fallback_id, fallback_only)
+                .is_some()
+        );
+
+        let text = format!("A{fallback_only}B");
+        let layout = text_system.layout_line(
+            &text,
+            px(16.),
+            &[FontRun {
+                len: text.len(),
+                font_id: primary_id,
+            }],
+        );
+        let run_font_ids = layout
+            .runs
+            .iter()
+            .map(|run| run.font_id)
+            .collect::<Vec<_>>();
+
+        assert_eq!(run_font_ids, vec![primary_id, fallback_id, primary_id]);
+    }
 
     #[test]
     fn run_spans_prefer_configured_fallbacks_for_missing_glyphs() {
@@ -730,6 +778,39 @@ mod tests {
                 },
             ]
         );
+    }
+
+    fn family_name(font_bytes: &[u8]) -> String {
+        let face = ttf_parser::Face::parse(font_bytes, 0).unwrap();
+        let mut typographic_family = None;
+        let mut family = None;
+
+        for name in face.names() {
+            let Some(value) = name.to_string() else {
+                continue;
+            };
+            match name.name_id {
+                ttf_parser::name_id::TYPOGRAPHIC_FAMILY => {
+                    typographic_family.get_or_insert(value);
+                }
+                ttf_parser::name_id::FAMILY => {
+                    family.get_or_insert(value);
+                }
+                _ => {}
+            }
+        }
+
+        typographic_family.or(family).unwrap()
+    }
+
+    fn fallback_only_char(primary_bytes: &[u8], fallback_bytes: &[u8]) -> char {
+        let primary = ttf_parser::Face::parse(primary_bytes, 0).unwrap();
+        let fallback = ttf_parser::Face::parse(fallback_bytes, 0).unwrap();
+
+        (0x80..=0xf8ff)
+            .filter_map(char::from_u32)
+            .find(|&ch| primary.glyph_index(ch).is_none() && fallback.glyph_index(ch).is_some())
+            .unwrap()
     }
 }
 
