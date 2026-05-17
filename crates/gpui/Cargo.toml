@@ -525,6 +525,9 @@ optional = true
 version = "0.14.0"
 optional = true
 
+[target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies.unicode-segmentation]
+version = "1.10"
+
 [target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies.filedescriptor]
 version = "0.8.2"
 optional = true

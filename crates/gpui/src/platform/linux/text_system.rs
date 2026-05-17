@@ -18,6 +18,7 @@ use pathfinder_geometry::{
 };
 use smallvec::SmallVec;
 use std::{borrow::Cow, sync::Arc};
+use unicode_segmentation::UnicodeSegmentation;
 
 pub(crate) struct CosmicTextSystem(RwLock<CosmicTextSystemState>);
 
@@ -25,11 +26,16 @@ pub(crate) struct CosmicTextSystem(RwLock<CosmicTextSystemState>);
 struct FontKey {
     family: SharedString,
     features: FontFeatures,
+    fallbacks: Option<FontFallbacks>,
 }
 
 impl FontKey {
-    fn new(family: SharedString, features: FontFeatures) -> Self {
-        Self { family, features }
+    fn new(family: SharedString, features: FontFeatures, fallbacks: Option<FontFallbacks>) -> Self {
+        Self {
+            family,
+            features,
+            fallbacks,
+        }
     }
 }
 
@@ -48,6 +54,7 @@ struct LoadedFont {
     font: Arc<CosmicTextFont>,
     features: CosmicFontFeatures,
     is_known_emoji_font: bool,
+    user_fallback_chain: Arc<[(FontId, SharedString)]>,
 }
 
 impl CosmicTextSystem {
@@ -93,11 +100,16 @@ impl PlatformTextSystem for CosmicTextSystem {
     fn font_id(&self, font: &Font) -> Result<FontId> {
         // todo(linux): Do we need to use CosmicText's Font APIs? Can we consolidate this to use font_kit?
         let mut state = self.0.write();
-        let key = FontKey::new(font.family.clone(), font.features.clone());
+        let key = FontKey::new(
+            font.family.clone(),
+            font.features.clone(),
+            font.fallbacks.clone(),
+        );
         let candidates = if let Some(font_ids) = state.font_ids_by_family_cache.get(&key) {
             font_ids.as_slice()
         } else {
-            let font_ids = state.load_family(&font.family, &font.features)?;
+            let font_ids =
+                state.load_family(&font.family, &font.features, font.fallbacks.as_ref())?;
             state.font_ids_by_family_cache.insert(key.clone(), font_ids);
             state.font_ids_by_family_cache[&key].as_ref()
         };
@@ -211,7 +223,43 @@ impl CosmicTextSystemState {
         &mut self,
         name: &str,
         features: &FontFeatures,
+        fallbacks: Option<&FontFallbacks>,
     ) -> Result<SmallVec<[FontId; 4]>> {
+        // Resolve user-configured fallbacks once while loading the primary family.
+        // Fallback families do not recursively inherit another fallback chain.
+        let user_fallback_chain: Arc<[(FontId, SharedString)]> = match fallbacks {
+            Some(fallbacks) if !fallbacks.fallback_list().is_empty() => {
+                let mut chain = Vec::new();
+                for fallback_name in fallbacks.fallback_list() {
+                    let fallback_key = FontKey::new(
+                        SharedString::from(fallback_name.clone()),
+                        features.clone(),
+                        None,
+                    );
+                    let fallback_ids =
+                        if let Some(cached) = self.font_ids_by_family_cache.get(&fallback_key) {
+                            cached.clone()
+                        } else {
+                            let loaded = self.load_family(fallback_name, features, None)?;
+                            self.font_ids_by_family_cache
+                                .insert(fallback_key.clone(), loaded.clone());
+                            loaded
+                        };
+                    let Some(&fallback_id) = fallback_ids.first() else {
+                        continue;
+                    };
+                    let database_id = self.loaded_fonts[fallback_id.0].font.id();
+                    if let Some(face) = self.font_system.db().face(database_id)
+                        && let Some(family) = face.families.first()
+                    {
+                        chain.push((fallback_id, SharedString::from(family.0.clone())));
+                    }
+                }
+                Arc::from(chain)
+            }
+            _ => Arc::from(Vec::new()),
+        };
+
         // TODO: Determine the proper system UI font.
         let name = crate::text_system::font_name_with_fallbacks(name, "IBM Plex Sans");
 
@@ -249,6 +297,7 @@ impl CosmicTextSystemState {
                 font,
                 features: features.try_into()?,
                 is_known_emoji_font: check_is_known_emoji_font(&postscript_name),
+                user_fallback_chain: Arc::clone(&user_fallback_chain),
             });
         }
 
@@ -365,6 +414,7 @@ impl CosmicTextSystemState {
                 font,
                 features: CosmicFontFeatures::new(),
                 is_known_emoji_font: check_is_known_emoji_font(&face.post_script_name),
+                user_fallback_chain: Arc::from(Vec::new()),
             });
 
             font_id
@@ -376,20 +426,59 @@ impl CosmicTextSystemState {
         let mut attrs_list = AttrsList::new(&Attrs::new());
         let mut offs = 0;
         for run in font_runs {
+            let run_end = offs + run.len;
             let loaded_font = self.loaded_font(run.font_id);
             let font = self.font_system.db().face(loaded_font.font.id()).unwrap();
 
-            attrs_list.add_span(
-                offs..(offs + run.len),
-                &Attrs::new()
-                    .metadata(run.font_id.0)
-                    .family(Family::Name(&font.families.first().unwrap().0))
-                    .stretch(font.stretch)
-                    .style(font.style)
-                    .weight(font.weight)
-                    .font_features(loaded_font.features.clone()),
-            );
-            offs += run.len;
+            let primary_family = font.families.first().unwrap().0.clone();
+            let primary_stretch = font.stretch;
+            let primary_style = font.style;
+            let primary_weight = font.weight;
+            let primary_features = loaded_font.features.clone();
+            let fallback_chain = Arc::clone(&loaded_font.user_fallback_chain);
+
+            let primary_attrs = Attrs::new()
+                .metadata(run.font_id.0)
+                .family(Family::Name(&primary_family))
+                .stretch(primary_stretch)
+                .style(primary_style)
+                .weight(primary_weight)
+                .font_features(primary_features.clone());
+
+            let fallback_attrs: SmallVec<[Attrs<'_>; 4]> = fallback_chain
+                .iter()
+                .map(|(fallback_id, fallback_family)| {
+                    Attrs::new()
+                        .metadata(fallback_id.0)
+                        .family(Family::Name(fallback_family))
+                        .stretch(primary_stretch)
+                        .style(primary_style)
+                        .weight(primary_weight)
+                        .font_features(primary_features.clone())
+                })
+                .collect();
+
+            let spans = if fallback_chain.is_empty() {
+                smallvec::smallvec![RunSpan {
+                    start: offs,
+                    end: run_end,
+                    slot: None,
+                }]
+            } else {
+                let loaded_fonts = &self.loaded_fonts;
+                let covers = |font_id: FontId, ch: char| charmap_covers(loaded_fonts, font_id, ch);
+                compute_run_spans(text, offs, run.len, run.font_id, &fallback_chain, &covers)
+            };
+
+            for span in spans {
+                let attrs = match span.slot {
+                    None => &primary_attrs,
+                    Some(ix) => &fallback_attrs[ix],
+                };
+                attrs_list.add_span(span.start..span.end, attrs);
+            }
+
+            offs = run_end;
         }
 
         let line = ShapeLine::new(
@@ -454,6 +543,193 @@ impl CosmicTextSystemState {
             runs,
             len: text.len(),
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RunSpan {
+    start: usize,
+    end: usize,
+    slot: Option<usize>,
+}
+
+fn compute_run_spans(
+    text: &str,
+    run_offset: usize,
+    run_len: usize,
+    primary: FontId,
+    fallback_chain: &[(FontId, SharedString)],
+    covers: &impl Fn(FontId, char) -> bool,
+) -> SmallVec<[RunSpan; 4]> {
+    let mut spans = SmallVec::new();
+    let run_end = run_offset + run_len;
+    if run_end <= run_offset {
+        return spans;
+    }
+    if fallback_chain.is_empty() {
+        spans.push(RunSpan {
+            start: run_offset,
+            end: run_end,
+            slot: None,
+        });
+        return spans;
+    }
+
+    let run_text = &text[run_offset..run_end];
+    let mut span_start = run_offset;
+    let mut span_slot = None;
+
+    for (grapheme_idx, grapheme) in run_text.grapheme_indices(true) {
+        let abs = run_offset + grapheme_idx;
+        let ch = grapheme.chars().next().unwrap_or('\0');
+        let next_slot = pick_covering_slot(ch, span_slot, primary, fallback_chain, covers);
+        if next_slot == span_slot {
+            continue;
+        }
+        if abs > span_start {
+            spans.push(RunSpan {
+                start: span_start,
+                end: abs,
+                slot: span_slot,
+            });
+        }
+        span_start = abs;
+        span_slot = next_slot;
+    }
+
+    if span_start < run_end {
+        spans.push(RunSpan {
+            start: span_start,
+            end: run_end,
+            slot: span_slot,
+        });
+    }
+
+    spans
+}
+
+fn slot_font_id(
+    slot: Option<usize>,
+    primary: FontId,
+    fallback_chain: &[(FontId, SharedString)],
+) -> FontId {
+    match slot {
+        None => primary,
+        Some(ix) => fallback_chain[ix].0,
+    }
+}
+
+fn pick_covering_slot(
+    ch: char,
+    current: Option<usize>,
+    primary: FontId,
+    fallback_chain: &[(FontId, SharedString)],
+    covers: &impl Fn(FontId, char) -> bool,
+) -> Option<usize> {
+    if ch.is_ascii() || covers(primary, ch) {
+        return None;
+    }
+
+    let current_id = slot_font_id(current, primary, fallback_chain);
+    if covers(current_id, ch) {
+        return current;
+    }
+
+    fallback_chain
+        .iter()
+        .enumerate()
+        .find_map(|(ix, (font_id, _))| covers(*font_id, ch).then_some(ix))
+}
+
+fn charmap_covers(loaded_fonts: &[LoadedFont], id: FontId, ch: char) -> bool {
+    loaded_fonts
+        .get(id.0)
+        .is_some_and(|loaded| loaded.font.as_swash().charmap().map(ch) != 0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn run_spans_prefer_configured_fallbacks_for_missing_glyphs() {
+        let primary = FontId(0);
+        let fallback = FontId(1);
+        let fallback_chain = [(fallback, SharedString::from("Emoji"))];
+        let spans = compute_run_spans(
+            "a😀b",
+            0,
+            "a😀b".len(),
+            primary,
+            &fallback_chain,
+            &|font_id, ch| match font_id {
+                FontId(0) => ch.is_ascii(),
+                FontId(1) => ch == '😀',
+                _ => false,
+            },
+        );
+
+        assert_eq!(
+            spans.as_slice(),
+            &[
+                RunSpan {
+                    start: 0,
+                    end: 1,
+                    slot: None,
+                },
+                RunSpan {
+                    start: 1,
+                    end: 5,
+                    slot: Some(0),
+                },
+                RunSpan {
+                    start: 5,
+                    end: 6,
+                    slot: None,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn run_spans_keep_grapheme_clusters_together() {
+        let primary = FontId(0);
+        let fallback = FontId(1);
+        let fallback_chain = [(fallback, SharedString::from("Emoji"))];
+        let text = "a👨‍👩‍👧‍👦b";
+        let spans = compute_run_spans(
+            text,
+            0,
+            text.len(),
+            primary,
+            &fallback_chain,
+            &|font_id, ch| match font_id {
+                FontId(0) => ch.is_ascii(),
+                FontId(1) => ch == '👨',
+                _ => false,
+            },
+        );
+
+        assert_eq!(
+            spans.as_slice(),
+            &[
+                RunSpan {
+                    start: 0,
+                    end: 1,
+                    slot: None,
+                },
+                RunSpan {
+                    start: 1,
+                    end: text.len() - 1,
+                    slot: Some(0),
+                },
+                RunSpan {
+                    start: text.len() - 1,
+                    end: text.len(),
+                    slot: None,
+                },
+            ]
+        );
     }
 }
 
