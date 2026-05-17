@@ -2325,6 +2325,13 @@ impl Window {
         self.present();
     }
 
+    /// Renders the current frame's scene to an image when the platform supports it.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn render_to_image(&self) -> anyhow::Result<image::RgbaImage> {
+        self.platform_window
+            .render_to_image(&self.rendered_frame.scene)
+    }
+
     fn record_entities_accessed(&mut self, cx: &mut App) {
         let mut entities_ref = cx.entities.accessed_entities.borrow_mut();
         let mut entities = mem::take(entities_ref.deref_mut());

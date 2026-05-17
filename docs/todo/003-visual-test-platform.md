@@ -220,17 +220,18 @@ cargo test -p adabraka-gpui --test real_visual_smoke --features test-support -- 
 - 已新增 capability detection 自动测试，不创建真实窗口、不触发 GPU smoke。
 - 已新增 mock visual render artifact：`TestWindow::draw(scene)` 会记录场景结构，`TestAppWindow::visual_render_artifact()` 可读取最近一次 mock draw 的 primitive 统计。
 - 已新增 macOS `RealVisualTestContext` / `VisualTestPlatform` 试点，并通过 `harness = false` 的 `real_visual_smoke` 在主线程打开屏外坐标窗口、绘制 simple div、调用真实 renderer present。
+- 已新增上游同名 `Window::render_to_image()` / `PlatformWindow::render_to_image(scene)` 接口；当前默认返回 unsupported，避免在 Metal readback 实现前误报截图能力。
 - 验证脚本：`scripts/verify-003.sh`。
 
 当前 screenshot smoke 尚未落地，原因：
 
 - 上游 `VisualTestAppContext::capture_screenshot` 依赖 `Window::render_to_image()` / `PlatformWindow::render_to_image()`。
-- 当前仓库的 `PlatformWindow` trait 没有 `render_to_image` 方法，macOS/Windows/Linux renderer 也没有统一的 scene-to-image 读回入口。
+- macOS/Windows/Linux renderer 还没有具体 scene-to-image 读回实现。
 - `real_visual_smoke` 已覆盖真实 renderer present，但不读取像素，因此不能替代 screenshot nonblank 断言。
 
 下一步建议拆成独立小切片：
 
-1. 评估 `PlatformWindow::render_to_image` 是否能以默认 unsupported 方法引入，并只在 macOS Metal 先实现。
+1. 在 macOS Metal renderer 先实现 `PlatformWindow::render_to_image(scene)`。
 2. 添加 `real_visual_screenshot_* --ignored` smoke，unsupported 环境返回 skip。
 3. 再评估 Linux wgpu headless surface 或 readback 路径。
 
@@ -239,11 +240,12 @@ cargo test -p adabraka-gpui --test real_visual_smoke --features test-support -- 
 ```bash
 cargo test -p adabraka-gpui --lib --features test-support -- visual_test_capabilities
 cargo test -p adabraka-gpui --lib --features test-support -- visual_test_mock_render_artifact
+cargo test -p adabraka-gpui --lib --features test-support -- visual_test_render_to_image
 cargo test -p adabraka-gpui --test real_visual_smoke --features test-support
 cargo test -p adabraka-gpui --test real_visual_smoke --features test-support -- --ignored
 ```
 
-结果：通过。当前 003 已完成 capability detection、mock structural artifact、macOS real renderer smoke；screenshot smoke 仍待后续切片实现。
+结果：通过。当前 003 已完成 capability detection、mock structural artifact、macOS real renderer smoke 和 render-to-image unsupported 接口；screenshot smoke 仍待后续切片实现。
 
 ## 完成标准
 

@@ -1082,6 +1082,14 @@ impl RealVisualTestContext {
     pub fn is_screen_capture_supported(&self) -> bool {
         self.platform.is_screen_capture_supported()
     }
+
+    /// Captures a screenshot through the platform render readback path.
+    pub fn capture_screenshot(
+        &mut self,
+        window: AnyWindowHandle,
+    ) -> anyhow::Result<image::RgbaImage> {
+        self.update_window(window, |_, window, _| window.render_to_image())?
+    }
 }
 
 #[derive(Deref, DerefMut, Clone)]
@@ -1571,6 +1579,25 @@ mod test_app_tests {
             .expect("draw should produce a render artifact");
         assert!(artifact.is_nonblank());
         assert!(artifact.quads > 0);
+    }
+
+    #[test]
+    fn visual_test_render_to_image_reports_unsupported_without_platform_impl() {
+        let mut app = TestApp::new();
+        let window = app.open_window(|_, _| PaintedView);
+        let handle: AnyWindowHandle = window.handle().into();
+
+        let result = app
+            .raw_context_mut()
+            .update_window(handle, |_, window, _| window.render_to_image())
+            .unwrap();
+
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("render_to_image not implemented")
+        );
     }
 
     #[cfg(target_os = "macos")]
