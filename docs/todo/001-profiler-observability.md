@@ -192,6 +192,26 @@ cargo check -p adabraka-gpui --no-default-features --features wgpu
 - 打开/关闭窗口、显示 tray popup、触发 cache trim。
 - 确认日志或 debug dump 中可以看到 task timing。
 
+## 当前状态
+
+已完成首版实现（2026-05-17）：
+
+- 新增 `crates/gpui/src/profiler.rs`，包含 task timing 数据模型、线程本地 ring buffer、全局 registry、运行时开关和增量 `ProfilingCollector`。
+- `BackgroundExecutor::spawn` / `spawn_labeled`、`ForegroundExecutor::spawn`、`BackgroundExecutor::timer` 已接入 `TimedFuture`，记录 first-poll 到 completed/cancelled 的 timing。
+- profiler 默认关闭；开启后通过 `gpui::profiler::set_enabled(true)` 和 `ProfilingCollector` 采集增量 timing。
+- 未引入 scheduler crate，未替换 `Task<T>` 或 `PlatformDispatcher` API。
+- 验证脚本：`scripts/verify-001.sh`。
+
+已验证：
+
+```bash
+cargo test -p adabraka-gpui profiler
+cargo test -p adabraka-gpui --lib --features test-support -- profiler
+cargo check -p adabraka-gpui --no-default-features --features wgpu
+```
+
+结果：全部通过。
+
 ## 完成标准
 
 - profiling 默认关闭，不改变现有行为。

@@ -30,6 +30,8 @@ mod keymap;
 mod path_builder;
 mod platform;
 pub mod prelude;
+#[doc(hidden)]
+pub mod profiler;
 mod resource_profile;
 mod scene;
 mod shared_string;

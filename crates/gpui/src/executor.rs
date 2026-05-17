@@ -1,4 +1,4 @@
-use crate::{App, PlatformDispatcher};
+use crate::{App, PlatformDispatcher, profiler};
 use async_task::Runnable;
 use futures::channel::mpsc;
 use smol::prelude::*;
@@ -131,6 +131,52 @@ type AnyLocalFuture<R> = Pin<Box<dyn 'static + Future<Output = R>>>;
 
 type AnyFuture<R> = Pin<Box<dyn 'static + Send + Future<Output = R>>>;
 
+struct TimedFuture<F> {
+    inner: F,
+    location: &'static Location<'static>,
+    started: bool,
+    timing: Option<profiler::TaskTimingHandle>,
+}
+
+impl<F> TimedFuture<F> {
+    fn new(inner: F, location: &'static Location<'static>) -> Self {
+        Self {
+            inner,
+            location,
+            started: false,
+            timing: None,
+        }
+    }
+}
+
+impl<F: Future> Future for TimedFuture<F> {
+    type Output = F::Output;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = unsafe { self.get_unchecked_mut() };
+        if !this.started {
+            this.started = true;
+            this.timing = profiler::record_start(this.location);
+        }
+
+        let result = unsafe { Pin::new_unchecked(&mut this.inner) }.poll(cx);
+        if result.is_ready()
+            && let Some(timing) = this.timing.take()
+        {
+            profiler::record_end(timing, profiler::TaskTimingStatus::Completed);
+        }
+        result
+    }
+}
+
+impl<F> Drop for TimedFuture<F> {
+    fn drop(&mut self) {
+        if let Some(timing) = self.timing.take() {
+            profiler::record_end(timing, profiler::TaskTimingStatus::Cancelled);
+        }
+    }
+}
+
 /// BackgroundExecutor lets you run things on background threads.
 /// In production this is a thread pool with no ordering guarantees.
 /// In tests this is simulated by running tasks one by one in a deterministic
@@ -142,6 +188,7 @@ impl BackgroundExecutor {
     }
 
     /// Enqueues the given future to be run to completion on a background thread.
+    #[track_caller]
     pub fn spawn<R>(&self, future: impl Future<Output = R> + Send + 'static) -> Task<R>
     where
         R: Send + 'static,
@@ -151,6 +198,7 @@ impl BackgroundExecutor {
 
     /// Enqueues the given future to be run to completion on a background thread.
     /// The given label can be used to control the priority of the task in tests.
+    #[track_caller]
     pub fn spawn_labeled<R>(
         &self,
         label: TaskLabel,
@@ -162,12 +210,14 @@ impl BackgroundExecutor {
         self.spawn_internal::<R>(Box::pin(future), Some(label))
     }
 
+    #[track_caller]
     fn spawn_internal<R: Send + 'static>(
         &self,
         future: AnyFuture<R>,
         label: Option<TaskLabel>,
     ) -> Task<R> {
         let dispatcher = self.dispatcher.clone();
+        let future = TimedFuture::new(future, Location::caller());
         let (runnable, task) =
             async_task::spawn(future, move |runnable| dispatcher.dispatch(runnable, label));
         runnable.schedule();
@@ -342,11 +392,13 @@ impl BackgroundExecutor {
     /// Returns a task that will complete after the given duration.
     /// Depending on other concurrent tasks the elapsed duration may be longer
     /// than requested.
+    #[track_caller]
     pub fn timer(&self, duration: Duration) -> Task<()> {
         if duration.is_zero() {
             return Task::ready(());
         }
-        let (runnable, task) = async_task::spawn(async move {}, {
+        let future = TimedFuture::new(Box::pin(async move {}), Location::caller());
+        let (runnable, task) = async_task::spawn(future, {
             let dispatcher = self.dispatcher.clone();
             move |runnable| dispatcher.dispatch_after(duration, runnable)
         });
@@ -467,6 +519,7 @@ impl ForegroundExecutor {
             dispatcher: Arc<dyn PlatformDispatcher>,
             future: AnyLocalFuture<R>,
         ) -> Task<R> {
+            let future = TimedFuture::new(future, Location::caller());
             let (runnable, task) = spawn_local_with_source_location(future, move |runnable| {
                 dispatcher.dispatch_on_main_thread(runnable)
             });
@@ -597,5 +650,95 @@ impl Drop for Scope<'_> {
         // Wait until the channel is closed, which means that all of the spawned
         // futures have resolved.
         self.executor.block(self.rx.next());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{TestAppContext, profiler};
+
+    fn reset_profiler() {
+        profiler::set_enabled(false);
+    }
+
+    fn collect_timings() -> Vec<profiler::ThreadTimingsDelta> {
+        let mut collector = profiler::ProfilingCollector::new(Instant::now());
+        profiler::profiler_collect_timings(&mut collector)
+    }
+
+    #[test]
+    fn profiler_disabled_records_nothing() {
+        let _guard = profiler::test_guard();
+        reset_profiler();
+
+        let mut cx = TestAppContext::single();
+        cx.executor().spawn(async {}).detach();
+        cx.run_until_parked();
+
+        assert!(collect_timings().is_empty());
+        reset_profiler();
+    }
+
+    #[test]
+    fn profiler_enabled_records_background_task_timing() {
+        let _guard = profiler::test_guard();
+        reset_profiler();
+        profiler::set_enabled(true);
+
+        let mut cx = TestAppContext::single();
+        let mut collector = profiler::ProfilingCollector::new(Instant::now());
+        cx.executor().spawn(async {}).detach();
+        cx.run_until_parked();
+
+        let deltas = profiler::profiler_collect_timings(&mut collector);
+        let timing = deltas
+            .iter()
+            .flat_map(|delta| &delta.new_timings)
+            .next()
+            .expect("expected a recorded background task timing");
+        assert_eq!(timing.status, profiler::TaskTimingStatus::Completed);
+
+        reset_profiler();
+    }
+
+    #[test]
+    fn profiler_enabled_records_foreground_task_location() {
+        let _guard = profiler::test_guard();
+        reset_profiler();
+        profiler::set_enabled(true);
+
+        let mut cx = TestAppContext::single();
+        let mut collector = profiler::ProfilingCollector::new(Instant::now());
+        cx.foreground_executor().spawn(async {}).detach();
+        cx.run_until_parked();
+
+        let deltas = profiler::profiler_collect_timings(&mut collector);
+        let timing = deltas
+            .iter()
+            .flat_map(|delta| &delta.new_timings)
+            .find(|timing| timing.location.file.as_ref().contains("executor.rs"))
+            .expect("expected foreground task timing to include its source location");
+        assert!(timing.location.line > 0);
+        assert!(timing.location.column > 0);
+
+        reset_profiler();
+    }
+
+    #[test]
+    fn profiler_timing_start_is_first_poll_not_spawn() {
+        let _guard = profiler::test_guard();
+        reset_profiler();
+        profiler::set_enabled(true);
+
+        let mut cx = TestAppContext::single();
+        let mut collector = profiler::ProfilingCollector::new(Instant::now());
+        cx.executor().spawn(async {}).detach();
+        assert!(profiler::profiler_collect_timings(&mut collector).is_empty());
+
+        cx.run_until_parked();
+        assert!(!profiler::profiler_collect_timings(&mut collector).is_empty());
+
+        reset_profiler();
     }
 }
