@@ -2235,16 +2235,31 @@ impl Window {
 
         // Restore the previously-used input handler.
         if let Some(input_handler) = self.platform_window.take_input_handler() {
-            self.rendered_frame.input_handlers.push(Some(input_handler));
+            if let Some(slot) = self
+                .rendered_frame
+                .input_handlers
+                .iter_mut()
+                .rev()
+                .find(|handler| handler.is_none())
+            {
+                *slot = Some(input_handler);
+            } else {
+                self.rendered_frame.input_handlers.push(Some(input_handler));
+            }
         }
         self.draw_roots(cx);
         self.dirty_views.clear();
         self.next_frame.window_active = self.active.get();
 
         // Register requested input handler with the platform window.
-        if let Some(input_handler) = self.next_frame.input_handlers.pop() {
-            self.platform_window
-                .set_input_handler(input_handler.unwrap());
+        if let Some(input_handler) = self
+            .next_frame
+            .input_handlers
+            .iter_mut()
+            .rev()
+            .find_map(|handler| handler.take())
+        {
+            self.platform_window.set_input_handler(input_handler);
         }
 
         self.layout_engine.as_mut().unwrap().clear();

@@ -71,15 +71,30 @@ struct StateInner {
     scroll_handler: Option<Box<dyn FnMut(&ListScrollEvent, &mut Window, &mut App)>>,
     scrollbar_drag_start_height: Option<Pixels>,
     measuring_behavior: ListMeasuringBehavior,
-    pending_scroll: Option<PendingScrollFraction>,
+    pending_scroll: Option<PendingScroll>,
     follow_state: FollowState,
+}
+
+/// Deferred scroll adjustment applied after the scroll-top item has been remeasured.
+#[derive(Clone)]
+enum PendingScroll {
+    /// Preserve the same pixel offset into the item after it is remeasured.
+    Absolute { item_ix: usize, offset: Pixels },
+    /// Preserve the same fractional offset into the item after it is remeasured.
+    Proportional(PendingScrollFraction),
 }
 
 /// Keeps track of a fractional scroll position within an item for restoration
 /// after remeasurement.
+#[derive(Clone)]
 struct PendingScrollFraction {
     item_ix: usize,
     fraction: f32,
+}
+
+enum ScrollAnchor {
+    Absolute,
+    Proportional,
 }
 
 /// Controls whether the list automatically follows new content at the end.
@@ -329,34 +344,49 @@ impl ListState {
     /// Remeasure all items while preserving proportional scroll position.
     pub fn remeasure(&self) {
         let count = self.item_count();
-        self.remeasure_items(0..count);
+        self.remeasure_items_with_scroll_anchor(0..count, ScrollAnchor::Proportional);
     }
 
     /// Mark items in `range` as needing remeasurement while preserving
     /// the current scroll position.
     pub fn remeasure_items(&self, range: Range<usize>) {
+        self.remeasure_items_with_scroll_anchor(range, ScrollAnchor::Absolute);
+    }
+
+    fn remeasure_items_with_scroll_anchor(&self, range: Range<usize>, scroll_anchor: ScrollAnchor) {
         let state = &mut *self.0.borrow_mut();
 
         if let Some(scroll_top) = state.logical_scroll_top
             && range.contains(&scroll_top.item_ix)
         {
-            let mut cursor = state.items.cursor::<Count>(());
-            cursor.seek(&Count(scroll_top.item_ix), Bias::Right);
-
-            if let Some(item) = cursor.item()
-                && let Some(size) = item.size()
-            {
-                let fraction = if size.height > px(0.) {
-                    (scroll_top.offset_in_item / size.height).clamp(0.0, 1.0)
-                } else {
-                    0.0
-                };
-
-                state.pending_scroll = Some(PendingScrollFraction {
+            state.pending_scroll = match scroll_anchor {
+                ScrollAnchor::Absolute => Some(PendingScroll::Absolute {
                     item_ix: scroll_top.item_ix,
-                    fraction,
-                });
-            }
+                    offset: scroll_top.offset_in_item,
+                }),
+                ScrollAnchor::Proportional => {
+                    let mut cursor = state.items.cursor::<Count>(());
+                    cursor.seek(&Count(scroll_top.item_ix), Bias::Right);
+
+                    cursor
+                        .item()
+                        .and_then(|item| {
+                            item.size().map(|size| {
+                                let fraction = if size.height > px(0.) {
+                                    (scroll_top.offset_in_item / size.height).clamp(0.0, 1.0)
+                                } else {
+                                    0.0
+                                };
+
+                                PendingScroll::Proportional(PendingScrollFraction {
+                                    item_ix: scroll_top.item_ix,
+                                    fraction,
+                                })
+                            })
+                        })
+                        .or_else(|| state.pending_scroll.clone())
+                }
+            };
         }
 
         let new_items = {
@@ -612,6 +642,11 @@ impl ListState {
         self.0.borrow_mut().scrollbar_drag_start_height.take();
     }
 
+    /// Returns `true` if the scrollbar is currently being dragged.
+    pub fn is_scrollbar_dragging(&self) -> bool {
+        self.0.borrow().scrollbar_drag_start_height.is_some()
+    }
+
     /// Set the offset from the scrollbar
     pub fn set_offset_from_scrollbar(&self, point: Point<Pixels>) {
         self.0.borrow_mut().set_offset_from_scrollbar(point);
@@ -624,7 +659,10 @@ impl ListState {
         Size::new(Pixels::ZERO, state.max_scroll_offset())
     }
 
-    /// Returns the current scroll offset adjusted for the scrollbar
+    /// Returns the current scroll offset adjusted for the scrollbar.
+    ///
+    /// The returned offset has a negative `y` component representing how far the content has
+    /// scrolled.
     pub fn scroll_px_offset_for_scrollbar(&self) -> Point<Pixels> {
         let state = &self.0.borrow();
 
@@ -637,11 +675,7 @@ impl ListState {
         let mut cursor = state.items.cursor::<ListItemSummary>(());
         let summary: ListItemSummary =
             cursor.summary(&Count(logical_scroll_top.item_ix), Bias::Right);
-        let content_height = state.items.summary().height;
-        let drag_offset =
-            // if dragging the scrollbar, we want to offset the point if the height changed
-            content_height - state.scrollbar_drag_start_height.unwrap_or(content_height);
-        let offset = summary.height + logical_scroll_top.offset_in_item - drag_offset;
+        let offset = summary.height + logical_scroll_top.offset_in_item;
 
         Point::new(px(0.), -offset)
     }
@@ -838,10 +872,23 @@ impl StateInner {
 
                 if ix == 0
                     && let Some(pending_scroll) = self.pending_scroll.take()
-                    && pending_scroll.item_ix == scroll_top.item_ix
                 {
-                    scroll_top.offset_in_item = element_size.height * pending_scroll.fraction;
-                    self.logical_scroll_top = Some(scroll_top);
+                    match pending_scroll {
+                        PendingScroll::Absolute { item_ix, offset }
+                            if item_ix == scroll_top.item_ix =>
+                        {
+                            scroll_top.offset_in_item = offset.min(element_size.height);
+                            self.logical_scroll_top = Some(scroll_top);
+                        }
+                        PendingScroll::Proportional(pending_scroll)
+                            if pending_scroll.item_ix == scroll_top.item_ix =>
+                        {
+                            scroll_top.offset_in_item =
+                                element_size.height * pending_scroll.fraction;
+                            self.logical_scroll_top = Some(scroll_top);
+                        }
+                        _ => {}
+                    }
                 }
 
                 if visible_height < available_height {
@@ -1082,12 +1129,23 @@ impl StateInner {
         let height = bounds.size.height;
 
         let padding = self.last_padding.unwrap_or_default();
-        let content_height = self.items.summary().height;
+        let content_height = self
+            .scrollbar_drag_start_height
+            .unwrap_or_else(|| self.items.summary().height);
         let scroll_max = (content_height + padding.top + padding.bottom - height).max(px(0.));
-        let drag_offset =
-            // if dragging the scrollbar, we want to offset the point if the height changed
-            content_height - self.scrollbar_drag_start_height.unwrap_or(content_height);
-        let new_scroll_top = (point.y - drag_offset).abs().max(px(0.)).min(scroll_max);
+        let new_scroll_top = (-point.y).max(px(0.)).min(scroll_max);
+
+        let dragged_to_end =
+            scroll_max > px(0.) && new_scroll_top >= (scroll_max - px(1.)).max(px(0.));
+        if dragged_to_end && matches!(self.follow_state, FollowState::Tail { .. }) {
+            self.follow_state = FollowState::Tail { is_following: true };
+            let item_count = self.items.summary().count;
+            self.logical_scroll_top = Some(ListOffset {
+                item_ix: item_count,
+                offset_in_item: px(0.),
+            });
+            return;
+        }
 
         self.follow_state.stop_following();
 
@@ -1578,5 +1636,180 @@ mod test {
         assert_eq!(summary.unrendered_count, 5);
         assert_eq!(summary.height, px(100.));
         assert_eq!(state.max_offset_for_scrollbar().height, px(60.));
+    }
+
+    #[gpui::test]
+    fn test_remeasure_item_preserves_scroll_offset(cx: &mut TestAppContext) {
+        use crate::{
+            AppContext, Context, Element, IntoElement, ListState, Render, Styled, Window, div,
+            list, point, px, size,
+        };
+        use std::{cell::Cell, rc::Rc};
+
+        let cx = cx.add_empty_window();
+        let item_height = Rc::new(Cell::new(100usize));
+        let state = ListState::new(20, crate::ListAlignment::Top, px(10.));
+
+        struct TestView {
+            state: ListState,
+            item_height: Rc<Cell<usize>>,
+        }
+
+        impl Render for TestView {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                let height = self.item_height.get();
+                list(self.state.clone(), move |index, _, _| {
+                    let height = if index == 5 { height } else { 100 };
+                    div().h(px(height as f32)).w_full().into_any()
+                })
+                .w_full()
+                .h_full()
+            }
+        }
+
+        let view = cx.update(|_, cx| {
+            cx.new(|_| TestView {
+                state: state.clone(),
+                item_height: item_height.clone(),
+            })
+        });
+
+        state.scroll_to(gpui::ListOffset {
+            item_ix: 5,
+            offset_in_item: px(40.),
+        });
+
+        cx.draw(point(px(0.), px(0.)), size(px(100.), px(200.)), |_, _| {
+            view.clone().into_any_element()
+        });
+
+        item_height.set(200);
+        state.remeasure_items(5..6);
+
+        cx.draw(point(px(0.), px(0.)), size(px(100.), px(200.)), |_, _| {
+            view.into_any_element()
+        });
+
+        let offset = state.logical_scroll_top();
+        assert_eq!(offset.item_ix, 5);
+        assert_eq!(offset.offset_in_item, px(40.));
+    }
+
+    #[gpui::test]
+    fn test_scrollbar_drag_with_growing_content(cx: &mut TestAppContext) {
+        use crate::{
+            AppContext, Context, Element, IntoElement, ListState, Render, Styled, Window, div,
+            list, point, px, size,
+        };
+        use std::{cell::Cell, rc::Rc};
+
+        let cx = cx.add_empty_window();
+        let last_item_height = Rc::new(Cell::new(50usize));
+        let state = ListState::new(10, crate::ListAlignment::Top, px(0.)).measure_all();
+
+        struct TestView {
+            state: ListState,
+            last_item_height: Rc<Cell<usize>>,
+        }
+
+        impl Render for TestView {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                let last_item_height = self.last_item_height.clone();
+                list(self.state.clone(), move |index, _, _| {
+                    let height = if index == 9 {
+                        last_item_height.get()
+                    } else {
+                        50
+                    };
+                    div().h(px(height as f32)).w_full().into_any()
+                })
+                .w_full()
+                .h_full()
+            }
+        }
+
+        let view = cx.update(|_, cx| {
+            cx.new(|_| TestView {
+                state: state.clone(),
+                last_item_height: last_item_height.clone(),
+            })
+        });
+
+        cx.draw(point(px(0.), px(0.)), size(px(100.), px(200.)), |_, _| {
+            view.clone().into_any_element()
+        });
+
+        state.scrollbar_drag_started();
+        state.set_offset_from_scrollbar(point(px(0.), px(-150.)));
+        let scrollbar_offset_before_growth = state.scroll_px_offset_for_scrollbar();
+
+        let offset = state.logical_scroll_top();
+        assert_eq!(offset.item_ix, 3);
+        assert_eq!(offset.offset_in_item, px(0.));
+
+        last_item_height.set(550);
+        state.remeasure_items(9..10);
+        cx.draw(point(px(0.), px(0.)), size(px(100.), px(200.)), |_, _| {
+            view.clone().into_any_element()
+        });
+
+        assert_eq!(state.max_offset_for_scrollbar().height, px(300.));
+        assert_eq!(
+            state.scroll_px_offset_for_scrollbar(),
+            scrollbar_offset_before_growth
+        );
+
+        state.set_offset_from_scrollbar(point(px(0.), px(-150.)));
+        let offset = state.logical_scroll_top();
+        assert_eq!(offset.item_ix, 3);
+        assert_eq!(offset.offset_in_item, px(0.));
+    }
+
+    #[gpui::test]
+    fn test_follow_tail_reengages_after_scrollbar_drag_to_bottom_while_growing(
+        cx: &mut TestAppContext,
+    ) {
+        use crate::{
+            AppContext, Context, Element, FollowMode, IntoElement, ListState, Render, Styled,
+            Window, div, list, point, px, size,
+        };
+
+        let cx = cx.add_empty_window();
+        let state = ListState::new(10, crate::ListAlignment::Top, px(0.)).measure_all();
+
+        struct TestView(ListState);
+        impl Render for TestView {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                list(self.0.clone(), |_, _, _| {
+                    div().h(px(50.)).w_full().into_any()
+                })
+                .w_full()
+                .h_full()
+            }
+        }
+
+        let view = cx.update(|_, cx| cx.new(|_| TestView(state.clone())));
+
+        state.set_follow_mode(FollowMode::Tail);
+        cx.draw(point(px(0.), px(0.)), size(px(100.), px(200.)), |_, _| {
+            view.clone().into_any_element()
+        });
+        assert!(state.is_following_tail());
+
+        state.scrollbar_drag_started();
+
+        state.splice(10..10, 10);
+        cx.draw(point(px(0.), px(0.)), size(px(100.), px(200.)), |_, _| {
+            view.clone().into_any_element()
+        });
+
+        state.set_offset_from_scrollbar(point(px(0.), px(-300.)));
+        state.scrollbar_drag_ended();
+
+        cx.draw(point(px(0.), px(0.)), size(px(100.), px(200.)), |_, _| {
+            view.into_any_element()
+        });
+
+        assert!(state.is_following_tail());
     }
 }
