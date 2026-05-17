@@ -221,4 +221,4 @@ async fn concurrent_feature_is_stable(cx: &mut TestAppContext) { ... }
 
 ## 当前建议
 
-下一步应从 `001-profiler-observability.md` 开始。它不依赖 scheduler，收益直接，并且能为后续测试和调度改造提供观测基线。
+四个首版迁移任务均已完成。后续工作应按“已知迁移债务”和各任务文档中的“后续扩展”单独拆分，例如完整 scheduler crate 引入、跨平台 screenshot readback、golden snapshot 阈值工具或 profiler overlay。

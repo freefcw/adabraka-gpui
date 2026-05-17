@@ -213,7 +213,7 @@ cargo test -p adabraka-gpui --test real_visual_smoke --features test-support -- 
 
 ## 当前状态
 
-进行中（2026-05-17）：
+已完成首版（2026-05-17）：
 
 - 已新增 `VisualTestCapabilities::detect()`，用于报告 `real_renderer`、`screenshot_capture`、`offscreen_positioned_window`、`deterministic_clock`。
 - macOS 当前报告真实 renderer、截图和屏幕外坐标窗口可用；Linux/FreeBSD 根据 `DISPLAY` / `WAYLAND_DISPLAY` 探测真实 renderer；Windows 当前报告真实 renderer 可用。
