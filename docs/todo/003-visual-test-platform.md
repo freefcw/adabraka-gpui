@@ -220,6 +220,18 @@ cargo test -p adabraka-gpui real_visual --features test-support -- --ignored
 - 已新增 capability detection 自动测试，不创建真实窗口、不触发 GPU smoke。
 - 验证脚本：`scripts/verify-003.sh`。
 
+当前真实 renderer / screenshot smoke 尚未落地，原因：
+
+- 上游 `VisualTestAppContext::capture_screenshot` 依赖 `Window::render_to_image()` / `PlatformWindow::render_to_image()`。
+- 当前仓库的 `PlatformWindow` trait 没有 `render_to_image` 方法，macOS/Windows/Linux renderer 也没有统一的 scene-to-image 读回入口。
+- 直接迁移上游 visual test context 会扩大到 `Platform`、`PlatformWindow`、renderer 和 window draw 生命周期，不适合作为 capability detection 同一提交。
+
+下一步建议拆成独立小切片：
+
+1. 先为 mock `TestWindow` 增加结构化 render artifact 或 nonblank 检测，不声称真实 renderer。
+2. 再评估 `PlatformWindow::render_to_image` 是否能以默认 unsupported 方法引入，并只在 macOS Metal 先实现。
+3. 最后添加 `real_visual_* --ignored` smoke，unsupported 环境返回 skip。
+
 已验证：
 
 ```bash
