@@ -5332,6 +5332,8 @@ pub enum ElementId {
     CodeLocation(core::panic::Location<'static>),
     /// A labeled child of an element.
     NamedChild(Box<ElementId>, SharedString),
+    /// A byte array ID.
+    OpaqueId([u8; 20]),
 }
 
 impl ElementId {
@@ -5353,6 +5355,7 @@ impl Display for ElementId {
             ElementId::Path(path) => write!(f, "{}", path.display())?,
             ElementId::CodeLocation(location) => write!(f, "{}", location)?,
             ElementId::NamedChild(id, name) => write!(f, "{}-{}", id, name)?,
+            ElementId::OpaqueId(opaque_id) => write!(f, "{:x?}", opaque_id)?,
         }
 
         Ok(())
@@ -5386,6 +5389,18 @@ impl From<i32> for ElementId {
 impl From<SharedString> for ElementId {
     fn from(name: SharedString) -> Self {
         ElementId::Name(name)
+    }
+}
+
+impl From<String> for ElementId {
+    fn from(name: String) -> Self {
+        ElementId::Name(name.into())
+    }
+}
+
+impl From<Arc<str>> for ElementId {
+    fn from(name: Arc<str>) -> Self {
+        ElementId::Name(name.into())
     }
 }
 
@@ -5452,6 +5467,12 @@ impl<T: Into<SharedString>> From<(ElementId, T)> for ElementId {
 impl From<&'static core::panic::Location<'static>> for ElementId {
     fn from(location: &'static core::panic::Location<'static>) -> Self {
         ElementId::CodeLocation(*location)
+    }
+}
+
+impl From<[u8; 20]> for ElementId {
+    fn from(opaque_id: [u8; 20]) -> Self {
+        ElementId::OpaqueId(opaque_id)
     }
 }
 
