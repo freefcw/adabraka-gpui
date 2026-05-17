@@ -122,6 +122,7 @@ pub struct WaylandWindowState {
     active: bool,
     hovered: bool,
     force_render_after_recovery: bool,
+    renderer_presented: bool,
     in_progress_configure: Option<InProgressConfigure>,
     resize_throttle: bool,
     in_progress_window_controls: Option<WindowControls>,
@@ -198,7 +199,13 @@ impl WaylandWindowState {
                 transparent: true,
                 preferred_present_mode: None,
             };
-            WgpuRenderer::new(gpu_context, &raw_window, config, None, options.atlas_initial_size)?
+            WgpuRenderer::new(
+                gpu_context,
+                &raw_window,
+                config,
+                None,
+                options.atlas_initial_size,
+            )?
         };
 
         Ok(Self {
@@ -229,6 +236,7 @@ impl WaylandWindowState {
             active: false,
             hovered: false,
             force_render_after_recovery: false,
+            renderer_presented: false,
             in_progress_window_controls: None,
             window_controls: WindowControls::default(),
             client_inset: None,
@@ -1567,7 +1575,7 @@ impl PlatformWindow for WaylandWindow {
             return;
         }
 
-        state.renderer.draw(scene);
+        state.renderer_presented = state.renderer.draw(scene);
 
         if state.renderer.needs_redraw() {
             state.force_render_after_recovery = true;
@@ -1575,11 +1583,15 @@ impl PlatformWindow for WaylandWindow {
     }
 
     fn completed_frame(&self) {
-        let state = self.borrow();
+        let mut state = self.borrow_mut();
         if is_unconfigured_layer_shell(&state.role) {
+            state.renderer_presented = false;
             return;
         }
-        state.surface.commit();
+        if !state.renderer_presented {
+            state.surface.commit();
+        }
+        state.renderer_presented = false;
     }
 
     fn sprite_atlas(&self) -> Arc<dyn PlatformAtlas> {
