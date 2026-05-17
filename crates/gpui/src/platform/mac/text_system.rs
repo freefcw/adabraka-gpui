@@ -8,7 +8,7 @@ use anyhow::anyhow;
 use collections::HashMap;
 use core_foundation::{
     attributed_string::CFMutableAttributedString,
-    base::{CFRange, TCFType},
+    base::{CFRange, CFType, TCFType},
     number::CFNumber,
     string::CFString,
 };
@@ -217,7 +217,10 @@ fn font_smoothing_allowed_by_user() -> bool {
             return true;
         }
 
-        let number = unsafe { CFNumber::wrap_under_create_rule(value_ref as _) };
+        let value = unsafe { CFType::wrap_under_create_rule(value_ref) };
+        let Some(number) = value.downcast_into::<CFNumber>() else {
+            return true;
+        };
         // Only an explicit value of 0 means font smoothing is disabled.
         number.to_i64() != Some(0)
     })
