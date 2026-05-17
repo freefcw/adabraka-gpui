@@ -3,7 +3,7 @@ use crate::{
     BackgroundExecutor, BorrowAppContext, Bounds, Capslock, ClipboardItem, DrawPhase, Drawable,
     Element, Empty, EventEmitter, ForegroundExecutor, Global, InputEvent, Keystroke, Modifiers,
     ModifiersChangedEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels,
-    Platform, Point, Render, Result, Size, Task, TestDispatcher, TestPlatform,
+    Platform, PlatformTextSystem, Point, Render, Result, Size, Task, TestDispatcher, TestPlatform,
     TestScreenCaptureSource, TestWindow, TextSystem, VisualContext, Window, WindowBounds,
     WindowHandle, WindowOptions,
 };
@@ -122,10 +122,26 @@ impl AppContext for TestAppContext {
 impl TestAppContext {
     /// Creates a new `TestAppContext`. Usually you can rely on `#[gpui::test]` to do this for you.
     pub fn build(dispatcher: TestDispatcher, fn_name: Option<&'static str>) -> Self {
+        Self::build_with_text_system(dispatcher, fn_name, None)
+    }
+
+    pub(crate) fn build_with_text_system(
+        dispatcher: TestDispatcher,
+        fn_name: Option<&'static str>,
+        platform_text_system: Option<Arc<dyn PlatformTextSystem>>,
+    ) -> Self {
         let arc_dispatcher = Arc::new(dispatcher.clone());
         let background_executor = BackgroundExecutor::new(arc_dispatcher.clone());
         let foreground_executor = ForegroundExecutor::new(arc_dispatcher);
-        let platform = TestPlatform::new(background_executor.clone(), foreground_executor.clone());
+        let platform = if let Some(platform_text_system) = platform_text_system {
+            TestPlatform::with_text_system(
+                background_executor.clone(),
+                foreground_executor.clone(),
+                platform_text_system,
+            )
+        } else {
+            TestPlatform::new(background_executor.clone(), foreground_executor.clone())
+        };
         let asset_source = Arc::new(());
         let http_client = http_client::FakeHttpClient::with_404_response();
         let default_profile = crate::AppResourceProfile::default();
@@ -575,6 +591,15 @@ impl TestApp {
         let dispatcher = TestDispatcher::new(StdRng::seed_from_u64(seed));
         Self {
             cx: TestAppContext::build(dispatcher, None),
+        }
+    }
+
+    pub(crate) fn with_platform_text_system(
+        platform_text_system: Arc<dyn PlatformTextSystem>,
+    ) -> Self {
+        let dispatcher = TestDispatcher::new(StdRng::seed_from_u64(0));
+        Self {
+            cx: TestAppContext::build_with_text_system(dispatcher, None, Some(platform_text_system)),
         }
     }
 
@@ -1237,6 +1262,7 @@ impl AnyWindowHandle {
 #[cfg(test)]
 mod test_app_tests {
     use super::*;
+    use crate::{TextRun, font, px};
     use std::sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
@@ -1318,5 +1344,47 @@ mod test_app_tests {
     fn test_app_flush_with_no_windows_succeeds() {
         let mut app = TestApp::new();
         app.flush();
+    }
+
+    fn assert_headless_text_layout_has_real_metrics(app: &TestApp) {
+        let text_system = app.text_system();
+        let family = text_system
+            .all_font_names()
+            .into_iter()
+            .find(|name| !name.starts_with('.'))
+            .unwrap_or_else(|| ".SystemUIFont".to_string());
+        let window_text_system = crate::WindowTextSystem::new(text_system.clone());
+        let text = "Headless text";
+        let layout = window_text_system.layout_line(
+            text,
+            px(16.),
+            &[TextRun {
+                len: text.len(),
+                font: font(family),
+                color: crate::black(),
+                background_color: None,
+                underline: None,
+                strikethrough: None,
+            }],
+            None,
+        );
+
+        assert!(layout.width > px(0.));
+        assert!(layout.ascent > px(0.));
+        assert!(layout.runs.iter().any(|run| !run.glyphs.is_empty()));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn headless_mac_text_layout_produces_nonzero_metrics() {
+        let app = TestApp::with_platform_text_system(Arc::new(crate::MacTextSystem::new()));
+        assert_headless_text_layout_has_real_metrics(&app);
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    #[test]
+    fn headless_cosmic_text_layout_produces_nonzero_metrics() {
+        let app = TestApp::with_platform_text_system(Arc::new(crate::CosmicTextSystem::new()));
+        assert_headless_text_layout_has_real_metrics(&app);
     }
 }
