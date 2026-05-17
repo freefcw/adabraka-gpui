@@ -279,12 +279,12 @@ cargo test -p adabraka-gpui --lib --features test-support
 
 ## 当前状态
 
-进行中（2026-05-17）：
+已完成本地 priority 首版（2026-05-17）：
 
 - 已完成 Step 0 行为基线测试，覆盖 foreground main-thread、background drain、fake-clock timer、`TaskLabel::deprioritize`、`block_with_timeout` bounded pending、no-window headless task、scoped task。
 - 已完成本地 `TaskPriority::{High, Medium, Low}` 试点；默认 `spawn` 仍为 Medium，`PlatformDispatcher` trait 未改变。
 - `TestDispatcher` 已增加 high / medium / low background queue，`TaskLabel::deprioritize` 仍映射为 low queue。
-- 尚未引入 scheduler crate，尚未替换 `Task<T>`。
+- 明确暂缓引入 scheduler crate：当前本地 adapter/queue 已满足测试可观测 priority 需求，且避免一次性替换 `Task<T>` 与平台 dispatcher 签名。
 - 验证脚本：`scripts/verify-004.sh`。
 
 已验证：
