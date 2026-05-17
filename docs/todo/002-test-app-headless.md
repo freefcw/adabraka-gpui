@@ -200,6 +200,25 @@ cargo check -p adabraka-gpui --no-default-features --features wgpu
 - 用新 `TestApp` 模拟输入并断言状态变化。
 - 用 headless text system 断言 layout/glyph fallback。
 
+## 当前状态
+
+进行中（2026-05-17）：
+
+- 已新增 `TestApp` wrapper，覆盖 `new`、`with_seed`、`update`、`update_without_flush`、`flush` / `flush_effects`、`open_window`、`raw_context` escape hatch。
+- 已新增 `TestAppWindow`，覆盖 `handle`、`root`、`read`、`update`、`draw`、`flush`。
+- 已保留 `TestAppContext` 原有入口；`TestApp` 仅作为上层便利 API，不替换现有 `#[gpui::test]` 流程。
+- 已通过 `raw_context()` / `raw_context_mut()` 和 tray helper 保留 Adabraka tray/daemon 专属测试路径。
+- 验证脚本：`scripts/verify-002.sh`。
+
+已验证：
+
+```bash
+cargo test -p adabraka-gpui --lib --features test-support -- test_app
+cargo test -p adabraka-gpui --lib --features test-support -- headless
+```
+
+结果：全部通过；当前 `headless` 过滤项尚无命名匹配测试，真实 text shaping 覆盖仍待补充。
+
 ## 完成标准
 
 - 旧 `TestAppContext` 测试不需要改。

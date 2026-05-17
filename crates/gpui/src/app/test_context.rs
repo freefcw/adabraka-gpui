@@ -554,6 +554,180 @@ impl TestAppContext {
     }
 }
 
+/// A higher-level test application wrapper that flushes pending effects after updates.
+///
+/// Use this for tests that do not need precise control over every dispatcher tick. Use
+/// [`TestAppContext`] directly when a test needs to observe intermediate states before tasks run.
+pub struct TestApp {
+    cx: TestAppContext,
+}
+
+impl TestApp {
+    /// Creates a new test application using a deterministic default seed.
+    pub fn new() -> Self {
+        Self {
+            cx: TestAppContext::single(),
+        }
+    }
+
+    /// Creates a new test application using the provided dispatcher seed.
+    pub fn with_seed(seed: u64) -> Self {
+        let dispatcher = TestDispatcher::new(StdRng::seed_from_u64(seed));
+        Self {
+            cx: TestAppContext::build(dispatcher, None),
+        }
+    }
+
+    /// Wraps an existing [`TestAppContext`].
+    pub fn from_context(cx: TestAppContext) -> Self {
+        Self { cx }
+    }
+
+    /// Returns the underlying [`TestAppContext`].
+    pub fn raw_context(&self) -> &TestAppContext {
+        &self.cx
+    }
+
+    /// Returns the underlying mutable [`TestAppContext`].
+    pub fn raw_context_mut(&mut self) -> &mut TestAppContext {
+        &mut self.cx
+    }
+
+    /// Gives mutable access to [`App`] and then flushes pending effects and redraws.
+    pub fn update<R>(&mut self, f: impl FnOnce(&mut App) -> R) -> R {
+        let result = self.cx.update(f);
+        self.flush();
+        result
+    }
+
+    /// Gives mutable access to [`App`] without automatically flushing pending work.
+    pub fn update_without_flush<R>(&mut self, f: impl FnOnce(&mut App) -> R) -> R {
+        self.cx.update(f)
+    }
+
+    /// Gives read-only access to [`App`].
+    pub fn read<R>(&self, f: impl FnOnce(&App) -> R) -> R {
+        self.cx.read(f)
+    }
+
+    /// Runs pending tasks, refreshes windows, and runs tasks produced by redraw.
+    pub fn flush(&mut self) {
+        self.cx.run_until_parked();
+        self.cx.refresh().unwrap();
+        self.cx.run_until_parked();
+    }
+
+    /// Alias for [`Self::flush`].
+    pub fn flush_effects(&mut self) {
+        self.flush();
+    }
+
+    /// Runs pending tasks until the dispatcher parks.
+    pub fn run_until_parked(&mut self) {
+        self.cx.run_until_parked();
+    }
+
+    /// Opens a test window and returns a typed wrapper for its root view.
+    pub fn open_window<F, V>(&mut self, build_window: F) -> TestAppWindow<V>
+    where
+        F: FnOnce(&mut Window, &mut Context<V>) -> V,
+        V: 'static + Render,
+    {
+        let handle = self.cx.add_window(build_window);
+        self.flush();
+        TestAppWindow {
+            handle,
+            cx: self.cx.clone(),
+        }
+    }
+
+    /// Returns the test text system.
+    pub fn text_system(&self) -> &Arc<TextSystem> {
+        self.cx.text_system()
+    }
+
+    /// Returns the latest tray icon bytes set through the test platform.
+    pub fn tray_icon(&self) -> Option<Vec<u8>> {
+        self.cx.tray_icon()
+    }
+
+    /// Returns the latest tray icon rendering mode set through the test platform.
+    pub fn tray_icon_rendering_mode(&self) -> crate::TrayIconRenderingMode {
+        self.cx.tray_icon_rendering_mode()
+    }
+
+    /// Simulates a system tray icon click event.
+    pub fn simulate_tray_icon_click_event(&self, event: crate::TrayIconClickEvent) {
+        self.cx.simulate_tray_icon_click_event(event);
+    }
+}
+
+impl Default for TestApp {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// A typed handle for a root view opened by [`TestApp`].
+pub struct TestAppWindow<V> {
+    handle: WindowHandle<V>,
+    cx: TestAppContext,
+}
+
+impl<V> Clone for TestAppWindow<V> {
+    fn clone(&self) -> Self {
+        Self {
+            handle: self.handle,
+            cx: self.cx.clone(),
+        }
+    }
+}
+
+impl<V: 'static + Render> TestAppWindow<V> {
+    /// Returns the underlying window handle.
+    pub fn handle(&self) -> WindowHandle<V> {
+        self.handle
+    }
+
+    /// Returns the root entity for this window.
+    pub fn root(&mut self) -> Entity<V> {
+        self.handle.root(&mut self.cx).unwrap()
+    }
+
+    /// Reads the root view.
+    pub fn read<R>(&self, f: impl FnOnce(&V, &App) -> R) -> R {
+        self.handle.read_with(&self.cx, f).unwrap()
+    }
+
+    /// Updates the root view and then flushes pending effects.
+    pub fn update<R>(
+        &mut self,
+        f: impl FnOnce(&mut V, &mut Window, &mut Context<V>) -> R,
+    ) -> R {
+        let result = self.handle.update(&mut self.cx, f).unwrap();
+        self.flush();
+        result
+    }
+
+    /// Draws the window once.
+    pub fn draw(&mut self) {
+        let window: AnyWindowHandle = self.handle.into();
+        self.cx
+            .update_window(window, |_, window, cx| {
+                window.draw(cx).clear();
+            })
+            .unwrap();
+        self.flush();
+    }
+
+    /// Flushes pending effects through the underlying test app context.
+    pub fn flush(&mut self) {
+        self.cx.run_until_parked();
+        self.cx.refresh().unwrap();
+        self.cx.run_until_parked();
+    }
+}
+
 impl<T: 'static> Entity<T> {
     /// Block until the next event is emitted by the entity, then return it.
     pub fn next_event<Event>(&self, cx: &mut TestAppContext) -> impl Future<Output = Event>
@@ -1057,5 +1231,92 @@ impl AnyWindowHandle {
     ) -> Entity<V> {
         self.update(cx, |_, window, cx| cx.new(|cx| build_view(window, cx)))
             .unwrap()
+    }
+}
+
+#[cfg(test)]
+mod test_app_tests {
+    use super::*;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    struct TestView {
+        value: usize,
+    }
+
+    impl Render for TestView {
+        fn render(
+            &mut self,
+            _window: &mut Window,
+            _cx: &mut Context<Self>,
+        ) -> impl crate::IntoElement {
+            Empty
+        }
+    }
+
+    #[test]
+    fn test_app_update_auto_flushes_effects() {
+        let mut app = TestApp::new();
+        let value = Arc::new(AtomicUsize::new(0));
+
+        app.update({
+            let value = value.clone();
+            move |cx| {
+                cx.background_executor()
+                    .spawn(async move {
+                        value.store(1, Ordering::SeqCst);
+                    })
+                    .detach();
+            }
+        });
+
+        assert_eq!(value.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn test_app_update_without_flush_preserves_pending_state() {
+        let mut app = TestApp::new();
+        let value = Arc::new(AtomicUsize::new(0));
+
+        app.update_without_flush({
+            let value = value.clone();
+            move |cx| {
+                cx.background_executor()
+                    .spawn(async move {
+                        value.store(1, Ordering::SeqCst);
+                    })
+                    .detach();
+            }
+        });
+
+        assert_eq!(value.load(Ordering::SeqCst), 0);
+        app.flush();
+        assert_eq!(value.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn test_app_open_window_returns_usable_handle() {
+        let mut app = TestApp::new();
+        let mut window = app.open_window(|_, _| TestView { value: 1 });
+
+        assert_eq!(window.read(|view, _| view.value), 1);
+        window.update(|view, _, _| view.value = 2);
+        assert_eq!(window.read(|view, _| view.value), 2);
+    }
+
+    #[test]
+    fn test_app_window_draw_succeeds() {
+        let mut app = TestApp::new();
+        let mut window = app.open_window(|_, _| TestView { value: 1 });
+
+        window.draw();
+    }
+
+    #[test]
+    fn test_app_flush_with_no_windows_succeeds() {
+        let mut app = TestApp::new();
+        app.flush();
     }
 }
