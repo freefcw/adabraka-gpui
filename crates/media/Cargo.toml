@@ -23,10 +23,10 @@ version = "1.0.86"
 version = "0.71"
 
 [target.'cfg(target_os = "macos")'.dependencies.core-foundation]
-version = "0.10.0"
+version = "0.10.1"
 
 [target.'cfg(target_os = "macos")'.dependencies.core-video]
-version = "0.4.3"
+version = "0.5.2"
 features = ["metal"]
 
 [target.'cfg(target_os = "macos")'.dependencies.ctor]
@@ -36,7 +36,7 @@ version = "0.4.0"
 version = "0.5"
 
 [target.'cfg(target_os = "macos")'.dependencies.metal]
-version = "0.29"
+version = "0.33"
 
 [target.'cfg(target_os = "macos")'.dependencies.objc]
 version = "0.2"
