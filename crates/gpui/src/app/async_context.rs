@@ -365,11 +365,26 @@ impl AppContext for AsyncWindowContext {
     where
         T: 'static,
     {
-        self.window.update(self, |_, _, cx| cx.new(build_entity))
+        let mut build_entity = Some(build_entity);
+        match self.app.update_window(self.window, |_, _, cx| {
+            cx.new(
+                build_entity
+                    .take()
+                    .expect("build_entity is taken exactly once"),
+            )
+        }) {
+            Ok(entity) => Ok(entity),
+            Err(err) => {
+                let Some(build_entity) = build_entity.take() else {
+                    return Err(err);
+                };
+                self.app.new(build_entity)
+            }
+        }
     }
 
     fn reserve_entity<T: 'static>(&mut self) -> Result<Reservation<T>> {
-        self.window.update(self, |_, _, cx| cx.reserve_entity())
+        self.app.reserve_entity()
     }
 
     fn insert_entity<T: 'static>(
@@ -377,8 +392,19 @@ impl AppContext for AsyncWindowContext {
         reservation: Reservation<T>,
         build_entity: impl FnOnce(&mut Context<T>) -> T,
     ) -> Self::Result<Entity<T>> {
-        self.window
-            .update(self, |_, _, cx| cx.insert_entity(reservation, build_entity))
+        let mut args = Some((reservation, build_entity));
+        match self.app.update_window(self.window, |_, _, cx| {
+            let (reservation, build_entity) = args.take().expect("args are taken exactly once");
+            cx.insert_entity(reservation, build_entity)
+        }) {
+            Ok(entity) => Ok(entity),
+            Err(err) => {
+                let Some((reservation, build_entity)) = args.take() else {
+                    return Err(err);
+                };
+                self.app.insert_entity(reservation, build_entity)
+            }
+        }
     }
 
     fn update_entity<T: 'static, R>(
@@ -484,5 +510,42 @@ impl VisualContext for AsyncWindowContext {
         self.window.update(self, |_, window, cx| {
             view.read(cx).focus_handle(cx).focus(window);
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Empty, TestAppContext};
+
+    struct TestEntity(usize);
+
+    #[test]
+    fn async_window_context_creates_entities_after_window_closes() {
+        let mut cx = TestAppContext::single();
+        let window = cx.add_window(|_, _| Empty);
+        let window: AnyWindowHandle = window.into();
+        let mut async_cx = cx
+            .update_window(window, |_, window, cx| window.to_async(cx))
+            .unwrap();
+
+        cx.update_window(window, |_, window, _| window.remove_window())
+            .unwrap();
+        assert!(cx.update_window(window, |_, _, _| ()).is_err());
+
+        let entity = async_cx.new(|_| TestEntity(1)).unwrap();
+        assert_eq!(
+            async_cx.read_entity(&entity, |entity, _| entity.0).unwrap(),
+            1
+        );
+
+        let reservation = async_cx.reserve_entity::<TestEntity>().unwrap();
+        let entity = async_cx
+            .insert_entity(reservation, |_| TestEntity(2))
+            .unwrap();
+        assert_eq!(
+            async_cx.read_entity(&entity, |entity, _| entity.0).unwrap(),
+            2
+        );
     }
 }
