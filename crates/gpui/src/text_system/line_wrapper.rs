@@ -137,13 +137,12 @@ impl LineWrapper {
         runs: &mut Vec<TextRun>,
     ) -> SharedString {
         let mut width = px(0.);
-        let mut suffix_width = truncation_suffix
+        let suffix_width = truncation_suffix
             .chars()
             .map(|c| self.width_for_char(c))
             .fold(px(0.0), |a, x| a + x);
-        let mut char_indices = line.char_indices();
         let mut truncate_ix = 0;
-        for (ix, c) in char_indices {
+        for (ix, c) in line.char_indices() {
             if width + suffix_width < truncate_width {
                 truncate_ix = ix;
             }
@@ -152,8 +151,9 @@ impl LineWrapper {
             width += char_width;
 
             if width.floor() > truncate_width {
-                let result =
-                    SharedString::from(format!("{}{}", &line[..truncate_ix], truncation_suffix));
+                let truncated = line[..truncate_ix]
+                    .trim_end_matches(|c: char| c.is_whitespace() || c.is_ascii_punctuation());
+                let result = SharedString::from(format!("{}{}", truncated, truncation_suffix));
                 update_runs_after_truncation(&result, truncation_suffix, runs);
 
                 return result;
@@ -499,10 +499,20 @@ mod tests {
             result: &'static str,
             ellipsis: &str,
         ) {
+            perform_test_with_width(wrapper, text, result, ellipsis, px(220.));
+        }
+
+        fn perform_test_with_width(
+            wrapper: &mut LineWrapper,
+            text: &'static str,
+            result: &'static str,
+            ellipsis: &str,
+            width: Pixels,
+        ) {
             let dummy_run_lens = vec![text.len()];
             let mut dummy_runs = generate_test_runs(&dummy_run_lens);
             assert_eq!(
-                wrapper.truncate_line(text.into(), px(220.), ellipsis, &mut dummy_runs),
+                wrapper.truncate_line(text.into(), width, ellipsis, &mut dummy_runs),
                 result
             );
             assert_eq!(dummy_runs.first().unwrap().len, result.len());
@@ -525,6 +535,20 @@ mod tests {
             "aa bbb cccc ddddd eeee ffff gggg",
             "aa bbb cccc dddd......",
             "......",
+        );
+        perform_test_with_width(
+            &mut wrapper,
+            "aa bbb cccc ddddd. eeee ffff gggg",
+            "aa bbb cccc ddddd…",
+            "…",
+            px(195.),
+        );
+        perform_test_with_width(
+            &mut wrapper,
+            "aa bbb cccc ddddd  eeee ffff gggg",
+            "aa bbb cccc ddddd…",
+            "…",
+            px(195.),
         );
     }
 
