@@ -197,7 +197,8 @@ impl WaylandWindowState {
             let config = WgpuSurfaceConfig {
                 size: options.bounds.to_device_pixels(1.0).size,
                 transparent: true,
-                preferred_present_mode: None,
+                // Prefer Mailbox on Wayland to avoid blocking the event loop on FIFO stalls.
+                preferred_present_mode: Some(wgpu::PresentMode::Mailbox),
             };
             WgpuRenderer::new(
                 gpu_context,
