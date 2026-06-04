@@ -28,7 +28,7 @@ version = "1.0.86"
 version = "2.1"
 
 [dependencies.async_zip]
-version = "0.0.17"
+version = "0.0.18"
 features = [
     "deflate",
     "deflate64",
