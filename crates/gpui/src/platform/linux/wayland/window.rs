@@ -27,7 +27,7 @@ use wayland_protocols::{
 use wayland_protocols_plasma::blur::client::org_kde_kwin_blur;
 
 use crate::{
-    AnyWindowHandle, Bounds, Decorations, Globals, GpuSpecs, Modifiers, Output, Pixels,
+    AnyWindowHandle, Bounds, Decorations, DisplayId, Globals, GpuSpecs, Modifiers, Output, Pixels,
     PlatformDisplay, PlatformInput, Point, PromptButton, PromptLevel, RequestFrameOptions,
     ResizeEdge, Size, Tiling, WaylandClientStatePtr, WindowAppearance, WindowBackgroundAppearance,
     WindowBounds, WindowControlArea, WindowControls, WindowDecorations, WindowParams, px, size,
@@ -480,7 +480,7 @@ fn output_for_layer_shell(
     params.display_id.and_then(|display_id| {
         outputs
             .iter()
-            .find(|output| output.id.protocol_id() as u64 == display_id.0)
+            .find(|output| DisplayId::from(output.id.protocol_id()) == display_id)
             .map(|output| output.output.clone())
     })
 }
@@ -578,7 +578,7 @@ fn find_output_for_params<'a>(params: &WindowParams, outputs: &'a [Output]) -> O
         .and_then(|display_id| {
             outputs
                 .iter()
-                .find(|output| output.id.protocol_id() as u64 == display_id.0)
+                .find(|output| DisplayId::from(output.id.protocol_id()) == display_id)
         })
         .or_else(|| {
             outputs.iter().find(|output| {

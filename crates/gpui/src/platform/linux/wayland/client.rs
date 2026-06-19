@@ -767,7 +767,7 @@ impl LinuxClient for WaylandClient {
 
     fn display(&self, id: DisplayId) -> Option<Rc<dyn PlatformDisplay>> {
         self.0.borrow().outputs.values().find_map(|output| {
-            (output.id.protocol_id() as u64 == id.0).then(|| {
+            (DisplayId::from(output.id.protocol_id()) == id).then(|| {
                 Rc::new(WaylandDisplay {
                     id: output.id.clone(),
                     name: output.name.clone(),
