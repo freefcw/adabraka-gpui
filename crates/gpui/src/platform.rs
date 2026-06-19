@@ -510,6 +510,12 @@ impl DisplayId {
     }
 }
 
+impl From<u32> for DisplayId {
+    fn from(id: u32) -> Self {
+        Self(u64::from(id))
+    }
+}
+
 impl From<DisplayId> for u32 {
     fn from(id: DisplayId) -> Self {
         id.0 as u32
