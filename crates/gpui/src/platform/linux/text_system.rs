@@ -416,16 +416,19 @@ impl CosmicTextSystemState {
     /// `LoadedFont.features`, as it will have an arbitrarily chosen or empty value. The only
     /// current use of this field is for the *input* of `layout_line`, and so it's fine to use
     /// `font_id_for_cosmic_id` when computing the *output* of `layout_line`.
-    fn font_id_for_cosmic_id(&mut self, id: cosmic_text::fontdb::ID) -> Option<FontId> {
+    fn font_id_for_cosmic_id(
+        &mut self,
+        id: cosmic_text::fontdb::ID,
+        weight: cosmic_text::Weight,
+    ) -> Option<FontId> {
         if let Some(ix) = self
             .loaded_fonts
             .iter()
-            .position(|loaded_font| loaded_font.font.id() == id)
+            .position(|loaded_font| loaded_font.font.id() == id && loaded_font.weight == weight)
         {
             Some(FontId(ix))
         } else {
-            let font_weight = self.font_weight(id);
-            let font = self.font_system.get_font(id, font_weight)?;
+            let font = self.font_system.get_font(id, weight)?;
             let is_known_emoji_font = self
                 .font_system
                 .db()
@@ -435,7 +438,7 @@ impl CosmicTextSystemState {
             let font_id = FontId(self.loaded_fonts.len());
             self.loaded_fonts.push(LoadedFont {
                 font,
-                weight: font_weight,
+                weight,
                 features: CosmicFontFeatures::new(),
                 is_known_emoji_font,
                 user_fallback_chain: Arc::from(Vec::new()),
@@ -530,8 +533,10 @@ impl CosmicTextSystemState {
         for glyph in &layout.glyphs {
             let mut font_id = FontId(glyph.metadata);
             let mut loaded_font = self.loaded_font(font_id);
-            if loaded_font.font.id() != glyph.font_id {
-                let Some(fallback_font_id) = self.font_id_for_cosmic_id(glyph.font_id) else {
+            if loaded_font.font.id() != glyph.font_id || loaded_font.weight != glyph.font_weight {
+                let Some(fallback_font_id) =
+                    self.font_id_for_cosmic_id(glyph.font_id, glyph.font_weight)
+                else {
                     continue;
                 };
                 font_id = fallback_font_id;
