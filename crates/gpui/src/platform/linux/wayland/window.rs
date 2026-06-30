@@ -213,7 +213,7 @@ impl WaylandWindowState {
             role,
             acknowledged_first_configure: false,
             surface,
-            app_id: None,
+            app_id: options.app_id,
             blur: None,
             viewport,
             globals,
@@ -495,6 +495,10 @@ fn create_xdg_toplevel_role(
         .wm_base
         .get_xdg_surface(surface, &globals.qh, surface.id());
     let toplevel = xdg_surface.get_toplevel(&globals.qh, surface.id());
+
+    if let Some(app_id) = &params.app_id {
+        toplevel.set_app_id(app_id.clone());
+    }
 
     if params.kind == WindowKind::Floating || params.kind == WindowKind::Overlay {
         toplevel.set_parent(parent.as_ref());
