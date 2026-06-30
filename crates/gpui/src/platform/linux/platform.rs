@@ -13,7 +13,7 @@ use std::{
     ffi::OsString,
     fs::File,
     io::Read as _,
-    os::fd::{AsFd, AsRawFd, FromRawFd},
+    os::fd::{AsFd, AsRawFd},
 };
 
 use anyhow::{Context as _, anyhow};
@@ -1056,11 +1056,43 @@ pub(super) fn get_xkb_compose_state(cx: &xkb::Context) -> Option<xkb::compose::S
 }
 
 #[cfg(any(feature = "wayland", feature = "x11"))]
-pub(super) unsafe fn read_fd(mut fd: filedescriptor::FileDescriptor) -> Result<Vec<u8>> {
-    let mut file = unsafe { File::from_raw_fd(fd.as_raw_fd()) };
+pub(super) const PIPE_READ_TIMEOUT: Duration = Duration::from_secs(4);
+
+#[cfg(any(feature = "wayland", feature = "x11"))]
+pub(super) fn read_fd_with_timeout(
+    mut fd: filedescriptor::FileDescriptor,
+    timeout: Duration,
+) -> Result<Vec<u8>> {
+    fd.set_non_blocking(true)?;
     let mut buffer = Vec::new();
-    file.read_to_end(&mut buffer)?;
-    Ok(buffer)
+    let mut chunk = [0u8; 8192];
+    loop {
+        let mut poll_fds = [filedescriptor::pollfd {
+            fd: fd.as_raw_fd(),
+            events: filedescriptor::POLLIN,
+            revents: 0,
+        }];
+        let ready = match filedescriptor::poll(&mut poll_fds, Some(timeout)) {
+            Ok(ready) => ready,
+            Err(filedescriptor::Error::Poll(err))
+                if err.kind() == std::io::ErrorKind::Interrupted =>
+            {
+                continue;
+            }
+            Err(err) => return Err(err.into()),
+        };
+        if ready == 0 {
+            anyhow::bail!("timed out waiting for data on pipe after {timeout:?}");
+        }
+        match fd.read(&mut chunk) {
+            Ok(0) => return Ok(buffer),
+            Ok(len) => buffer.extend_from_slice(&chunk[..len]),
+            Err(err)
+                if err.kind() == std::io::ErrorKind::WouldBlock
+                    || err.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(err) => return Err(err.into()),
+        }
+    }
 }
 
 #[cfg(any(feature = "wayland", feature = "x11"))]

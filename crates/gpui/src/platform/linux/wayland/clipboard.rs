@@ -12,7 +12,7 @@ use wayland_protocols::wp::primary_selection::zv1::client::zwp_primary_selection
 
 use crate::{
     ClipboardEntry, ClipboardItem, Image, ImageFormat, WaylandClientStatePtr, hash,
-    platform::linux::platform::read_fd,
+    platform::linux::platform::{PIPE_READ_TIMEOUT, read_fd_with_timeout},
 };
 
 /// Text mime types that we'll offer to other programs.
@@ -88,7 +88,7 @@ impl<T: ReceiveData> DataOffer<T> {
 
         connection.flush().unwrap();
 
-        match unsafe { read_fd(fd) } {
+        match read_fd_with_timeout(fd, PIPE_READ_TIMEOUT) {
             Ok(bytes) => Some(bytes),
             Err(err) => {
                 log::error!("error reading clipboard pipe: {err:?}");
