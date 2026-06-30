@@ -891,25 +891,30 @@ impl WindowsWindowInner {
         wparam: WPARAM,
         lparam: LPARAM,
     ) -> Option<isize> {
-        if !self.is_movable || self.state.borrow().is_fullscreen() {
+        if self.state.borrow().is_fullscreen() {
             return None;
         }
 
         let mut lock = self.state.borrow_mut();
-        if let Some(mut callback) = lock.callbacks.hit_test_window_control.take() {
-            drop(lock);
-            let area = callback();
-            self.state.borrow_mut().callbacks.hit_test_window_control = Some(callback);
-            if let Some(area) = area {
-                return match area {
-                    WindowControlArea::Drag => Some(HTCAPTION as _),
+        let hit_test_window_control =
+            if let Some(mut callback) = lock.callbacks.hit_test_window_control.take() {
+                drop(lock);
+                let area = callback();
+                self.state.borrow_mut().callbacks.hit_test_window_control = Some(callback);
+                area.and_then(|area| match area {
+                    WindowControlArea::Drag if self.is_movable => Some(HTCAPTION as _),
+                    WindowControlArea::Drag => None,
                     WindowControlArea::Close => Some(HTCLOSE as _),
                     WindowControlArea::Max => Some(HTMAXBUTTON as _),
                     WindowControlArea::Min => Some(HTMINBUTTON as _),
-                };
-            }
-        } else {
-            drop(lock);
+                })
+            } else {
+                drop(lock);
+                None
+            };
+
+        if let Some(hit_test_window_control) = hit_test_window_control {
+            return Some(hit_test_window_control);
         }
 
         if !self.hide_title_bar {
