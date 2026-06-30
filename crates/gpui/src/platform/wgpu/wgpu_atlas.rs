@@ -135,15 +135,17 @@ impl PlatformAtlas for WgpuAtlas {
     fn remove(&self, key: &AtlasKey) {
         let mut lock = self.0.lock();
 
-        let Some(id) = lock.tiles_by_key.remove(key).map(|tile| tile.texture_id) else {
+        let Some(tile) = lock.tiles_by_key.remove(key) else {
             return;
         };
+        let id = tile.texture_id;
 
         let Some(texture_slot) = lock.storage[id.kind].textures.get_mut(id.index as usize) else {
             return;
         };
 
         if let Some(mut texture) = texture_slot.take() {
+            texture.allocator.deallocate(tile.tile_id.into());
             texture.decrement_ref_count();
             if texture.is_unreferenced() {
                 lock.pending_uploads
@@ -433,6 +435,26 @@ mod tests {
         })
     }
 
+    fn make_image_key(image_id: usize, frame_index: usize) -> AtlasKey {
+        AtlasKey::Image(RenderImageParams {
+            image_id: ImageId(image_id),
+            frame_index,
+        })
+    }
+
+    fn insert_tile(
+        atlas: &WgpuAtlas,
+        key: &AtlasKey,
+        size: Size<DevicePixels>,
+    ) -> anyhow::Result<AtlasTile> {
+        let byte_count = size.width.0 as usize * size.height.0 as usize * 4;
+        atlas
+            .get_or_insert_with(key, &mut || {
+                Ok(Some((size, Cow::Owned(vec![0u8; byte_count]))))
+            })?
+            .ok_or_else(|| anyhow::anyhow!("tile callback should create a tile"))
+    }
+
     #[test]
     fn before_frame_skips_uploads_for_removed_texture() -> anyhow::Result<()> {
         let (device, queue) = test_device_and_queue()?;
@@ -442,22 +464,49 @@ mod tests {
             height: DevicePixels(1024),
         };
         let atlas = WgpuAtlas::new(device, queue, wgpu::TextureFormat::Bgra8Unorm, default_atlas_size);
-        let key = AtlasKey::Image(RenderImageParams {
-            image_id: ImageId(1),
-            frame_index: 0,
-        });
+        let key = make_image_key(1, 0);
         let size = Size {
             width: DevicePixels(1),
             height: DevicePixels(1),
         };
-        let mut build = || Ok(Some((size, Cow::Owned(vec![0, 0, 0, 255]))));
 
         // Regression test: before the fix, this panicked in flush_uploads
-        atlas
-            .get_or_insert_with(&key, &mut build)?
-            .expect("tile should be created");
+        insert_tile(&atlas, &key, size)?;
         atlas.remove(&key);
         atlas.before_frame();
+        Ok(())
+    }
+
+    #[test]
+    fn remove_deallocates_tile_space_for_reuse() -> anyhow::Result<()> {
+        let (device, queue) = test_device_and_queue()?;
+
+        let default_atlas_size = Size {
+            width: DevicePixels(1024),
+            height: DevicePixels(1024),
+        };
+        let atlas = WgpuAtlas::new(device, queue, wgpu::TextureFormat::Bgra8Unorm, default_atlas_size);
+        let small = Size {
+            width: DevicePixels(64),
+            height: DevicePixels(64),
+        };
+        let big = Size {
+            width: DevicePixels(700),
+            height: DevicePixels(700),
+        };
+
+        let keeper_key = make_image_key(1, 0);
+        let big_key_a = make_image_key(2, 0);
+        let big_key_b = make_image_key(3, 0);
+
+        let keeper_tile = insert_tile(&atlas, &keeper_key, small)?;
+        let tile_a = insert_tile(&atlas, &big_key_a, big)?;
+        assert_eq!(keeper_tile.texture_id, tile_a.texture_id);
+
+        atlas.remove(&big_key_a);
+        let tile_b = insert_tile(&atlas, &big_key_b, big)?;
+        assert_eq!(tile_b.texture_id, keeper_tile.texture_id);
+
         Ok(())
     }
 
