@@ -58,6 +58,20 @@
 - 执行常规同步操作
 - 检查文件是否可以安全同步
 
+### 4. [ZED_GPUI_INCREMENTAL_AUDIT_2026-07-01.md](./ZED_GPUI_INCREMENTAL_AUDIT_2026-07-01.md)
+**增量审计报告** - 自 `24f62484e936aa355c72f2009313bbe2898a9fd5` 以来的 Zed GPUI 变更取舍
+
+**内容**:
+- 已经包含或基本覆盖的上游修复
+- 建议引入的 P0/P1/P2 补丁清单
+- 架构级改动的单独迁移建议
+- 每个候选补丁的当前证据、风险和验证方式
+
+**适用场景**:
+- 规划下一批 Zed GPUI bugfix 同步
+- 判断某个上游 commit 是否值得引入
+- 追踪当前仓库相对 Zed HEAD 的明确缺口
+
 ## 使用指南
 
 ### 新手入门
@@ -68,10 +82,11 @@
 
 ### 执行同步
 
-1. **查看快速参考**: [QUICK_SYNC_REFERENCE.md](./QUICK_SYNC_REFERENCE.md)
-2. **确定文件优先级**: 使用颜色标记（🟢🟡🔴）
-3. **执行同步**: 按照工作流程操作
-4. **遇到问题**: 查看 [TECHNICAL_SYNC_GUIDE.md](./TECHNICAL_SYNC_GUIDE.md) 的故障排除部分
+1. **查看增量审计**: [ZED_GPUI_INCREMENTAL_AUDIT_2026-07-01.md](./ZED_GPUI_INCREMENTAL_AUDIT_2026-07-01.md)
+2. **查看快速参考**: [QUICK_SYNC_REFERENCE.md](./QUICK_SYNC_REFERENCE.md)
+3. **确定文件优先级**: 使用颜色标记（🟢🟡🔴）
+4. **执行同步**: 按照工作流程操作
+5. **遇到问题**: 查看 [TECHNICAL_SYNC_GUIDE.md](./TECHNICAL_SYNC_GUIDE.md) 的故障排除部分
 
 ### 解决冲突
 
