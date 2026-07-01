@@ -185,7 +185,9 @@ impl LineWrapper {
         // Characters that used in URL, e.g. `https://github.com/zed-industries/zed?a=1&b=2` for better wrapping a long URL.
         matches!(c,  '/' | ':' | '?' | '&' | '=') ||
         // `⋯` character is special used in Zed, to keep this at the end of the line.
-        matches!(c, '⋯')
+        matches!(c, '⋯') ||
+        // Non-breaking glue characters.
+        matches!(c, '\u{202F}' | '\u{00A0}' | '\u{2011}')
     }
 
     #[inline(always)]
@@ -675,6 +677,9 @@ mod tests {
         assert_word("more⋯");
         assert_word("won’t");
         assert_word("‘twas");
+        assert_word("foo\u{00A0}bar");
+        assert_word("foo\u{202F}bar");
+        assert_word("foo\u{2011}bar");
 
         // Space
         assert_not_word("foo bar");
