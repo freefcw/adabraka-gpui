@@ -17,11 +17,11 @@
 
 use crate::{
     AbsoluteLength, Action, AnyDrag, AnyElement, AnyTooltip, AnyView, App, Bounds, ClickEvent,
-    DispatchPhase, Element, ElementId, Entity, FocusHandle, Global, GlobalElementId, Hitbox,
-    HitboxBehavior, HitboxId, InspectorElementId, IntoElement, IsZero, KeyContext, KeyDownEvent,
-    KeyUpEvent, KeyboardButton, KeyboardClickEvent, LayoutId, ModifiersChangedEvent, MouseButton,
-    MouseClickEvent, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Overflow, ParentElement,
-    PinchEvent, Pixels, Point, Render, ScrollWheelEvent, SharedString, Size, Style,
+    DispatchPhase, Element, ElementId, Entity, EntityId, FocusHandle, Global, GlobalElementId,
+    Hitbox, HitboxBehavior, HitboxId, InspectorElementId, IntoElement, IsZero, KeyContext,
+    KeyDownEvent, KeyUpEvent, KeyboardButton, KeyboardClickEvent, LayoutId, ModifiersChangedEvent,
+    MouseButton, MouseClickEvent, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Overflow,
+    ParentElement, PinchEvent, Pixels, Point, Render, ScrollWheelEvent, SharedString, Size, Style,
     StyleRefinement, Styled, Task, TooltipId, Visibility, Window, WindowControlArea, point, px,
     size,
 };
@@ -2765,6 +2765,8 @@ pub(crate) fn register_tooltip_mouse_handlers(
     check_is_hovered_during_prepaint: Rc<dyn Fn(&Window) -> bool>,
     window: &mut Window,
 ) {
+    let current_view = window.current_view();
+
     window.on_mouse_event({
         let active_tooltip = active_tooltip.clone();
         let build_tooltip = build_tooltip.clone();
@@ -2775,6 +2777,8 @@ pub(crate) fn register_tooltip_mouse_handlers(
                 &build_tooltip,
                 &check_is_hovered,
                 &check_is_hovered_during_prepaint,
+                tooltip_id,
+                current_view,
                 phase,
                 window,
                 cx,
@@ -2817,6 +2821,8 @@ fn handle_tooltip_mouse_move(
     build_tooltip: &Rc<dyn Fn(&mut Window, &mut App) -> Option<(AnyView, bool)>>,
     check_is_hovered: &Rc<dyn Fn(&Window) -> bool>,
     check_is_hovered_during_prepaint: &Rc<dyn Fn(&Window) -> bool>,
+    tooltip_id: Option<TooltipId>,
+    current_view: EntityId,
     phase: DispatchPhase,
     window: &mut Window,
     cx: &mut App,
@@ -2827,6 +2833,7 @@ fn handle_tooltip_mouse_move(
         None,
         CancelShow,
         ScheduleShow,
+        CheckVisible,
     }
 
     let action = match active_tooltip.borrow().as_ref() {
@@ -2846,9 +2853,26 @@ fn handle_tooltip_mouse_move(
                 Action::CancelShow
             }
         }
-        // These are handled in check_visible_and_update.
-        Some(ActiveTooltip::Visible { .. }) | Some(ActiveTooltip::WaitingForHide { .. }) => {
-            Action::None
+        Some(ActiveTooltip::Visible { is_hoverable, .. }) => {
+            if phase.capture()
+                && !check_is_hovered(window)
+                && (!*is_hoverable
+                    || !tooltip_id.is_some_and(|tooltip_id| tooltip_id.is_hovered(window)))
+            {
+                Action::CheckVisible
+            } else {
+                Action::None
+            }
+        }
+        Some(ActiveTooltip::WaitingForHide { .. }) => {
+            if phase.capture()
+                && (check_is_hovered(window)
+                    || tooltip_id.is_some_and(|tooltip_id| tooltip_id.is_hovered(window)))
+            {
+                Action::CheckVisible
+            } else {
+                Action::None
+            }
         }
     };
 
@@ -2860,21 +2884,29 @@ fn handle_tooltip_mouse_move(
         }
         Action::ScheduleShow => {
             let delayed_show_task = window.spawn(cx, {
-                let active_tooltip = active_tooltip.clone();
+                let weak_active_tooltip = Rc::downgrade(active_tooltip);
                 let build_tooltip = build_tooltip.clone();
                 let check_is_hovered_during_prepaint = check_is_hovered_during_prepaint.clone();
                 async move |cx| {
                     cx.background_executor().timer(TOOLTIP_SHOW_DELAY).await;
+                    let Some(active_tooltip) = weak_active_tooltip.upgrade() else {
+                        return;
+                    };
                     cx.update(|window, cx| {
                         let new_tooltip =
                             build_tooltip(window, cx).map(|(view, tooltip_is_hoverable)| {
-                                let active_tooltip = active_tooltip.clone();
+                                let weak_active_tooltip = Rc::downgrade(&active_tooltip);
                                 ActiveTooltip::Visible {
                                     tooltip: AnyTooltip {
                                         view,
                                         mouse_position: window.mouse_position(),
                                         check_visible_and_update: Rc::new(
                                             move |tooltip_bounds, window, cx| {
+                                                let Some(active_tooltip) =
+                                                    weak_active_tooltip.upgrade()
+                                                else {
+                                                    return false;
+                                                };
                                                 handle_tooltip_check_visible_and_update(
                                                     &active_tooltip,
                                                     tooltip_is_hoverable,
@@ -2901,6 +2933,7 @@ fn handle_tooltip_mouse_move(
                     _task: delayed_show_task,
                 });
         }
+        Action::CheckVisible => cx.notify(current_view),
     }
 }
 
