@@ -1176,17 +1176,50 @@ impl PlatformInputHandler {
         self.handler.replace_text_in_range(None, input, window, cx);
     }
 
-    pub fn selected_bounds(&mut self, window: &mut Window, cx: &mut App) -> Option<Bounds<Pixels>> {
-        let selection = self.handler.selected_text_range(true, window, cx)?;
-        self.handler.bounds_for_range(
-            if selection.reversed {
-                selection.range.start..selection.range.start
+    pub fn compute_ime_candidate_bounds(
+        marked_range: Option<Range<usize>>,
+        selection: &UTF16Selection,
+        mut bounds_for_range: impl FnMut(Range<usize>) -> Option<Bounds<Pixels>>,
+    ) -> Option<Bounds<Pixels>> {
+        if let Some(marked_range) = marked_range {
+            let mut line_start = marked_range.start;
+            let caret = selection.range.end;
+            if let Some(caret_bounds) = bounds_for_range(caret..caret) {
+                for i in (marked_range.start..caret).rev() {
+                    if let Some(bounds) = bounds_for_range(i..i)
+                        && (bounds.origin.y - caret_bounds.origin.y).abs() > px(0.1)
+                    {
+                        line_start = i + 1;
+                        break;
+                    }
+                }
+            }
+            bounds_for_range(line_start..line_start)
+        } else {
+            let offset = if selection.reversed {
+                selection.range.start
             } else {
-                selection.range.end..selection.range.end
-            },
-            window,
-            cx,
-        )
+                selection.range.end
+            };
+            bounds_for_range(offset..offset)
+        }
+    }
+
+    pub fn selected_bounds(&mut self, window: &mut Window, cx: &mut App) -> Option<Bounds<Pixels>> {
+        let marked_range = self.handler.marked_text_range(window, cx);
+        let selection = self.handler.selected_text_range(true, window, cx)?;
+        Self::compute_ime_candidate_bounds(marked_range, &selection, |range| {
+            self.handler.bounds_for_range(range, window, cx)
+        })
+    }
+
+    #[allow(dead_code)]
+    pub fn ime_candidate_bounds(&mut self) -> Option<Bounds<Pixels>> {
+        let marked_range = self.marked_text_range();
+        let selection = self.selected_text_range(true)?;
+        Self::compute_ime_candidate_bounds(marked_range, &selection, |range| {
+            self.bounds_for_range(range)
+        })
     }
 
     #[allow(unused)]
@@ -1713,6 +1746,67 @@ fn layer_shell_margin_for_display_bounds(
 impl std::ops::BitOrAssign for LayerShellAnchor {
     fn bitor_assign(&mut self, rhs: Self) {
         self.0 |= rhs.0;
+    }
+}
+
+#[cfg(test)]
+mod platform_input_handler_tests {
+    use super::*;
+
+    fn bounds_at(offset: usize, y: f32) -> Bounds<Pixels> {
+        Bounds::new(
+            point(px(offset as f32 * 10.0), px(y)),
+            size(px(1.0), px(20.0)),
+        )
+    }
+
+    #[test]
+    fn ime_candidate_bounds_uses_selection_endpoint_without_marked_range() {
+        let selection = UTF16Selection {
+            range: 3..5,
+            reversed: false,
+        };
+        let mut requests = Vec::new();
+        let bounds =
+            PlatformInputHandler::compute_ime_candidate_bounds(None, &selection, |range| {
+                requests.push(range.clone());
+                Some(bounds_at(range.start, 0.0))
+            })
+            .unwrap();
+
+        assert_eq!(bounds.origin.x, px(50.0));
+        assert_eq!(requests, vec![5..5]);
+
+        let selection = UTF16Selection {
+            range: 3..5,
+            reversed: true,
+        };
+        let bounds =
+            PlatformInputHandler::compute_ime_candidate_bounds(None, &selection, |range| {
+                Some(bounds_at(range.start, 0.0))
+            })
+            .unwrap();
+
+        assert_eq!(bounds.origin.x, px(30.0));
+    }
+
+    #[test]
+    fn ime_candidate_bounds_anchors_marked_text_to_visual_line_start() {
+        let selection = UTF16Selection {
+            range: 15..15,
+            reversed: false,
+        };
+        let mut requests = Vec::new();
+        let bounds =
+            PlatformInputHandler::compute_ime_candidate_bounds(Some(10..15), &selection, |range| {
+                requests.push(range.clone());
+                let y = if range.start >= 13 { 20.0 } else { 0.0 };
+                Some(bounds_at(range.start, y))
+            })
+            .unwrap();
+
+        assert_eq!(bounds.origin.x, px(130.0));
+        assert_eq!(requests.last(), Some(&(13..13)));
     }
 }
 
