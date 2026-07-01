@@ -3413,3 +3413,43 @@ impl ScrollHandle {
         self.0.borrow().child_bounds.len()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{hsla, point};
+
+    #[test]
+    fn test_tooltip_show_delay_sets_interactivity_state() {
+        let delay = Duration::from_millis(125);
+        let element = div().id("tooltip-target").tooltip_show_delay(delay);
+
+        assert_eq!(
+            element.element.interactivity.tooltip_show_delay,
+            Some(delay)
+        );
+    }
+
+    #[test]
+    fn test_shadow_sm_preset_preserves_shadow_fields() {
+        let mut element = div().shadow_sm();
+        let shadows = element
+            .style()
+            .box_shadow
+            .as_ref()
+            .expect("shadow_sm should set box shadows");
+
+        assert_eq!(shadows.len(), 2);
+        assert_eq!(shadows[0].color, hsla(0., 0., 0., 0.1));
+        assert_eq!(shadows[0].offset, point(px(0.), px(1.)));
+        assert_eq!(shadows[0].blur_radius, px(3.));
+        assert_eq!(shadows[0].spread_radius, px(0.));
+        assert!(!shadows[0].inset);
+
+        assert_eq!(shadows[1].color, hsla(0., 0., 0., 0.1));
+        assert_eq!(shadows[1].offset, point(px(0.), px(1.)));
+        assert_eq!(shadows[1].blur_radius, px(2.));
+        assert_eq!(shadows[1].spread_radius, px(-1.));
+        assert!(!shadows[1].inset);
+    }
+}

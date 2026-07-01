@@ -1405,11 +1405,26 @@ impl From<Position> for taffy::style::Position {
 
 #[cfg(test)]
 mod tests {
-    use crate::{blue, green, px, red, yellow};
+    use crate::{blue, green, hsla, point, px, red, yellow};
 
     use super::*;
 
     use util_macros::perf;
+
+    #[test]
+    fn test_box_shadow_builder_sets_expected_fields() {
+        let color = hsla(210., 0.5, 0.4, 0.75);
+        let shadow = BoxShadow::new(px(1.), px(2.), color)
+            .blur_radius(px(3.))
+            .spread_radius(px(4.))
+            .inset();
+
+        assert_eq!(shadow.color, color);
+        assert_eq!(shadow.offset, point(px(1.), px(2.)));
+        assert_eq!(shadow.blur_radius, px(3.));
+        assert_eq!(shadow.spread_radius, px(4.));
+        assert!(shadow.inset);
+    }
 
     #[perf]
     fn test_basic_highlight_style_combination() {
