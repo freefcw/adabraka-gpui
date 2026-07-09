@@ -54,6 +54,19 @@ This does not introduce a public `gpui_wgpu` crate or change the `Application::n
 The renderer protocol stays crate-internal so downstream application APIs remain stable. See
 [`../../docs/wgpu-migration.md`](../../docs/wgpu-migration.md) for details.
 
+### Accessibility
+
+Adabraka GPUI exposes AccessKit-backed roles, labels, values, focus, and action handlers on
+elements. Native adapters connect the generated accessibility tree to macOS Accessibility,
+Linux AT-SPI, and Windows UI Automation.
+
+```sh
+cargo run -p adabraka-gpui --example a11y
+```
+
+See [`examples/a11y.rs`](examples/a11y.rs) for focus navigation, accessible actions, numeric
+values, switches, and list metadata.
+
 ### Wayland Layer-Shell Popups
 
 Set `WindowOptions::layer_shell` to place Wayland popup and overlay windows through layer-shell.
@@ -102,6 +115,7 @@ cargo check -p adabraka-gpui --example window_positioning --features wayland,x11
 - Low-level `Element` API for custom rendering
 - Async executor integrated with the platform event loop
 - Action system for keyboard shortcuts
+- AccessKit accessibility tree and native platform adapters
 - Test framework with `#[gpui::test]`
 
 ### Daemon & Background App Support (new in Adabraka)
