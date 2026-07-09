@@ -301,6 +301,7 @@ pub struct X11WindowState {
     edge_constraints: Option<EdgeConstraints>,
     pub handle: AnyWindowHandle,
     last_insets: [u32; 4],
+    accesskit_adapter: Option<accesskit_unix::Adapter>,
 }
 
 impl X11WindowState {
@@ -795,6 +796,7 @@ impl X11WindowState {
                 decorations: WindowDecorations::Server,
                 last_insets: [0, 0, 0, 0],
                 edge_constraints: None,
+                accesskit_adapter: None,
                 counter_id: sync_request_counter,
                 last_sync_counter: None,
             })
@@ -1245,6 +1247,9 @@ impl X11WindowStatePtr {
     pub fn set_active(&self, focus: bool) {
         if let Some(ref mut fun) = self.callbacks.borrow_mut().active_status_change {
             fun(focus);
+        }
+        if let Some(adapter) = self.state.borrow_mut().accesskit_adapter.as_mut() {
+            adapter.update_window_focus_state(focus);
         }
     }
 
@@ -1898,6 +1903,86 @@ impl PlatformWindow for X11Window {
         )
         .log_err();
         xcb_flush(&self.0.xcb);
+    }
+
+    fn a11y_init(&self, callbacks: crate::A11yCallbacks) {
+        let activation_handler = A11yActivationHandler {
+            callback: callbacks.activation,
+        };
+        let action_handler = A11yActionHandler(callbacks.action);
+        let deactivation_handler = A11yDeactivationHandler {
+            callback: callbacks.deactivation,
+        };
+
+        let adapter =
+            accesskit_unix::Adapter::new(activation_handler, action_handler, deactivation_handler);
+
+        self.0.state.borrow_mut().accesskit_adapter = Some(adapter);
+    }
+
+    fn a11y_tree_update(&self, tree_update: accesskit::TreeUpdate) {
+        let mut state = self.0.state.borrow_mut();
+        if let Some(adapter) = state.accesskit_adapter.as_mut() {
+            adapter.update_if_active(|| tree_update);
+        }
+    }
+
+    fn a11y_update_window_bounds(&self) {
+        let mut state = self.0.state.borrow_mut();
+        let scale = state.scale_factor;
+        let bounds = state.bounds;
+        let [left, right, top, bottom] = state.last_insets;
+
+        let x = f32::from(bounds.origin.x);
+        let y = f32::from(bounds.origin.y);
+        let width = f32::from(bounds.size.width);
+        let height = f32::from(bounds.size.height);
+
+        let outer = accesskit::Rect {
+            x0: (x * scale) as f64,
+            y0: (y * scale) as f64,
+            x1: ((x + width) * scale) as f64,
+            y1: ((y + height) * scale) as f64,
+        };
+
+        let inner = accesskit::Rect {
+            x0: (x * scale) as f64 + left as f64,
+            y0: (y * scale) as f64 + top as f64,
+            x1: ((x + width) * scale) as f64 - right as f64,
+            y1: ((y + height) * scale) as f64 - bottom as f64,
+        };
+
+        if let Some(adapter) = state.accesskit_adapter.as_mut() {
+            adapter.set_root_window_bounds(outer, inner);
+        }
+    }
+}
+
+struct A11yActivationHandler {
+    callback: Box<dyn Fn() -> Option<accesskit::TreeUpdate> + Send + 'static>,
+}
+
+impl accesskit::ActivationHandler for A11yActivationHandler {
+    fn request_initial_tree(&mut self) -> Option<accesskit::TreeUpdate> {
+        (self.callback)()
+    }
+}
+
+struct A11yActionHandler(Box<dyn Fn(accesskit::ActionRequest) + Send + 'static>);
+
+impl accesskit::ActionHandler for A11yActionHandler {
+    fn do_action(&mut self, request: accesskit::ActionRequest) {
+        (self.0)(request);
+    }
+}
+
+struct A11yDeactivationHandler {
+    callback: Box<dyn Fn() + Send + 'static>,
+}
+
+impl accesskit::DeactivationHandler for A11yDeactivationHandler {
+    fn deactivate_accessibility(&mut self) {
+        (self.callback)();
     }
 }
 

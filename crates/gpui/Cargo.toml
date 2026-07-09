@@ -512,6 +512,9 @@ version = "0.5.1"
 version = "1"
 optional = true
 
+[target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies.accesskit_unix]
+version = "0.21.0"
+
 [target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies.ashpd]
 version = "0.11"
 features = ["async-std"]

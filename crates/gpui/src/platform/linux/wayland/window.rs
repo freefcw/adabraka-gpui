@@ -129,6 +129,7 @@ pub struct WaylandWindowState {
     window_controls: WindowControls,
     client_inset: Option<Pixels>,
     visible: bool,
+    accesskit_adapter: Option<accesskit_unix::Adapter>,
 }
 
 pub enum WaylandWindowRole {
@@ -242,6 +243,7 @@ impl WaylandWindowState {
             window_controls: WindowControls::default(),
             client_inset: None,
             visible: true,
+            accesskit_adapter: None,
         })
     }
 
@@ -1263,6 +1265,9 @@ impl WaylandWindowStatePtr {
         if let Some(ref mut fun) = self.callbacks.borrow_mut().active_status_change {
             fun(focus);
         }
+        if let Some(adapter) = self.state.borrow_mut().accesskit_adapter.as_mut() {
+            adapter.update_window_focus_state(focus);
+        }
     }
 
     pub fn set_hovered(&self, focus: bool) {
@@ -1803,6 +1808,60 @@ impl PlatformWindow for WaylandWindow {
         if !is_unconfigured_layer_shell(&state.role) {
             state.surface.commit();
         }
+    }
+
+    fn a11y_init(&self, callbacks: crate::A11yCallbacks) {
+        let activation_handler = A11yActivationHandler {
+            callback: callbacks.activation,
+        };
+        let action_handler = A11yActionHandler(callbacks.action);
+        let deactivation_handler = A11yDeactivationHandler {
+            callback: callbacks.deactivation,
+        };
+
+        let adapter =
+            accesskit_unix::Adapter::new(activation_handler, action_handler, deactivation_handler);
+
+        self.borrow_mut().accesskit_adapter = Some(adapter);
+    }
+
+    fn a11y_tree_update(&self, tree_update: accesskit::TreeUpdate) {
+        let mut state = self.borrow_mut();
+        if let Some(adapter) = state.accesskit_adapter.as_mut() {
+            adapter.update_if_active(|| tree_update);
+        }
+    }
+
+    fn a11y_update_window_bounds(&self) {
+        // Wayland does not expose absolute window positions.
+    }
+}
+
+struct A11yActivationHandler {
+    callback: Box<dyn Fn() -> Option<accesskit::TreeUpdate> + Send + 'static>,
+}
+
+impl accesskit::ActivationHandler for A11yActivationHandler {
+    fn request_initial_tree(&mut self) -> Option<accesskit::TreeUpdate> {
+        (self.callback)()
+    }
+}
+
+struct A11yActionHandler(Box<dyn Fn(accesskit::ActionRequest) + Send + 'static>);
+
+impl accesskit::ActionHandler for A11yActionHandler {
+    fn do_action(&mut self, request: accesskit::ActionRequest) {
+        (self.0)(request);
+    }
+}
+
+struct A11yDeactivationHandler {
+    callback: Box<dyn Fn() + Send + 'static>,
+}
+
+impl accesskit::DeactivationHandler for A11yDeactivationHandler {
+    fn deactivate_accessibility(&mut self) {
+        (self.callback)();
     }
 }
 
