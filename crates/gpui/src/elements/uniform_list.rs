@@ -8,7 +8,7 @@ use crate::{
     AnyElement, App, AvailableSpace, Bounds, ContentMask, Element, ElementId, Entity,
     GlobalElementId, Hitbox, InspectorElementId, InteractiveElement, Interactivity, IntoElement,
     IsZero, LayoutId, ListSizingBehavior, Overflow, Pixels, Point, ScrollHandle, Size,
-    StyleRefinement, Styled, Window, point, size,
+    StyleRefinement, Styled, Window, point, px, size,
 };
 use smallvec::SmallVec;
 use std::{cell::RefCell, cmp, ops::Range, rc::Rc};
@@ -230,6 +230,18 @@ impl UniformListScrollHandle {
         } else {
             false
         }
+    }
+
+    /// Whether the list is scrolled to the end, or `None` if the list is
+    /// not scrollable.
+    pub fn is_scrolled_to_end(&self) -> Option<bool> {
+        let state = self.0.borrow();
+        let max_offset = state.base_handle.max_offset();
+        if max_offset.height <= px(0.) {
+            return None;
+        }
+        let offset = state.base_handle.offset();
+        Some(-offset.y >= max_offset.height)
     }
 }
 
@@ -716,5 +728,55 @@ impl UniformList {
 impl InteractiveElement for UniformList {
     fn interactivity(&mut self) -> &mut crate::Interactivity {
         &mut self.interactivity
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        self as gpui, AppContext, Context, IntoElement, Render, Styled, TestAppContext, Window,
+        div, point,
+    };
+
+    struct TestUniformListView {
+        handle: UniformListScrollHandle,
+        item_count: usize,
+    }
+
+    impl Render for TestUniformListView {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            uniform_list("items", self.item_count, |range, _, _| {
+                range.map(|_| div().h(px(20.)).w_full()).collect::<Vec<_>>()
+            })
+            .size_full()
+            .track_scroll(self.handle.clone())
+        }
+    }
+
+    #[gpui::test]
+    fn test_is_scrolled_to_end_reports_after_layout(cx: &mut TestAppContext) {
+        let cx = cx.add_empty_window();
+        let handle = UniformListScrollHandle::new();
+
+        let view = cx.update(|_, cx| {
+            cx.new(|_| TestUniformListView {
+                handle: handle.clone(),
+                item_count: 5,
+            })
+        });
+
+        cx.draw(point(px(0.), px(0.)), size(px(100.), px(40.)), |_, _| {
+            view.clone().into_any_element()
+        });
+
+        assert_eq!(handle.is_scrolled_to_end(), Some(false));
+
+        handle.scroll_to_item_strict(4, ScrollStrategy::Bottom);
+        cx.draw(point(px(0.), px(0.)), size(px(100.), px(40.)), |_, _| {
+            view.into_any_element()
+        });
+
+        assert_eq!(handle.is_scrolled_to_end(), Some(true));
     }
 }
