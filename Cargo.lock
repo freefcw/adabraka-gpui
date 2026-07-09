@@ -3,9 +3,19 @@
 version = 4
 
 [[package]]
+name = "accesskit"
+version = "0.24.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3b7f7f85a7e5f68090000ed7622545829afd484d210358702ae4cb97dd0c320"
+dependencies = [
+ "uuid",
+]
+
+[[package]]
 name = "adabraka-gpui"
 version = "0.6.2"
 dependencies = [
+ "accesskit",
  "adabraka-gpui-macros",
  "adabraka_collections",
  "adabraka_http_client",
@@ -18,6 +28,7 @@ dependencies = [
  "anyhow",
  "as-raw-xcb-connection",
  "ashpd 0.11.1",
+ "async-channel 2.5.0",
  "async-task",
  "backtrace",
  "bindgen",

@@ -103,6 +103,19 @@ pub trait Element: 'static + IntoElement {
         cx: &mut App,
     );
 
+    /// Returns the accessible role for this element, if any.
+    ///
+    /// Elements that return `None` are not included in the accessibility tree.
+    /// Inclusion also requires a non-`None` [`Element::id`].
+    fn a11y_role(&self) -> Option<accesskit::Role> {
+        None
+    }
+
+    /// Write accessibility properties to the given node.
+    ///
+    /// Called only when [`Element::a11y_role`] returns `Some`.
+    fn write_a11y_info(&self, _node: &mut accesskit::Node) {}
+
     /// Convert this element into a dynamically-typed [`AnyElement`].
     fn into_any(self) -> AnyElement {
         AnyElement::new(self)
@@ -287,6 +300,16 @@ impl Display for GlobalElementId {
     }
 }
 
+impl GlobalElementId {
+    pub(crate) fn accesskit_node_id(&self) -> accesskit::NodeId {
+        use std::hash::{Hash, Hasher};
+
+        let mut hasher = std::hash::DefaultHasher::default();
+        self.hash(&mut hasher);
+        accesskit::NodeId(hasher.finish())
+    }
+}
+
 trait ElementObject {
     fn inner_element(&mut self) -> &mut dyn Any;
 
@@ -416,6 +439,25 @@ impl<E: Element> Drawable<E> {
                 }
 
                 let bounds = window.layout_bounds(layout_id);
+                let mut pushed_a11y_node = false;
+                if window.a11y.is_active()
+                    && let Some(global_id) = global_id.as_ref()
+                    && let Some(role) = self.element.a11y_role()
+                {
+                    let node_id = global_id.accesskit_node_id();
+                    let mut node = accesskit::Node::new(role);
+                    let scale = window.scale_factor();
+                    node.set_bounds(accesskit::Rect {
+                        x0: f64::from(bounds.origin.x.0 * scale),
+                        y0: f64::from(bounds.origin.y.0 * scale),
+                        x1: f64::from((bounds.origin.x.0 + bounds.size.width.0) * scale),
+                        y1: f64::from((bounds.origin.y.0 + bounds.size.height.0) * scale),
+                    });
+                    self.element.write_a11y_info(&mut node);
+                    window.a11y.node_bounds.insert(node_id, bounds);
+                    pushed_a11y_node = window.a11y.nodes.push(node_id, node);
+                }
+
                 let node_id = window.next_frame.dispatch_tree.push_node();
                 let prepaint = self.element.prepaint(
                     global_id.as_ref(),
@@ -426,6 +468,10 @@ impl<E: Element> Drawable<E> {
                     cx,
                 );
                 window.next_frame.dispatch_tree.pop_node();
+
+                if pushed_a11y_node {
+                    window.a11y.nodes.pop();
+                }
 
                 if global_id.is_some() {
                     window.element_id_stack.pop();

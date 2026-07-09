@@ -254,8 +254,14 @@ path = "tests/real_visual_smoke.rs"
 harness = false
 required-features = ["test-support"]
 
+[dependencies.accesskit]
+version = "0.24.0"
+
 [dependencies.anyhow]
 version = "1.0.86"
+
+[dependencies.async-channel]
+version = "2.5.0"
 
 [dependencies.async-task]
 version = "4.7"
