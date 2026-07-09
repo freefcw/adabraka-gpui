@@ -128,6 +128,31 @@ impl Drop for AppRefMut<'_> {
 /// You won't interact with this type much outside of initial configuration and startup.
 pub struct Application(Rc<AppCell>);
 
+/// A strong handle to an [`Application`] started with [`Application::run_embedded`].
+///
+/// Dropping this handle releases the app, so an embedder must hold it for as long as the
+/// app should run. While held, it is the embedder's entry point back into GPUI each time
+/// the external run loop gives it control.
+pub struct ApplicationHandle {
+    app: Rc<AppCell>,
+}
+
+impl ApplicationHandle {
+    /// Invoke `f` with the app context. Must not be called re-entrantly from code that
+    /// is already inside an update; the app state is a `RefCell` and will panic on a
+    /// double borrow.
+    pub fn update<R>(&self, f: impl FnOnce(&mut App) -> R) -> R {
+        let cx = &mut *self.app.borrow_mut();
+        f(cx)
+    }
+
+    /// An [`AsyncApp`] for use across await points. It holds the app weakly; keeping the
+    /// app alive remains this handle's job.
+    pub fn to_async(&self) -> AsyncApp {
+        self.update(|cx| cx.to_async())
+    }
+}
+
 /// Represents an application before it is fully launched. Once your app is
 /// configured, you'll start the app with `App::run`.
 impl Application {
@@ -226,6 +251,28 @@ impl Application {
             let cx = &mut *this.borrow_mut();
             on_finish_launching(cx);
         }));
+    }
+
+    /// Start the application for an embedder that drives the run loop itself.
+    ///
+    /// On ordinary platforms `Platform::run` blocks for the lifetime of the app, and the
+    /// app state is kept alive by [`Application::run`]'s stack frame. Embedded platforms -
+    /// where the run loop belongs to someone else, e.g. GPUI compiled into a Wasm guest,
+    /// or a GPUI view hosted inside a foreign native application - implement
+    /// `Platform::run` to invoke the launch callback and return immediately. This method
+    /// supports that shape: it returns an [`ApplicationHandle`] that keeps the app alive
+    /// and lets the embedder re-enter it whenever the external run loop yields control.
+    pub fn run_embedded<F>(self, on_finish_launching: F) -> ApplicationHandle
+    where
+        F: 'static + FnOnce(&mut App),
+    {
+        let this = self.0.clone();
+        let platform = self.0.borrow().platform.clone();
+        platform.run(Box::new(move || {
+            let cx = &mut *this.borrow_mut();
+            on_finish_launching(cx);
+        }));
+        ApplicationHandle { app: self.0 }
     }
 
     /// Register a handler to be invoked when the platform instructs the application
@@ -2877,7 +2924,7 @@ mod test {
 
     use rand::{SeedableRng, rngs::StdRng};
 
-    use super::{Application, NullHttpClient};
+    use super::{Application, ApplicationHandle, NullHttpClient};
     use crate::{
         AppContext, AppResourceProfile, BackgroundExecutor, ForegroundExecutor, TestAppContext,
         TestDispatcher, TestPlatform, TrayIconClickEvent, TrayIconEvent, TrayIconRenderingMode,
@@ -2940,6 +2987,39 @@ mod test {
             app.resource_profile.gpu.instance_buffer_initial_size,
             768 * 1024
         );
+    }
+
+    #[test]
+    fn test_application_handle_keeps_app_alive_for_embedders() {
+        let dispatcher = Arc::new(TestDispatcher::new(StdRng::seed_from_u64(0)));
+        let platform = TestPlatform::new(
+            BackgroundExecutor::new(dispatcher.clone()),
+            ForegroundExecutor::new(dispatcher),
+        );
+        let application = Application(super::App::new_app(
+            platform,
+            Arc::new(()),
+            Arc::new(NullHttpClient),
+            AppResourceProfile::default(),
+        ));
+        let weak_app = Rc::downgrade(&application.0);
+        let handle = ApplicationHandle {
+            app: application.0.clone(),
+        };
+        drop(application);
+
+        assert!(weak_app.upgrade().is_some());
+
+        let did_update = Rc::new(RefCell::new(false));
+        let did_update_clone = did_update.clone();
+        handle.update(move |_| {
+            *did_update_clone.borrow_mut() = true;
+        });
+
+        assert!(*did_update.borrow());
+
+        drop(handle);
+        assert!(weak_app.upgrade().is_none());
     }
 
     #[test]
