@@ -20,6 +20,18 @@ pub(crate) type PathVertex_ScaledPixels = PathVertex<ScaledPixels>;
 
 pub(crate) type DrawOrder = u32;
 
+/// A boolean stored as a `u32` so GPU-facing structs contain no
+/// compiler-inserted padding bytes when reinterpreted as instance data.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+#[repr(transparent)]
+pub(crate) struct PaddedBool32(u32);
+
+impl From<bool> for PaddedBool32 {
+    fn from(value: bool) -> Self {
+        PaddedBool32(value as u32)
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct Scene {
     pub(crate) paint_operations: Vec<PaintOperation>,
@@ -542,7 +554,7 @@ pub(crate) struct Underline {
     pub content_mask: ContentMask<ScaledPixels>,
     pub color: Hsla,
     pub thickness: ScaledPixels,
-    pub wavy: u32,
+    pub wavy: PaddedBool32,
 }
 
 impl From<Underline> for Primitive {
@@ -726,7 +738,7 @@ impl From<MonochromeSprite> for Primitive {
 pub(crate) struct PolychromeSprite {
     pub order: DrawOrder,
     pub pad: u32, // align to 8 bytes
-    pub grayscale: bool,
+    pub grayscale: PaddedBool32,
     pub opacity: f32,
     pub bounds: Bounds<ScaledPixels>,
     pub content_mask: ContentMask<ScaledPixels>,
@@ -759,6 +771,7 @@ impl From<PaintSurface> for Primitive {
 mod tests {
     use super::*;
     use crate::{bounds, point, size, transparent_black};
+    use std::mem::{align_of, size_of};
 
     fn test_quad(blend_mode: BlendMode) -> Quad {
         let bounds = bounds(
@@ -793,6 +806,12 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(batch_lengths, vec![2, 1, 1, 1]);
+    }
+
+    #[test]
+    fn padded_bool_matches_gpu_scalar_layout() {
+        assert_eq!(size_of::<PaddedBool32>(), size_of::<u32>());
+        assert_eq!(align_of::<PaddedBool32>(), align_of::<u32>());
     }
 }
 
