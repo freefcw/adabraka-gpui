@@ -20,10 +20,10 @@ use crate::{
     DispatchPhase, Element, ElementId, Entity, EntityId, FocusHandle, Global, GlobalElementId,
     Hitbox, HitboxBehavior, HitboxId, InspectorElementId, IntoElement, IsZero, KeyContext,
     KeyDownEvent, KeyUpEvent, KeyboardButton, KeyboardClickEvent, LayoutId, ModifiersChangedEvent,
-    MouseButton, MouseClickEvent, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Overflow,
-    ParentElement, PinchEvent, Pixels, Point, Render, ScrollWheelEvent, SharedString, Size, Style,
-    StyleRefinement, Styled, Task, TooltipId, Visibility, Window, WindowControlArea, point, px,
-    size,
+    MouseButton, MouseClickEvent, MouseDownEvent, MouseExitEvent, MouseMoveEvent, MouseUpEvent,
+    Overflow, ParentElement, PinchEvent, Pixels, Point, Render, ScrollWheelEvent, SharedString,
+    Size, Style, StyleRefinement, Styled, Task, TooltipId, Visibility, Window, WindowControlArea,
+    point, px, size,
 };
 use collections::HashMap;
 use refineable::Refineable;
@@ -274,6 +274,22 @@ impl Interactivity {
         listener: impl Fn(&MouseMoveEvent, &mut Window, &mut App) + 'static,
     ) {
         self.mouse_move_listeners
+            .push(Box::new(move |event, phase, hitbox, window, cx| {
+                if phase == DispatchPhase::Bubble && hitbox.is_hovered(window) {
+                    (listener)(event, window, cx);
+                }
+            }));
+    }
+
+    /// Bind the given callback to the mouse exit event, during the bubble phase.
+    /// The imperative API equivalent to [`InteractiveElement::on_mouse_exit`].
+    ///
+    /// See [`Context::listener`](crate::Context::listener) to get access to a view's state from this callback.
+    pub fn on_mouse_exit(
+        &mut self,
+        listener: impl Fn(&MouseExitEvent, &mut Window, &mut App) + 'static,
+    ) {
+        self.mouse_exit_listeners
             .push(Box::new(move |event, phase, hitbox, window, cx| {
                 if phase == DispatchPhase::Bubble && hitbox.is_hovered(window) {
                     (listener)(event, window, cx);
@@ -865,6 +881,18 @@ pub trait InteractiveElement: Sized {
         self
     }
 
+    /// Bind the given callback to the mouse exit event, during the bubble phase.
+    /// The fluent API equivalent to [`Interactivity::on_mouse_exit`].
+    ///
+    /// See [`Context::listener`](crate::Context::listener) to get access to a view's state from this callback.
+    fn on_mouse_exit(
+        mut self,
+        listener: impl Fn(&MouseExitEvent, &mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.interactivity().on_mouse_exit(listener);
+        self
+    }
+
     /// Bind the given callback to the mouse drag event of the given type. Note that this
     /// will be called for all move events, inside or outside of this element, as long as the
     /// drag was started with this element under the mouse. Useful for implementing draggable
@@ -1288,6 +1316,8 @@ pub(crate) type MouseUpListener =
 
 pub(crate) type MouseMoveListener =
     Box<dyn Fn(&MouseMoveEvent, DispatchPhase, &Hitbox, &mut Window, &mut App) + 'static>;
+pub(crate) type MouseExitListener =
+    Box<dyn Fn(&MouseExitEvent, DispatchPhase, &Hitbox, &mut Window, &mut App) + 'static>;
 
 pub(crate) type ScrollWheelListener =
     Box<dyn Fn(&ScrollWheelEvent, DispatchPhase, &Hitbox, &mut Window, &mut App) + 'static>;
@@ -1604,6 +1634,7 @@ pub struct Interactivity {
     pub(crate) mouse_down_listeners: Vec<MouseDownListener>,
     pub(crate) mouse_up_listeners: Vec<MouseUpListener>,
     pub(crate) mouse_move_listeners: Vec<MouseMoveListener>,
+    pub(crate) mouse_exit_listeners: Vec<MouseExitListener>,
     pub(crate) scroll_wheel_listeners: Vec<ScrollWheelListener>,
     pub(crate) pinch_listeners: Vec<PinchListener>,
     pub(crate) key_down_listeners: Vec<KeyDownListener>,
@@ -1801,6 +1832,7 @@ impl Interactivity {
             || !self.mouse_up_listeners.is_empty()
             || !self.mouse_down_listeners.is_empty()
             || !self.mouse_move_listeners.is_empty()
+            || !self.mouse_exit_listeners.is_empty()
             || !self.click_listeners.is_empty()
             || !self.scroll_wheel_listeners.is_empty()
             || !self.pinch_listeners.is_empty()
@@ -2173,6 +2205,13 @@ impl Interactivity {
         for listener in self.mouse_move_listeners.drain(..) {
             let hitbox = hitbox.clone();
             window.on_mouse_event(move |event: &MouseMoveEvent, phase, window, cx| {
+                listener(event, phase, &hitbox, window, cx);
+            })
+        }
+
+        for listener in self.mouse_exit_listeners.drain(..) {
+            let hitbox = hitbox.clone();
+            window.on_mouse_event(move |event: &MouseExitEvent, phase, window, cx| {
                 listener(event, phase, &hitbox, window, cx);
             })
         }
