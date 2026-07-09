@@ -1,8 +1,11 @@
 use gpui::{
-    App, Application, Bounds, Context, DisplayId, Hsla, LayerShellOptions, Pixels, SharedString,
-    Size, Window, WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, div, point,
-    prelude::*, px, rgb,
+    App, Application, Bounds, Context, DisplayId, Hsla, Pixels, SharedString, Size, Window,
+    WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, div, point, prelude::*,
+    px, rgb,
 };
+
+#[cfg(all(target_os = "linux", feature = "wayland"))]
+use gpui::layer_shell::{Anchor, KeyboardInteractivity, LayerShellOptions};
 
 struct WindowContent {
     text: SharedString,
@@ -52,6 +55,14 @@ fn build_window_options(
     display_bounds: Bounds<Pixels>,
     bounds: Bounds<Pixels>,
 ) -> WindowOptions {
+    #[cfg(all(target_os = "linux", feature = "wayland"))]
+    let kind = WindowKind::LayerShell(layer_shell_options(display_bounds, bounds));
+    #[cfg(not(all(target_os = "linux", feature = "wayland")))]
+    let kind = {
+        let _ = display_bounds;
+        WindowKind::PopUp
+    };
+
     WindowOptions {
         // Set the bounds of the window in screen coordinates
         window_bounds: Some(WindowBounds::Windowed(bounds)),
@@ -61,16 +72,51 @@ fn build_window_options(
         window_background: WindowBackgroundAppearance::Transparent,
         focus: false,
         show: true,
-        kind: WindowKind::PopUp,
+        kind,
         is_movable: false,
-        layer_shell: Some(LayerShellOptions::from_window_bounds(
-            display_bounds,
-            bounds,
-        )),
         app_id: None,
         window_min_size: None,
         window_decorations: None,
         tabbing_identifier: None,
+        ..Default::default()
+    }
+}
+
+#[cfg(all(target_os = "linux", feature = "wayland"))]
+fn layer_shell_options(display: Bounds<Pixels>, bounds: Bounds<Pixels>) -> LayerShellOptions {
+    let center = bounds.center();
+    let display_center = display.center();
+    let top = center.y < display_center.y;
+    let left = center.x < display_center.x;
+    let anchor = (if top { Anchor::TOP } else { Anchor::BOTTOM })
+        | if left { Anchor::LEFT } else { Anchor::RIGHT };
+
+    let margin_top = if top {
+        bounds.origin.y - display.origin.y
+    } else {
+        px(0.0)
+    };
+    let margin_right = if left {
+        px(0.0)
+    } else {
+        display.right() - bounds.right()
+    };
+    let margin_bottom = if top {
+        px(0.0)
+    } else {
+        display.bottom() - bounds.bottom()
+    };
+    let margin_left = if left {
+        bounds.origin.x - display.origin.x
+    } else {
+        px(0.0)
+    };
+
+    LayerShellOptions {
+        namespace: "gpui-window-positioning".to_string(),
+        anchor,
+        margin: Some((margin_top, margin_right, margin_bottom, margin_left)),
+        keyboard_interactivity: KeyboardInteractivity::None,
         ..Default::default()
     }
 }

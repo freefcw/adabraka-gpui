@@ -36,7 +36,7 @@ re-enables parallel decoding. SVG support is handled separately through `resvg`.
 | Tray menu actions | Yes | Yes | Yes | Yes |
 | Global hotkeys | Yes | Yes (XGrabKey) | No (protocol limitation) | Yes (RegisterHotKey) |
 | Native notifications | Yes (UNUserNotification) | Yes (notify-rust) | Yes (notify-rust) | Yes (Shell balloon) |
-| Overlay windows (always-on-top) | Yes | Yes | Yes (layer-shell when available) | Yes |
+| Overlay windows (always-on-top) | Yes | Yes | Yes (`WindowKind::LayerShell`) | Yes |
 | Click-through windows | Yes | Yes (Shape ext) | Yes (wl_region) | Yes (WS_EX_TRANSPARENT) |
 | Window show/hide | Yes | Yes | Yes | Yes |
 | Auto-launch at login | Yes (SMAppService) | Yes (XDG autostart) | Yes (XDG autostart) | Yes (Registry) |
@@ -70,41 +70,41 @@ cargo run -p adabraka-gpui --example a11y
 See [`examples/a11y.rs`](examples/a11y.rs) for focus navigation, accessible actions, numeric
 values, switches, and list metadata.
 
-### Wayland Layer-Shell Popups
+### Wayland Layer Shell
 
-Set `WindowOptions::layer_shell` to place Wayland popup and overlay windows through layer-shell.
-GPUI prefers `ext-layer-shell` and falls back to `wlr-layer-shell`; compositors without either
-protocol still receive a normal `xdg_toplevel` window with a warning.
-
-`LayerShellOptions::from_window_bounds` converts display-relative bounds into the anchor and margin
-values layer-shell expects. `LayerShellOptions::tray_panel` does the same for a `TrayAnchor`.
+Create a layer-shell surface with `WindowKind::LayerShell`. GPUI uses `wlr-layer-shell` when
+available and falls back to `ext-layer-shell`; opening the window fails when the compositor
+supports neither protocol. The ext fallback cannot select `exclusive_edge` or request exclusive
+keyboard focus, and wlr compositors older than protocol version 5 cannot select `exclusive_edge`;
+those options are downgraded with a warning.
 
 ```rust
 use gpui::{
-    Bounds, LayerShellOptions, WindowBounds, WindowKind, WindowOptions, point, px, size,
+    Bounds, WindowBounds, WindowKind, WindowOptions,
+    layer_shell::{Anchor, KeyboardInteractivity, LayerShellOptions}, point, px, size,
 };
 
-let display_bounds = Bounds::new(point(px(0.0), px(0.0)), size(px(1920.0), px(1080.0)));
 let popup_bounds = Bounds::new(point(px(1520.0), px(820.0)), size(px(320.0), px(220.0)));
 
 let options = WindowOptions {
     window_bounds: Some(WindowBounds::Windowed(popup_bounds)),
-    kind: WindowKind::PopUp,
-    layer_shell: Some(LayerShellOptions::from_window_bounds(
-        display_bounds,
-        popup_bounds,
-    )),
+    kind: WindowKind::LayerShell(LayerShellOptions {
+        namespace: "gpui-popup".to_string(),
+        anchor: Anchor::TOP | Anchor::RIGHT,
+        margin: Some((px(24.0), px(24.0), px(0.0), px(0.0))),
+        keyboard_interactivity: KeyboardInteractivity::None,
+        ..Default::default()
+    }),
     ..WindowOptions::default()
 };
 ```
 
-The layer-shell regression tests avoid requiring a real compositor. They cover anchor selection,
-edge margins, configure sizing, protocol enum mapping, and X11 window hints:
+The layer-shell regression tests avoid requiring a real compositor. They cover configure sizing
+and protocol enum mapping:
 
 ```sh
 cargo test -p adabraka-gpui --lib --features test-support layer_shell
-cargo test -p adabraka-gpui --lib --features test-support x11::window::tests
-cargo check -p adabraka-gpui --example window_positioning --features wayland,x11
+cargo check -p adabraka-gpui --example layer_shell --features wayland
 ```
 
 ## Features

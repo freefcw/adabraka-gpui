@@ -93,6 +93,7 @@ wayland = [
     "wayland-cursor",
     "wayland-protocols",
     "wayland-protocols-plasma",
+    "wayland-protocols-wlr",
     "wayland-scanner",
     "filedescriptor",
     "xkbcommon",
@@ -164,6 +165,10 @@ path = "examples/image_loading.rs"
 [[example]]
 name = "input"
 path = "examples/input.rs"
+
+[[example]]
+name = "layer_shell"
+path = "examples/layer_shell.rs"
 
 [[example]]
 name = "linux_rendering_probe"
@@ -602,6 +607,11 @@ optional = true
 
 [target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies.wayland-protocols-plasma]
 version = "0.3.12"
+features = ["client"]
+optional = true
+
+[target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies.wayland-protocols-wlr]
+version = "0.3.9"
 features = ["client"]
 optional = true
 

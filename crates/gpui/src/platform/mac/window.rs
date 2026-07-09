@@ -820,7 +820,6 @@ impl MacWindow {
             mouse_passthrough,
             icon: _,
             app_id: _app_id,
-            layer_shell: _layer_shell,
         }: WindowParams,
         executor: ForegroundExecutor,
         renderer_context: renderer::Context,
@@ -854,7 +853,7 @@ impl MacWindow {
                 style_mask = NSWindowStyleMask::Titled | NSWindowStyleMask::FullSizeContentView;
             }
 
-            let native_window: id = match kind {
+            let native_window: id = match &kind {
                 WindowKind::Normal | WindowKind::Floating => msg_send![WINDOW_CLASS, alloc],
                 WindowKind::PopUp | WindowKind::Overlay => {
                     style_mask |= NSWindowStyleMask::NonactivatingPanel;
@@ -1031,7 +1030,7 @@ impl MacWindow {
             let _: () = msg_send![content_view, addSubview: autorelease(native_view)];
             let _: () = msg_send![native_window, makeFirstResponder: native_view];
 
-            match kind {
+            match &kind {
                 WindowKind::Normal | WindowKind::Floating => {
                     let _: () = msg_send![native_window, setLevel: NSNormalWindowLevel];
                     let _: () = msg_send![native_window, setAcceptsMouseMovedEvents: YES];

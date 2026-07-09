@@ -96,12 +96,14 @@ x11rb::atom_manager! {
     }
 }
 
-fn window_type_for_kind(kind: WindowKind) -> X11WindowType {
+fn window_type_for_kind(kind: &WindowKind) -> X11WindowType {
     match kind {
         WindowKind::Normal => X11WindowType::Normal,
         WindowKind::PopUp => X11WindowType::Notification,
         WindowKind::Floating => X11WindowType::Dialog,
         WindowKind::Overlay => X11WindowType::Dock,
+        #[cfg(feature = "wayland")]
+        WindowKind::LayerShell(_) => X11WindowType::Normal,
     }
 }
 
@@ -311,7 +313,7 @@ impl X11WindowState {
     }
 }
 
-fn window_type_atom(kind: WindowKind, atoms: &XcbAtoms) -> xproto::Atom {
+fn window_type_atom(kind: &WindowKind, atoms: &XcbAtoms) -> xproto::Atom {
     match window_type_for_kind(kind) {
         X11WindowType::Normal => atoms._NET_WM_WINDOW_TYPE_NORMAL,
         X11WindowType::Notification => atoms._NET_WM_WINDOW_TYPE_NOTIFICATION,
@@ -615,7 +617,7 @@ impl X11WindowState {
                 )?;
             }
 
-            let window_type = window_type_atom(params.kind, atoms);
+            let window_type = window_type_atom(&params.kind, atoms);
             check_reply(
                 || "X11 ChangeProperty32 setting window type failed.",
                 xcb.change_property32(
@@ -2023,26 +2025,25 @@ mod tests {
             tabbing_identifier: None,
             mouse_passthrough: false,
             icon: None,
-            layer_shell: None,
         }
     }
 
     #[test]
     fn window_kind_maps_to_ewmh_window_type() {
         assert_eq!(
-            window_type_for_kind(WindowKind::Normal),
+            window_type_for_kind(&WindowKind::Normal),
             X11WindowType::Normal
         );
         assert_eq!(
-            window_type_for_kind(WindowKind::PopUp),
+            window_type_for_kind(&WindowKind::PopUp),
             X11WindowType::Notification
         );
         assert_eq!(
-            window_type_for_kind(WindowKind::Floating),
+            window_type_for_kind(&WindowKind::Floating),
             X11WindowType::Dialog
         );
         assert_eq!(
-            window_type_for_kind(WindowKind::Overlay),
+            window_type_for_kind(&WindowKind::Overlay),
             X11WindowType::Dock
         );
     }

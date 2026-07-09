@@ -5,7 +5,6 @@ mod display;
 mod ext_layer_shell;
 mod serial;
 mod window;
-mod wlr_layer_shell;
 
 pub(crate) use client::*;
 

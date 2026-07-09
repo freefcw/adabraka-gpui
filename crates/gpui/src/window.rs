@@ -1117,7 +1117,6 @@ impl Window {
             tabbing_identifier,
             mouse_passthrough,
             icon,
-            layer_shell,
         } = options;
 
         let bounds = window_bounds
@@ -1142,7 +1141,6 @@ impl Window {
                 tabbing_identifier,
                 mouse_passthrough,
                 icon,
-                layer_shell,
             },
         )?;
 

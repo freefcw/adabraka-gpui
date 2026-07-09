@@ -66,6 +66,7 @@ use wayland_protocols::xdg::decoration::zv1::client::{
 use wayland_protocols::xdg::shell::client::{xdg_surface, xdg_toplevel, xdg_wm_base};
 use wayland_protocols::xdg::system_bell::v1::client::xdg_system_bell_v1;
 use wayland_protocols_plasma::blur::client::{org_kde_kwin_blur, org_kde_kwin_blur_manager};
+use wayland_protocols_wlr::layer_shell::v1::client::{zwlr_layer_shell_v1, zwlr_layer_surface_v1};
 use xkbcommon::xkb::ffi::XKB_KEYMAP_FORMAT_TEXT_V1;
 use xkbcommon::xkb::{self, KEYMAP_COMPILE_NO_FLAGS, Keycode};
 
@@ -74,8 +75,6 @@ use super::{
     ext_layer_shell::client::ext_layer_shell_v1,
     ext_layer_shell::client::ext_layer_surface_v1,
     window::{ImeInput, WaylandWindowStatePtr},
-    wlr_layer_shell::client::zwlr_layer_shell_v1,
-    wlr_layer_shell::client::zwlr_layer_surface_v1,
 };
 
 use crate::platform::{PlatformWindow, wgpu::GpuContext};
@@ -169,7 +168,7 @@ impl Globals {
             fractional_scale_manager: globals.bind(&qh, 1..=1, ()).ok(),
             decoration_manager: globals.bind(&qh, 1..=1, ()).ok(),
             ext_layer_shell: globals.bind(&qh, 1..=1, ()).ok(),
-            wlr_layer_shell: globals.bind(&qh, 1..=4, ()).ok(),
+            wlr_layer_shell: globals.bind(&qh, 1..=5, ()).ok(),
             blur_manager: globals.bind(&qh, 1..=1, ()).ok(),
             text_input_manager: globals.bind(&qh, 1..=1, ()).ok(),
             gesture_manager: globals.bind(&qh, 1..=3, ()).ok(),

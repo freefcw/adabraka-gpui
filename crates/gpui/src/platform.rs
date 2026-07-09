@@ -1,6 +1,9 @@
 mod app_menu;
 mod keyboard;
 mod keystroke;
+/// Wayland layer-shell window configuration.
+#[cfg(all(any(target_os = "linux", target_os = "freebsd"), feature = "wayland"))]
+pub mod layer_shell;
 /// Cross-platform single instance enforcement using Unix domain sockets and Windows named mutexes.
 pub mod single_instance;
 /// Pure Rust utility for computing window bounds from a semantic [`WindowPosition`].
@@ -38,8 +41,8 @@ pub(crate) mod scap_screen_capture;
 
 use crate::{
     Action, AnyWindowHandle, App, AsyncWindowContext, BackgroundExecutor, Bounds,
-    DEFAULT_WINDOW_SIZE, DevicePixels, DispatchEventResult, Edges, Font, FontId, FontMetrics,
-    FontRun, ForegroundExecutor, GlyphId, GpuResourceBudget, GpuSpecs, Hsla, ImageSource, Keymap,
+    DEFAULT_WINDOW_SIZE, DevicePixels, DispatchEventResult, Font, FontId, FontMetrics, FontRun,
+    ForegroundExecutor, GlyphId, GpuResourceBudget, GpuSpecs, Hsla, ImageSource, Keymap,
     LineLayout, Pixels, PlatformInput, Point, RenderGlyphParams, RenderImage, RenderImageParams,
     RenderSvgParams, Scene, ShapedGlyph, ShapedRun, SharedString, Size, SvgRenderer,
     SystemWindowTab, Task, TaskLabel, Window, WindowControlArea, hash, point, px, size,
@@ -1425,12 +1428,6 @@ pub struct WindowOptions {
 
     /// Optional window icon (currently consumed only on X11; ignored elsewhere)
     pub icon: Option<image::RgbaImage>,
-
-    /// Wayland layer-shell placement options for desktop-style popup surfaces.
-    ///
-    /// This is currently consumed by the Wayland backend only. Other platforms
-    /// ignore it and continue to use normal window positioning.
-    pub layer_shell: Option<LayerShellOptions>,
 }
 
 /// The variables that can be configured when creating a new window
@@ -1496,8 +1493,6 @@ pub(crate) struct WindowParams {
     /// Optional window icon (primarily for X11)
     #[cfg_attr(not(any(target_os = "linux", target_os = "freebsd")), allow(dead_code))]
     pub icon: Option<image::RgbaImage>,
-
-    pub layer_shell: Option<LayerShellOptions>,
 }
 
 /// Represents the status of how a window should be opened.
@@ -1558,226 +1553,7 @@ impl Default for WindowOptions {
             tabbing_identifier: None,
             mouse_passthrough: false,
             icon: None,
-            layer_shell: None,
         }
-    }
-}
-
-/// Placement and stacking options for Wayland layer-shell popup surfaces.
-#[derive(Debug, Clone, PartialEq)]
-pub struct LayerShellOptions {
-    /// Preferred layer-shell protocol.
-    pub protocol: LayerShellProtocolPreference,
-    /// The layer the surface should be placed on.
-    pub layer: LayerShellLayer,
-    /// The output edges the surface is anchored to.
-    pub anchor: LayerShellAnchor,
-    /// Margins from the anchored output edges.
-    pub margin: Edges<Pixels>,
-    /// How much screen space this surface reserves.
-    pub exclusive_zone: LayerShellExclusiveZone,
-    /// How the surface participates in keyboard focus.
-    pub keyboard_interactivity: LayerShellKeyboardInteractivity,
-    /// Protocol namespace used by compositors for policy and debugging.
-    pub namespace: SharedString,
-}
-
-impl LayerShellOptions {
-    /// Build options suitable for a tray popover panel near the given anchor.
-    ///
-    /// `display` is the bounds of the display containing the tray icon. The
-    /// `TrayAnchor` bounds are display-local, so only the display size is used.
-    pub fn tray_panel(
-        display: Bounds<Pixels>,
-        anchor: &TrayAnchor,
-        panel_size: Size<Pixels>,
-    ) -> Self {
-        let local_display = Bounds::new(Point::default(), display.size);
-        Self {
-            anchor: LayerShellAnchor::from_display_nearest_corner(local_display, anchor.bounds),
-            margin: layer_shell_margin_for_tray_anchor(local_display, anchor.bounds, panel_size),
-            namespace: "gpui-tray-panel".into(),
-            ..Self::default()
-        }
-    }
-
-    /// Build options suitable for a screen-corner popup from existing window bounds.
-    pub fn from_window_bounds(display: Bounds<Pixels>, bounds: Bounds<Pixels>) -> Self {
-        Self {
-            anchor: LayerShellAnchor::from_display_nearest_corner(display, bounds),
-            margin: layer_shell_margin_for_display_bounds(display, bounds),
-            ..Self::default()
-        }
-    }
-}
-
-impl Default for LayerShellOptions {
-    fn default() -> Self {
-        Self {
-            protocol: LayerShellProtocolPreference::default(),
-            layer: LayerShellLayer::Top,
-            anchor: LayerShellAnchor::TOP | LayerShellAnchor::RIGHT,
-            margin: Edges::all(px(0.0)),
-            exclusive_zone: LayerShellExclusiveZone::None,
-            keyboard_interactivity: LayerShellKeyboardInteractivity::OnDemand,
-            namespace: "gpui-popup".into(),
-        }
-    }
-}
-
-/// Layer-shell protocol preference.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum LayerShellProtocolPreference {
-    /// Prefer ext-layer-shell once available, then fall back to wlr-layer-shell.
-    #[default]
-    ExtThenWlr,
-    /// Use wlr-layer-shell when available.
-    Wlr,
-}
-
-/// Wayland layer-shell layer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LayerShellLayer {
-    /// Behind normal windows.
-    Background,
-    /// Above the background but below normal windows.
-    Bottom,
-    /// Above normal windows.
-    Top,
-    /// Above fullscreen and lock surfaces. Use sparingly.
-    Overlay,
-}
-
-/// How a layer-shell surface participates in keyboard focus.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LayerShellKeyboardInteractivity {
-    /// Do not request keyboard focus.
-    None,
-    /// Request focus only when allowed by compositor policy.
-    OnDemand,
-    /// Request exclusive keyboard focus. Use only for strongly modal UI.
-    Exclusive,
-}
-
-/// Space reservation requested by a layer-shell surface.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LayerShellExclusiveZone {
-    /// Do not reserve screen space.
-    None,
-    /// Let the compositor derive the zone from the anchored edge.
-    Auto,
-    /// Reserve an explicit number of logical pixels.
-    Pixels(i32),
-}
-
-/// Edges used to anchor a layer-shell surface to an output.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct LayerShellAnchor(u32);
-
-impl LayerShellAnchor {
-    /// No anchored edge.
-    pub const NONE: Self = Self(0);
-    /// Anchor to the top edge.
-    pub const TOP: Self = Self(1);
-    /// Anchor to the bottom edge.
-    pub const BOTTOM: Self = Self(2);
-    /// Anchor to the left edge.
-    pub const LEFT: Self = Self(4);
-    /// Anchor to the right edge.
-    pub const RIGHT: Self = Self(8);
-
-    /// Raw bit representation used by Wayland protocol bindings.
-    pub fn bits(self) -> u32 {
-        self.0
-    }
-
-    /// Return true if this anchor contains every bit from `other`.
-    pub fn contains(self, other: Self) -> bool {
-        self.0 & other.0 == other.0
-    }
-
-    /// Choose the closest output corner for the given display-relative bounds.
-    pub fn from_display_nearest_corner(display: Bounds<Pixels>, bounds: Bounds<Pixels>) -> Self {
-        let center = bounds.center();
-        let display_center = display.center();
-        let vertical = if center.y < display_center.y {
-            Self::TOP
-        } else {
-            Self::BOTTOM
-        };
-        let horizontal = if center.x < display_center.x {
-            Self::LEFT
-        } else {
-            Self::RIGHT
-        };
-        vertical | horizontal
-    }
-}
-
-impl std::ops::BitOr for LayerShellAnchor {
-    type Output = Self;
-
-    fn bitor(self, rhs: Self) -> Self::Output {
-        Self(self.0 | rhs.0)
-    }
-}
-
-fn layer_shell_margin_for_tray_anchor(
-    display: Bounds<Pixels>,
-    anchor_bounds: Bounds<Pixels>,
-    panel_size: Size<Pixels>,
-) -> Edges<Pixels> {
-    let anchor = LayerShellAnchor::from_display_nearest_corner(display, anchor_bounds);
-    let mut margin = Edges::all(px(0.0));
-
-    let max_left = (display.size.width - panel_size.width).max(px(0.0));
-    let panel_left = (anchor_bounds.center().x - panel_size.width * 0.5)
-        .max(px(0.0))
-        .min(max_left);
-    let max_top = (display.size.height - panel_size.height).max(px(0.0));
-    let panel_top = if anchor.contains(LayerShellAnchor::TOP) {
-        anchor_bounds.bottom()
-    } else {
-        anchor_bounds.origin.y - panel_size.height
-    }
-    .max(px(0.0))
-    .min(max_top);
-
-    if anchor.contains(LayerShellAnchor::TOP) {
-        margin.top = panel_top;
-    } else {
-        margin.bottom = display.size.height - panel_top - panel_size.height;
-    }
-    if anchor.contains(LayerShellAnchor::LEFT) {
-        margin.left = panel_left;
-    } else {
-        margin.right = display.size.width - panel_left - panel_size.width;
-    }
-    margin
-}
-
-fn layer_shell_margin_for_display_bounds(
-    display: Bounds<Pixels>,
-    bounds: Bounds<Pixels>,
-) -> Edges<Pixels> {
-    let anchor = LayerShellAnchor::from_display_nearest_corner(display, bounds);
-    let mut margin = Edges::all(px(0.0));
-    if anchor.contains(LayerShellAnchor::TOP) {
-        margin.top = bounds.origin.y - display.origin.y;
-    } else {
-        margin.bottom = display.bottom() - bounds.bottom();
-    }
-    if anchor.contains(LayerShellAnchor::LEFT) {
-        margin.left = bounds.origin.x - display.origin.x;
-    } else {
-        margin.right = display.right() - bounds.right();
-    }
-    margin
-}
-
-impl std::ops::BitOrAssign for LayerShellAnchor {
-    fn bitor_assign(&mut self, rhs: Self) {
-        self.0 |= rhs.0;
     }
 }
 
@@ -1952,69 +1728,6 @@ mod platform_input_handler_tests {
     }
 }
 
-#[cfg(test)]
-mod layer_shell_tests {
-    use super::*;
-
-    fn display() -> Bounds<Pixels> {
-        Bounds::new(point(px(100.0), px(50.0)), size(px(1920.0), px(1080.0)))
-    }
-
-    #[test]
-    fn layer_shell_anchor_selects_nearest_display_corner() {
-        let display = display();
-
-        assert_eq!(
-            LayerShellAnchor::from_display_nearest_corner(
-                display,
-                Bounds::new(point(px(120.0), px(70.0)), size(px(200.0), px(120.0))),
-            ),
-            LayerShellAnchor::TOP | LayerShellAnchor::LEFT
-        );
-        assert_eq!(
-            LayerShellAnchor::from_display_nearest_corner(
-                display,
-                Bounds::new(point(px(1600.0), px(900.0)), size(px(200.0), px(120.0))),
-            ),
-            LayerShellAnchor::BOTTOM | LayerShellAnchor::RIGHT
-        );
-    }
-
-    #[test]
-    fn layer_shell_window_bounds_become_edge_margins() {
-        let options = LayerShellOptions::from_window_bounds(
-            display(),
-            Bounds::new(point(px(1800.0), px(920.0)), size(px(180.0), px(90.0))),
-        );
-
-        assert_eq!(
-            options.anchor,
-            LayerShellAnchor::BOTTOM | LayerShellAnchor::RIGHT
-        );
-        assert_eq!(options.margin.top, px(0.0));
-        assert_eq!(options.margin.right, px(40.0));
-        assert_eq!(options.margin.bottom, px(120.0));
-        assert_eq!(options.margin.left, px(0.0));
-    }
-
-    #[test]
-    fn tray_panel_uses_display_local_anchor_bounds() {
-        let anchor = TrayAnchor {
-            display_id: DisplayId::new(7),
-            bounds: Bounds::new(point(px(1700.0), px(1010.0)), size(px(32.0), px(32.0))),
-        };
-        let options = LayerShellOptions::tray_panel(display(), &anchor, size(px(320.0), px(240.0)));
-
-        assert_eq!(
-            options.anchor,
-            LayerShellAnchor::BOTTOM | LayerShellAnchor::RIGHT
-        );
-        assert_eq!(options.margin.right, px(44.0));
-        assert_eq!(options.margin.bottom, px(70.0));
-        assert_eq!(options.namespace.as_ref(), "gpui-tray-panel");
-    }
-}
-
 /// The options that can be configured for a window's titlebar
 #[derive(Debug, Default)]
 pub struct TitlebarOptions {
@@ -2030,7 +1743,7 @@ pub struct TitlebarOptions {
 }
 
 /// The kind of window to create
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum WindowKind {
     /// A normal application window
     Normal,
@@ -2044,6 +1757,11 @@ pub enum WindowKind {
 
     /// An overlay window that appears above all other windows, including fullscreen apps
     Overlay,
+
+    /// A Wayland layer-shell window, used for overlays or backgrounds such as docks,
+    /// notifications, and wallpapers.
+    #[cfg(all(any(target_os = "linux", target_os = "freebsd"), feature = "wayland"))]
+    LayerShell(layer_shell::LayerShellOptions),
 }
 
 /// The appearance of the window, as defined by the operating system.

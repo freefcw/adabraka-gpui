@@ -25,6 +25,7 @@ use wayland_protocols::{
     xdg::shell::client::xdg_toplevel::XdgToplevel,
 };
 use wayland_protocols_plasma::blur::client::org_kde_kwin_blur;
+use wayland_protocols_wlr::layer_shell::v1::client::{zwlr_layer_shell_v1, zwlr_layer_surface_v1};
 
 use crate::{
     AnyWindowHandle, Bounds, Decorations, DisplayId, Globals, GpuSpecs, Modifiers, Output, Pixels,
@@ -40,15 +41,11 @@ use crate::{
         wgpu::{GpuContext, WgpuRenderer, WgpuSurfaceConfig},
     },
 };
-use crate::{
-    LayerShellAnchor, LayerShellExclusiveZone, LayerShellKeyboardInteractivity, LayerShellLayer,
-    LayerShellOptions, LayerShellProtocolPreference,
-    platform::linux::wayland::{
-        ext_layer_shell::client::ext_layer_surface_v1,
-        wlr_layer_shell::client::{zwlr_layer_shell_v1, zwlr_layer_surface_v1},
-    },
-};
 use crate::{WindowKind, scene::Scene};
+use crate::{
+    layer_shell::{KeyboardInteractivity, Layer, LayerShellNotSupportedError, LayerShellOptions},
+    platform::linux::wayland::ext_layer_shell::client::ext_layer_surface_v1,
+};
 
 #[derive(Default)]
 pub(crate) struct Callbacks {
@@ -400,11 +397,11 @@ fn create_window_role(
     parent: Option<XdgToplevel>,
     outputs: &[Output],
 ) -> anyhow::Result<WaylandWindowRole> {
-    if let Some(options) = layer_shell_options(params, globals, outputs) {
-        if let Some(role) = create_layer_shell_role(surface, globals, params, &options, outputs) {
+    if let WindowKind::LayerShell(options) = &params.kind {
+        if let Some(role) = create_layer_shell_role(surface, globals, params, options, outputs) {
             return Ok(role);
         }
-        return Ok(create_xdg_toplevel_role(surface, globals, params, parent));
+        return Err(LayerShellNotSupportedError.into());
     }
 
     Ok(create_xdg_toplevel_role(surface, globals, params, parent))
@@ -417,15 +414,8 @@ fn create_layer_shell_role(
     options: &LayerShellOptions,
     outputs: &[Output],
 ) -> Option<WaylandWindowRole> {
-    match options.protocol {
-        LayerShellProtocolPreference::ExtThenWlr => {
-            create_ext_layer_shell_role(surface, globals, params, options, outputs)
-                .or_else(|| create_wlr_layer_shell_role(surface, globals, params, options, outputs))
-        }
-        LayerShellProtocolPreference::Wlr => {
-            create_wlr_layer_shell_role(surface, globals, params, options, outputs)
-        }
-    }
+    create_wlr_layer_shell_role(surface, globals, params, options, outputs)
+        .or_else(|| create_ext_layer_shell_role(surface, globals, params, options, outputs))
 }
 
 fn create_ext_layer_shell_role(
@@ -533,90 +523,23 @@ fn create_xdg_toplevel_role(
     }
 }
 
-fn layer_shell_options(
-    params: &WindowParams,
-    globals: &Globals,
-    outputs: &[Output],
-) -> Option<LayerShellOptions> {
-    let mut options = params.layer_shell.clone().or_else(|| {
-        (params.kind == WindowKind::Overlay).then(|| LayerShellOptions {
-            layer: LayerShellLayer::Overlay,
-            keyboard_interactivity: LayerShellKeyboardInteractivity::None,
-            namespace: "gpui-overlay".into(),
-            ..LayerShellOptions::default()
-        })
-    })?;
-
-    if params.layer_shell.is_none()
-        && params.kind == WindowKind::Overlay
-        && let Some(output) = find_output_for_params(params, outputs)
-    {
-        options = LayerShellOptions::from_window_bounds(
-            output.bounds.to_pixels(output.scale as f32),
-            params.bounds,
-        );
-        options.layer = LayerShellLayer::Overlay;
-        options.keyboard_interactivity = LayerShellKeyboardInteractivity::None;
-        options.namespace = "gpui-overlay".into();
-    }
-
-    if !is_layer_shell_available(globals, options.protocol) {
-        log::warn!(
-            "Wayland: layer-shell requested but no supported layer-shell protocol is available; \
-             falling back to xdg_toplevel positioning."
-        );
-        return None;
-    }
-
-    Some(options)
-}
-
-fn is_layer_shell_available(globals: &Globals, protocol: LayerShellProtocolPreference) -> bool {
-    match protocol {
-        LayerShellProtocolPreference::ExtThenWlr => {
-            globals.ext_layer_shell.is_some() || globals.wlr_layer_shell.is_some()
-        }
-        LayerShellProtocolPreference::Wlr => globals.wlr_layer_shell.is_some(),
-    }
-}
-
-fn find_output_for_params<'a>(params: &WindowParams, outputs: &'a [Output]) -> Option<&'a Output> {
-    params
-        .display_id
-        .and_then(|display_id| {
-            outputs
-                .iter()
-                .find(|output| DisplayId::from(output.id.protocol_id()) == display_id)
-        })
-        .or_else(|| {
-            outputs.iter().find(|output| {
-                output
-                    .bounds
-                    .to_pixels(output.scale as f32)
-                    .contains(&params.bounds.center())
-            })
-        })
-        .or_else(|| outputs.first())
-}
-
 fn configure_layer_surface_state(
     set_size: impl FnOnce(i32, i32),
     set_anchor: impl FnOnce(u32),
     set_margin: impl FnOnce(i32, i32, i32, i32),
     set_exclusive_zone: impl FnOnce(i32),
-    set_keyboard_interactivity: impl FnOnce(LayerShellKeyboardInteractivity),
+    set_keyboard_interactivity: impl FnOnce(KeyboardInteractivity),
     options: &LayerShellOptions,
     size: Size<Pixels>,
 ) {
     set_size(size.width.0.max(1.0) as i32, size.height.0.max(1.0) as i32);
     set_anchor(options.anchor.bits());
-    set_margin(
-        options.margin.top.0 as i32,
-        options.margin.right.0 as i32,
-        options.margin.bottom.0 as i32,
-        options.margin.left.0 as i32,
-    );
-    set_exclusive_zone(options.exclusive_zone.to_wayland());
+    if let Some((top, right, bottom, left)) = options.margin {
+        set_margin(top.0 as i32, right.0 as i32, bottom.0 as i32, left.0 as i32);
+    }
+    if let Some(exclusive_zone) = options.exclusive_zone {
+        set_exclusive_zone(exclusive_zone.0 as i32);
+    }
     set_keyboard_interactivity(options.keyboard_interactivity);
 }
 
@@ -625,6 +548,11 @@ fn configure_ext_layer_surface(
     options: &LayerShellOptions,
     size: Size<Pixels>,
 ) {
+    if options.exclusive_edge.is_some() {
+        log::warn!(
+            "Wayland: ext-layer-shell does not support selecting an exclusive edge; the compositor will infer it from the anchors."
+        );
+    }
     layer_surface.set_layer(options.layer.to_ext());
     configure_layer_surface_state(
         |width, height| layer_surface.set_size(width, height),
@@ -665,6 +593,16 @@ fn configure_wlr_layer_surface(
         options,
         size,
     );
+    if let Some(exclusive_edge) = options.exclusive_edge {
+        if layer_surface.version() >= zwlr_layer_surface_v1::REQ_SET_EXCLUSIVE_EDGE_SINCE {
+            layer_surface.set_exclusive_edge(exclusive_edge.to_wlr());
+        } else {
+            log::warn!(
+                "Wayland: wlr-layer-shell v{} does not support selecting an exclusive edge; the compositor will infer it from the anchors.",
+                layer_surface.version()
+            );
+        }
+    }
 }
 
 trait ToWlrLayerShell {
@@ -673,16 +611,24 @@ trait ToWlrLayerShell {
     fn to_wlr(self) -> Self::Wlr;
 }
 
-impl ToWlrLayerShell for LayerShellLayer {
+impl ToWlrLayerShell for Layer {
     type Wlr = zwlr_layer_shell_v1::Layer;
 
     fn to_wlr(self) -> Self::Wlr {
         match self {
-            LayerShellLayer::Background => zwlr_layer_shell_v1::Layer::Background,
-            LayerShellLayer::Bottom => zwlr_layer_shell_v1::Layer::Bottom,
-            LayerShellLayer::Top => zwlr_layer_shell_v1::Layer::Top,
-            LayerShellLayer::Overlay => zwlr_layer_shell_v1::Layer::Overlay,
+            Layer::Background => zwlr_layer_shell_v1::Layer::Background,
+            Layer::Bottom => zwlr_layer_shell_v1::Layer::Bottom,
+            Layer::Top => zwlr_layer_shell_v1::Layer::Top,
+            Layer::Overlay => zwlr_layer_shell_v1::Layer::Overlay,
         }
+    }
+}
+
+impl ToWlrLayerShell for crate::layer_shell::Anchor {
+    type Wlr = zwlr_layer_surface_v1::Anchor;
+
+    fn to_wlr(self) -> Self::Wlr {
+        zwlr_layer_surface_v1::Anchor::from_bits_truncate(self.bits())
     }
 }
 
@@ -692,67 +638,45 @@ trait ToExtLayerShell {
     fn to_ext(self) -> Self::Ext;
 }
 
-impl ToExtLayerShell for LayerShellLayer {
+impl ToExtLayerShell for Layer {
     type Ext = ext_layer_surface_v1::Layer;
 
     fn to_ext(self) -> Self::Ext {
         match self {
-            LayerShellLayer::Background => ext_layer_surface_v1::Layer::Background,
-            LayerShellLayer::Bottom => ext_layer_surface_v1::Layer::Bottom,
-            LayerShellLayer::Top => ext_layer_surface_v1::Layer::Top,
-            LayerShellLayer::Overlay => ext_layer_surface_v1::Layer::Overlay,
+            Layer::Background => ext_layer_surface_v1::Layer::Background,
+            Layer::Bottom => ext_layer_surface_v1::Layer::Bottom,
+            Layer::Top => ext_layer_surface_v1::Layer::Top,
+            Layer::Overlay => ext_layer_surface_v1::Layer::Overlay,
         }
     }
 }
 
-impl ToWlrLayerShell for LayerShellAnchor {
-    type Wlr = zwlr_layer_surface_v1::Anchor;
-
-    fn to_wlr(self) -> Self::Wlr {
-        zwlr_layer_surface_v1::Anchor::from_bits_truncate(self.bits())
-    }
-}
-
-impl LayerShellExclusiveZone {
-    fn to_wayland(self) -> i32 {
-        match self {
-            LayerShellExclusiveZone::None => 0,
-            LayerShellExclusiveZone::Auto => -1,
-            LayerShellExclusiveZone::Pixels(zone) => zone,
-        }
-    }
-}
-
-impl ToWlrLayerShell for LayerShellKeyboardInteractivity {
+impl ToWlrLayerShell for KeyboardInteractivity {
     type Wlr = zwlr_layer_surface_v1::KeyboardInteractivity;
 
     fn to_wlr(self) -> Self::Wlr {
         match self {
-            LayerShellKeyboardInteractivity::None => {
-                zwlr_layer_surface_v1::KeyboardInteractivity::None
-            }
-            LayerShellKeyboardInteractivity::OnDemand => {
+            KeyboardInteractivity::None => zwlr_layer_surface_v1::KeyboardInteractivity::None,
+            KeyboardInteractivity::OnDemand => {
                 zwlr_layer_surface_v1::KeyboardInteractivity::OnDemand
             }
-            LayerShellKeyboardInteractivity::Exclusive => {
+            KeyboardInteractivity::Exclusive => {
                 zwlr_layer_surface_v1::KeyboardInteractivity::Exclusive
             }
         }
     }
 }
 
-impl ToExtLayerShell for LayerShellKeyboardInteractivity {
+impl ToExtLayerShell for KeyboardInteractivity {
     type Ext = Option<ext_layer_surface_v1::KeyboardInteractivity>;
 
     fn to_ext(self) -> Self::Ext {
         match self {
-            LayerShellKeyboardInteractivity::None => {
-                Some(ext_layer_surface_v1::KeyboardInteractivity::None)
-            }
-            LayerShellKeyboardInteractivity::OnDemand => {
+            KeyboardInteractivity::None => Some(ext_layer_surface_v1::KeyboardInteractivity::None),
+            KeyboardInteractivity::OnDemand => {
                 Some(ext_layer_surface_v1::KeyboardInteractivity::OnDemand)
             }
-            LayerShellKeyboardInteractivity::Exclusive => None,
+            KeyboardInteractivity::Exclusive => None,
         }
     }
 }
@@ -995,6 +919,7 @@ impl WaylandWindowStatePtr {
                 false
             }
             zwlr_layer_surface_v1::Event::Closed => true,
+            _ => false,
         }
     }
 
@@ -2039,24 +1964,17 @@ mod layer_shell_tests {
     }
 
     #[test]
-    fn layer_exclusive_zone_maps_to_wayland_values() {
-        assert_eq!(LayerShellExclusiveZone::None.to_wayland(), 0);
-        assert_eq!(LayerShellExclusiveZone::Auto.to_wayland(), -1);
-        assert_eq!(LayerShellExclusiveZone::Pixels(24).to_wayland(), 24);
-    }
-
-    #[test]
     fn layer_keyboard_interactivity_maps_to_wlr_protocol() {
         assert_eq!(
-            LayerShellKeyboardInteractivity::None.to_wlr(),
+            KeyboardInteractivity::None.to_wlr(),
             zwlr_layer_surface_v1::KeyboardInteractivity::None
         );
         assert_eq!(
-            LayerShellKeyboardInteractivity::OnDemand.to_wlr(),
+            KeyboardInteractivity::OnDemand.to_wlr(),
             zwlr_layer_surface_v1::KeyboardInteractivity::OnDemand
         );
         assert_eq!(
-            LayerShellKeyboardInteractivity::Exclusive.to_wlr(),
+            KeyboardInteractivity::Exclusive.to_wlr(),
             zwlr_layer_surface_v1::KeyboardInteractivity::Exclusive
         );
     }
@@ -2064,33 +1982,37 @@ mod layer_shell_tests {
     #[test]
     fn layer_keyboard_interactivity_maps_to_ext_protocol_limits() {
         assert_eq!(
-            LayerShellKeyboardInteractivity::None.to_ext(),
+            KeyboardInteractivity::None.to_ext(),
             Some(ext_layer_surface_v1::KeyboardInteractivity::None)
         );
         assert_eq!(
-            LayerShellKeyboardInteractivity::OnDemand.to_ext(),
+            KeyboardInteractivity::OnDemand.to_ext(),
             Some(ext_layer_surface_v1::KeyboardInteractivity::OnDemand)
         );
-        assert_eq!(LayerShellKeyboardInteractivity::Exclusive.to_ext(), None);
+        assert_eq!(KeyboardInteractivity::Exclusive.to_ext(), None);
     }
 
     #[test]
     fn layer_values_map_to_both_wayland_protocols() {
         assert_eq!(
-            LayerShellLayer::Background.to_wlr(),
+            Layer::Background.to_wlr(),
             zwlr_layer_shell_v1::Layer::Background
         );
+        assert_eq!(Layer::Bottom.to_ext(), ext_layer_surface_v1::Layer::Bottom);
+        assert_eq!(Layer::Top.to_wlr(), zwlr_layer_shell_v1::Layer::Top);
         assert_eq!(
-            LayerShellLayer::Bottom.to_ext(),
-            ext_layer_surface_v1::Layer::Bottom
-        );
-        assert_eq!(
-            LayerShellLayer::Top.to_wlr(),
-            zwlr_layer_shell_v1::Layer::Top
-        );
-        assert_eq!(
-            LayerShellLayer::Overlay.to_ext(),
+            Layer::Overlay.to_ext(),
             ext_layer_surface_v1::Layer::Overlay
+        );
+    }
+
+    #[test]
+    fn layer_anchor_maps_to_wlr_protocol() {
+        let anchor = crate::layer_shell::Anchor::TOP | crate::layer_shell::Anchor::LEFT;
+
+        assert_eq!(
+            anchor.to_wlr(),
+            zwlr_layer_surface_v1::Anchor::Top | zwlr_layer_surface_v1::Anchor::Left
         );
     }
 }
