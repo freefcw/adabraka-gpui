@@ -5,7 +5,8 @@ use std::{
 };
 
 use crate::{
-    AnyElement, App, Element, ElementId, GlobalElementId, InspectorElementId, IntoElement, Window,
+    AnyElement, App, Element, ElementId, GlobalElementId, InspectorElementId, IntoElement,
+    ParentElement, Window,
 };
 
 pub use easing::*;
@@ -145,6 +146,16 @@ pub struct AnimationElement<E> {
     animations: SmallVec<[Animation; 1]>,
     animator: Box<dyn Fn(E, usize, f32) -> E + 'static>,
     cancel_handle: Option<Rc<Cell<bool>>>,
+}
+
+impl<E: ParentElement> ParentElement for AnimationElement<E> {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        let Some(element) = &mut self.element else {
+            return;
+        };
+
+        element.extend(elements);
+    }
 }
 
 impl<E> AnimationElement<E> {
@@ -317,5 +328,24 @@ mod easing {
 
             min + (normalized_alpha * range)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{InteractiveElement, div};
+
+    use super::*;
+
+    #[test]
+    fn test_animation_parent() {
+        div()
+            .id("id")
+            .with_animation(
+                "animation",
+                Animation::new(Duration::from_secs(1)),
+                |el, _t| el,
+            )
+            .child(div());
     }
 }
