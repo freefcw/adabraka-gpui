@@ -905,8 +905,12 @@ impl WindowsWindowInner {
                     WindowControlArea::Drag if self.is_movable => Some(HTCAPTION as _),
                     WindowControlArea::Drag => None,
                     WindowControlArea::Close => Some(HTCLOSE as _),
-                    WindowControlArea::Max => Some(HTMAXBUTTON as _),
-                    WindowControlArea::Min => Some(HTMINBUTTON as _),
+                    WindowControlArea::Max if self.is_resizable => Some(HTMAXBUTTON as _),
+                    WindowControlArea::Max if self.is_movable => Some(HTCAPTION as _),
+                    WindowControlArea::Max => Some(HTNOWHERE as _),
+                    WindowControlArea::Min if self.is_minimizable => Some(HTMINBUTTON as _),
+                    WindowControlArea::Min if self.is_movable => Some(HTCAPTION as _),
+                    WindowControlArea::Min => Some(HTNOWHERE as _),
                 })
             } else {
                 drop(lock);
@@ -951,7 +955,11 @@ impl WindowsWindowInner {
             y: lparam.signed_hiword().into(),
         };
         unsafe { ScreenToClient(handle, &mut cursor_point).ok().log_err() };
-        if !self.state.borrow().is_maximized() && cursor_point.y >= 0 && cursor_point.y <= frame_y {
+        if self.is_resizable
+            && !self.state.borrow().is_maximized()
+            && cursor_point.y >= 0
+            && cursor_point.y <= frame_y
+        {
             return Some(HTTOP as _);
         }
 
@@ -1071,11 +1079,12 @@ impl WindowsWindowInner {
             && let Some(last_pressed) = last_pressed
         {
             let handled = match (wparam.0 as u32, last_pressed) {
-                (HTMINBUTTON, HTMINBUTTON) => {
+                (HTMINBUTTON, HTMINBUTTON) if self.is_minimizable => {
                     unsafe { ShowWindowAsync(handle, SW_MINIMIZE).ok().log_err() };
                     true
                 }
-                (HTMAXBUTTON, HTMAXBUTTON) => {
+                (HTMINBUTTON, HTMINBUTTON) => true,
+                (HTMAXBUTTON, HTMAXBUTTON) if self.is_resizable => {
                     if self.state.borrow().is_maximized() {
                         unsafe { ShowWindowAsync(handle, SW_NORMAL).ok().log_err() };
                     } else {
@@ -1083,6 +1092,7 @@ impl WindowsWindowInner {
                     }
                     true
                 }
+                (HTMAXBUTTON, HTMAXBUTTON) => true,
                 (HTCLOSE, HTCLOSE) => {
                     unsafe {
                         PostMessageW(Some(handle), WM_CLOSE, WPARAM::default(), LPARAM::default())
