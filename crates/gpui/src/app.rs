@@ -182,6 +182,16 @@ impl Application {
         ))
     }
 
+    /// Builds this app with accessibility integration forcibly disabled.
+    ///
+    /// In this mode, accessibility APIs such as
+    /// [`StatefulInteractiveElement::role`](crate::StatefulInteractiveElement::role)
+    /// silently no-op.
+    pub fn inaccessible(self) -> Self {
+        self.0.borrow_mut().accessibility_force_disabled = true;
+        self
+    }
+
     /// Assign
     pub fn with_assets(self, asset_source: impl AssetSource) -> Self {
         let mut context_lock = self.0.borrow_mut();
@@ -633,6 +643,7 @@ impl SystemWindowTabController {
 pub struct App {
     pub(crate) this: Weak<AppCell>,
     pub(crate) platform: Rc<dyn Platform>,
+    pub(crate) accessibility_force_disabled: bool,
     pub(crate) resource_profile: AppResourceProfile,
     text_system: Arc<TextSystem>,
     flushing_effects: bool,
@@ -716,6 +727,7 @@ impl App {
             app: RefCell::new(App {
                 this: this.clone(),
                 platform: platform.clone(),
+                accessibility_force_disabled: false,
                 resource_profile,
                 text_system,
                 actions: Rc::new(ActionRegistry::default()),
@@ -2930,6 +2942,24 @@ mod test {
         TestDispatcher, TestPlatform, TrayIconClickEvent, TrayIconEvent, TrayIconRenderingMode,
         point, px,
     };
+
+    #[test]
+    fn test_inaccessible_sets_force_disabled() {
+        let dispatcher = Arc::new(TestDispatcher::new(StdRng::seed_from_u64(0)));
+        let platform = TestPlatform::new(
+            BackgroundExecutor::new(dispatcher.clone()),
+            ForegroundExecutor::new(dispatcher),
+        );
+        let application = Application(super::App::new_app(
+            platform,
+            Arc::new(()),
+            Arc::new(NullHttpClient),
+            AppResourceProfile::default(),
+        ))
+        .inaccessible();
+
+        assert!(application.0.borrow().accessibility_force_disabled);
+    }
 
     #[test]
     fn test_with_resource_profile_rebuilds_text_system_budget() {

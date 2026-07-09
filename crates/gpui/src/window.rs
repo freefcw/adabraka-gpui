@@ -1181,10 +1181,11 @@ impl Window {
             }
         }
 
+        let accessibility_force_disabled = cx.accessibility_force_disabled;
         let a11y_active_flag = Arc::new(AtomicBool::new(false));
 
         #[cfg(not(target_family = "wasm"))]
-        {
+        if !accessibility_force_disabled {
             let initial_tree = accesskit::TreeUpdate {
                 nodes: vec![(ROOT_NODE_ID, accesskit::Node::new(accesskit::Role::Window))],
                 tree: Some(accesskit::Tree::new(ROOT_NODE_ID)),
@@ -1505,7 +1506,7 @@ impl Window {
             invalidator,
             removed: false,
             platform_window,
-            a11y: A11y::new(a11y_active_flag),
+            a11y: A11y::new(a11y_active_flag, accessibility_force_disabled),
             display_id,
             sprite_atlas,
             text_system,

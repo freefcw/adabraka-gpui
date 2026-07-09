@@ -48,6 +48,8 @@ pub(crate) type A11yActionListener =
 /// Manages the AccessKit tree that is built each frame and the mappings
 /// needed to dispatch incoming action requests back to the right elements.
 pub(crate) struct A11y {
+    /// Whether accessibility has been forcibly disabled for this window.
+    force_disabled: bool,
     /// Whether a11y features have been requested by the system.
     ///
     /// Updated by AccessKit using callbacks provided to the adapter. Can change
@@ -72,8 +74,9 @@ pub(crate) struct A11y {
 }
 
 impl A11y {
-    pub(crate) fn new(active_flag: Arc<AtomicBool>) -> Self {
+    pub(crate) fn new(active_flag: Arc<AtomicBool>, force_disabled: bool) -> Self {
         Self {
+            force_disabled,
             active_flag,
             active_this_frame: false,
             nodes: A11yNodeBuilder::new(),
@@ -88,7 +91,7 @@ impl A11y {
     /// See the docs for [`Self::active_flag`] and [`Self::active_this_frame`]
     /// for more commentary.
     pub(crate) fn sync_active_flag(&mut self) {
-        self.active_this_frame = self.active_flag.load(Ordering::SeqCst);
+        self.active_this_frame = !self.force_disabled && self.active_flag.load(Ordering::SeqCst);
     }
 
     pub(crate) fn is_active(&self) -> bool {
@@ -302,7 +305,7 @@ mod tests {
     #[test]
     fn active_flag_is_snapshotted_until_sync() {
         let active_flag = Arc::new(AtomicBool::new(false));
-        let mut a11y = A11y::new(active_flag.clone());
+        let mut a11y = A11y::new(active_flag.clone(), false);
 
         a11y.sync_active_flag();
         assert!(!a11y.is_active());
@@ -312,6 +315,16 @@ mod tests {
 
         a11y.sync_active_flag();
         assert!(a11y.is_active());
+    }
+
+    #[test]
+    fn force_disabled_ignores_active_flag() {
+        let active_flag = Arc::new(AtomicBool::new(true));
+        let mut a11y = A11y::new(active_flag, true);
+
+        a11y.sync_active_flag();
+
+        assert!(!a11y.is_active());
     }
 
     #[test]
