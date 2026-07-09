@@ -64,6 +64,7 @@ pub struct WindowsWindowState {
     fullscreen: Option<StyleAndBounds>,
     initial_placement: Option<WindowOpenStatus>,
     hwnd: HWND,
+    pub(crate) a11y: RefCell<Option<A11yState>>,
 }
 
 pub(crate) struct WindowsWindowInner {
@@ -162,6 +163,7 @@ impl WindowsWindowState {
             fullscreen,
             initial_placement,
             hwnd,
+            a11y: RefCell::new(None),
         })
     }
 
@@ -956,6 +958,67 @@ impl PlatformWindow for WindowsWindow {
                 }
             }
         }
+    }
+
+    fn a11y_init(&self, callbacks: crate::A11yCallbacks) {
+        let action_handler = A11yActionHandler(callbacks.action);
+        let is_focused = unsafe { GetForegroundWindow() } == self.0.hwnd;
+
+        let adapter = accesskit_windows::Adapter::new(
+            accesskit_windows::HWND(self.0.hwnd.0),
+            is_focused,
+            action_handler,
+        );
+
+        let activation_handler = A11yActivationHandler {
+            callback: callbacks.activation,
+        };
+
+        let state = self.0.state.borrow();
+        *state.a11y.borrow_mut() = Some(A11yState {
+            adapter,
+            activation_handler,
+        });
+    }
+
+    fn a11y_tree_update(&self, tree_update: accesskit::TreeUpdate) {
+        let events = {
+            let state = self.0.state.borrow();
+            let mut a11y = state.a11y.borrow_mut();
+            a11y.as_mut()
+                .and_then(|a11y| a11y.adapter.update_if_active(|| tree_update))
+        };
+        // Raising an event may synchronously re-enter this window through WM_GETOBJECT.
+        if let Some(events) = events {
+            events.raise();
+        }
+    }
+
+    fn a11y_update_window_bounds(&self) {
+        // Windows UIA tracks window bounds automatically.
+    }
+}
+
+pub(crate) struct A11yState {
+    pub(crate) adapter: accesskit_windows::Adapter,
+    pub(crate) activation_handler: A11yActivationHandler,
+}
+
+pub(crate) struct A11yActivationHandler {
+    callback: Box<dyn Fn() -> Option<accesskit::TreeUpdate> + Send + 'static>,
+}
+
+impl accesskit::ActivationHandler for A11yActivationHandler {
+    fn request_initial_tree(&mut self) -> Option<accesskit::TreeUpdate> {
+        (self.callback)()
+    }
+}
+
+struct A11yActionHandler(Box<dyn Fn(accesskit::ActionRequest) + Send + 'static>);
+
+impl accesskit::ActionHandler for A11yActionHandler {
+    fn do_action(&mut self, request: accesskit::ActionRequest) {
+        (self.0)(request);
     }
 }
 

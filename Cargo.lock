@@ -78,12 +78,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "accesskit_windows"
+version = "0.33.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "36e93ac7bf50b964f1cbb75f741629a4e950571baa1ef1274457ab5a80d9bcc2"
+dependencies = [
+ "accesskit",
+ "accesskit_consumer 0.37.0",
+ "hashbrown 0.16.1",
+ "static_assertions",
+ "windows 0.62.2",
+ "windows-core 0.62.2",
+]
+
+[[package]]
 name = "adabraka-gpui"
 version = "0.6.2"
 dependencies = [
  "accesskit",
  "accesskit_macos",
  "accesskit_unix",
+ "accesskit_windows",
  "adabraka-gpui-macros",
  "adabraka_collections",
  "adabraka_http_client",
