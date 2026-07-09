@@ -75,10 +75,10 @@ unsafe fn screen_number(screen: &NSScreen) -> CGDirectDisplayID {
     screen_number.as_u32()
 }
 
-pub(crate) unsafe fn display_id_for_screen(screen: *mut Object) -> DisplayId {
+pub(crate) unsafe fn display_id_for_screen(screen: *mut Object) -> Option<DisplayId> {
     unsafe {
-        let screen = as_screen(screen).expect("display_id_for_screen received a null NSScreen");
-        DisplayId::new(screen_number(screen) as u64)
+        let screen = as_screen(screen)?;
+        Some(DisplayId::new(screen_number(screen) as u64))
     }
 }
 
@@ -214,5 +214,15 @@ impl MacDisplay {
             }
             None
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn display_id_for_screen_returns_none_for_null_screen() {
+        assert_eq!(unsafe { display_id_for_screen(std::ptr::null_mut()) }, None);
     }
 }

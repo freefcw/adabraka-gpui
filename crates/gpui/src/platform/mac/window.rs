@@ -703,7 +703,12 @@ impl MacWindowState {
                 return;
             }
         }
-        let display_id = unsafe { display_id_for_screen(window_screen(self.native_window)) };
+        let Some(display_id) =
+            (unsafe { display_id_for_screen(window_screen(self.native_window)) })
+        else {
+            // AppKit can temporarily report no screen while displays are being reconfigured.
+            return;
+        };
         let frame_request_context = Box::new(FrameRequestContext {
             window_state: self.self_ref.clone(),
         });
@@ -866,8 +871,10 @@ impl MacWindow {
             let count = array_count(screens);
             for i in 0..count {
                 let screen = array_object_at_index(screens, i);
+                let Some(display_id) = display_id_for_screen(screen) else {
+                    continue;
+                };
                 let frame = screen_frame(screen);
-                let display_id = display_id_for_screen(screen);
                 if display_id == display.id() {
                     selected_screen_frame = Some(frame);
                     target_screen = screen;
