@@ -1,6 +1,6 @@
 use crate::{
-    AssetSource, DevicePixels, IsZero, RenderImage, Result, SharedString, Size,
-    swap_rgba_pa_to_bgra,
+    swap_rgba_pa_to_bgra, AssetSource, DevicePixels, IsZero, RenderImage, Result, SharedString,
+    Size,
 };
 use image::Frame;
 use resvg::tiny_skia::Pixmap;
@@ -211,12 +211,30 @@ impl SvgRenderer {
     }
 
     pub fn render_pixmap(&self, bytes: &[u8], size: SvgSize) -> Result<Pixmap, usvg::Error> {
+        // Cap the size of the rendered pixmap to avoid texture allocation panics.
+        // Related upstream issue: zed-industries/zed#56466.
+        const MAX_SIZE: f32 = 8192.0;
+
         let tree = usvg::Tree::from_data(bytes, &self.usvg_options)?;
         let svg_size = tree.size();
-        let scale = match size {
+        let mut scale = match size {
             SvgSize::Size(size) => size.width.0 as f32 / svg_size.width(),
             SvgSize::ScaleFactor(scale) => scale,
         };
+
+        let width = svg_size.width() * scale;
+        if width > MAX_SIZE {
+            log::warn!("Attempted to render pixmap where width ({width}) > MAX_SIZE ({MAX_SIZE})");
+            scale *= MAX_SIZE / width;
+        }
+
+        let height = svg_size.height() * scale;
+        if height > MAX_SIZE {
+            log::warn!(
+                "Attempted to render pixmap where height ({height}) > MAX_SIZE ({MAX_SIZE})"
+            );
+            scale *= MAX_SIZE / height;
+        }
 
         // Render the SVG to a pixmap with the specified width and height.
         let mut pixmap = resvg::tiny_skia::Pixmap::new(
@@ -374,5 +392,22 @@ mod tests {
             "monospace should map to Lilex, got {:?}",
             face.families
         );
+    }
+
+    #[test]
+    fn render_pixmap_caps_oversized_svg_dimensions() {
+        let renderer = SvgRenderer::new(Arc::new(()));
+        let svg = br#"<svg xmlns="http://www.w3.org/2000/svg" width="16000" height="32000">
+            <rect width="16000" height="32000" fill="red"/>
+        </svg>"#;
+
+        let pixmap = renderer
+            .render_pixmap(svg, SvgSize::ScaleFactor(1.0))
+            .unwrap();
+
+        assert!(pixmap.width() <= 8192);
+        assert!(pixmap.height() <= 8192);
+        assert_eq!(pixmap.width(), 4096);
+        assert_eq!(pixmap.height(), 8192);
     }
 }
