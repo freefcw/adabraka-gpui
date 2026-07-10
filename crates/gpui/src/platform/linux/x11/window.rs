@@ -2008,6 +2008,7 @@ mod tests {
     fn window_params(is_resizable: bool, window_min_size: Option<Size<Pixels>>) -> WindowParams {
         WindowParams {
             bounds: Bounds::new(point(px(10.0), px(20.0)), size(px(320.0), px(240.0))),
+            atlas_initial_size: size(DevicePixels(1024), DevicePixels(1024)),
             titlebar: None,
             kind: WindowKind::Normal,
             is_movable: true,
@@ -2016,7 +2017,6 @@ mod tests {
             focus: true,
             app_id: None,
             show: true,
-            #[cfg(feature = "wayland")]
             display_id: None,
             window_min_size,
             #[cfg(target_os = "macos")]

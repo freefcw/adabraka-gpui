@@ -1476,11 +1476,22 @@ impl AnyWindowHandle {
 #[cfg(test)]
 mod test_app_tests {
     use super::*;
-    use crate::{Styled as _, TextRun, font, px};
+    use crate::{Styled as _, px};
+    #[cfg(any(
+        all(target_os = "macos", feature = "font-kit"),
+        all(
+            any(target_os = "linux", target_os = "freebsd"),
+            any(feature = "wayland", feature = "x11")
+        )
+    ))]
+    use crate::{TextRun, font};
     use std::sync::{
         Arc,
-        atomic::{AtomicBool, AtomicUsize, Ordering},
+        atomic::{AtomicUsize, Ordering},
     };
+    #[cfg(target_os = "macos")]
+    use std::sync::atomic::AtomicBool;
+    #[cfg(target_os = "macos")]
     use std::time::Duration;
 
     struct TestView {
@@ -1631,6 +1642,13 @@ mod test_app_tests {
         app.flush();
     }
 
+    #[cfg(any(
+        all(target_os = "macos", feature = "font-kit"),
+        all(
+            any(target_os = "linux", target_os = "freebsd"),
+            any(feature = "wayland", feature = "x11")
+        )
+    ))]
     fn assert_headless_text_layout_has_real_metrics(app: &TestApp) {
         let text_system = app.text_system();
         let family = text_system
@@ -1659,14 +1677,17 @@ mod test_app_tests {
         assert!(layout.runs.iter().any(|run| !run.glyphs.is_empty()));
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", feature = "font-kit"))]
     #[test]
     fn headless_mac_text_layout_produces_nonzero_metrics() {
         let app = TestApp::with_platform_text_system(Arc::new(crate::MacTextSystem::new()));
         assert_headless_text_layout_has_real_metrics(&app);
     }
 
-    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    #[cfg(all(
+        any(target_os = "linux", target_os = "freebsd"),
+        any(feature = "wayland", feature = "x11")
+    ))]
     #[test]
     fn headless_cosmic_text_layout_produces_nonzero_metrics() {
         let app = TestApp::with_platform_text_system(Arc::new(crate::CosmicTextSystem::new()));
