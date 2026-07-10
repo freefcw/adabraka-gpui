@@ -109,9 +109,9 @@ fn window_type_for_kind(kind: &WindowKind) -> X11WindowType {
     }
 }
 
-fn ensure_window_kind_supported(kind: &WindowKind) -> anyhow::Result<()> {
+fn ensure_window_kind_supported(_kind: &WindowKind) -> anyhow::Result<()> {
     #[cfg(feature = "wayland")]
-    if matches!(kind, WindowKind::LayerShell(_)) {
+    if matches!(_kind, WindowKind::LayerShell(_)) {
         return Err(crate::layer_shell::LayerShellNotSupportedError.into());
     }
 
