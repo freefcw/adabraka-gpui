@@ -1,5 +1,16 @@
 ## Unreleased
 
+### Breaking changes
+
+- **Layer-shell API (`0.7.0`)** — layer-shell windows now use
+  `WindowOptions.kind = WindowKind::LayerShell(LayerShellOptions { ... })`. This removes
+  `WindowOptions::layer_shell`, `LayerShellProtocolPreference`,
+  `LayerShellOptions::tray_panel`, and `LayerShellOptions::from_window_bounds`.
+  `WindowKind::Overlay` no longer implicitly creates a layer-shell surface. The Wayland backend
+  now requires `wlr-layer-shell`, while X11 and unsupported compositors return
+  `LayerShellNotSupportedError`. See the
+  [migration and implementation provenance guide](docs/layer-shell-migration.md).
+
 ### Features
 
 - **App resource profiles** — new `AppResourceProfile` / `AppProfile` system lets

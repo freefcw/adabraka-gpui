@@ -78,6 +78,9 @@ backend or compositor does not support that protocol. Compositors older than wlr
 version 5 cannot select `exclusive_edge`, so that option is ignored with a warning. A width or
 height of zero is passed through to let the compositor choose that dimension.
 
+Applications upgrading from `0.6.x` should follow the
+[layer-shell migration and implementation provenance guide](https://github.com/freefcw/adabraka-gpui/blob/main/docs/layer-shell-migration.md).
+
 ```rust
 use gpui::{
     Bounds, WindowBounds, WindowKind, WindowOptions,
