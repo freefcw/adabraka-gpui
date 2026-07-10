@@ -814,9 +814,9 @@ impl WaylandWindowStatePtr {
             .unwrap_or(true);
         drop(state);
 
-        if Some(ime_enabled) == client.ime_enabled() {
+        let Some(ime_enabled) = required_ime_state_change(client.ime_enabled(), ime_enabled) else {
             return;
-        }
+        };
 
         if ime_enabled {
             client.enable_ime();
@@ -1293,6 +1293,10 @@ impl WaylandWindowStatePtr {
     pub fn primary_output_scale(&self) -> i32 {
         self.state.borrow_mut().primary_output_scale()
     }
+}
+
+fn required_ime_state_change(current: Option<bool>, desired: bool) -> Option<bool> {
+    (current != Some(desired)).then_some(desired)
 }
 
 fn extract_states<'a, S: TryFrom<u32> + 'a>(states: &'a [u8]) -> impl Iterator<Item = S> + 'a
@@ -2088,5 +2092,28 @@ mod layer_shell_tests {
             LayerShellLayer::Overlay.to_ext(),
             ext_layer_surface_v1::Layer::Overlay
         );
+    }
+}
+
+#[cfg(test)]
+mod ime_tests {
+    use super::required_ime_state_change;
+
+    #[test]
+    fn requests_initial_ime_state() {
+        assert_eq!(required_ime_state_change(None, true), Some(true));
+        assert_eq!(required_ime_state_change(None, false), Some(false));
+    }
+
+    #[test]
+    fn requests_ime_state_switches() {
+        assert_eq!(required_ime_state_change(Some(false), true), Some(true));
+        assert_eq!(required_ime_state_change(Some(true), false), Some(false));
+    }
+
+    #[test]
+    fn skips_redundant_ime_state_updates() {
+        assert_eq!(required_ime_state_change(Some(true), true), None);
+        assert_eq!(required_ime_state_change(Some(false), false), None);
     }
 }

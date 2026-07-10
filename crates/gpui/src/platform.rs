@@ -1784,6 +1784,116 @@ impl std::ops::BitOrAssign for LayerShellAnchor {
 #[cfg(test)]
 mod platform_input_handler_tests {
     use super::*;
+    use crate::{
+        AppContext, Context, ElementInputHandler, Empty, EntityInputHandler, TestAppContext,
+    };
+
+    struct RejectingEntityInputHandler;
+
+    impl EntityInputHandler for RejectingEntityInputHandler {
+        fn text_for_range(
+            &mut self,
+            _range: Range<usize>,
+            _adjusted_range: &mut Option<Range<usize>>,
+            _window: &mut Window,
+            _cx: &mut Context<Self>,
+        ) -> Option<String> {
+            None
+        }
+
+        fn selected_text_range(
+            &mut self,
+            _ignore_disabled_input: bool,
+            _window: &mut Window,
+            _cx: &mut Context<Self>,
+        ) -> Option<UTF16Selection> {
+            None
+        }
+
+        fn marked_text_range(
+            &self,
+            _window: &mut Window,
+            _cx: &mut Context<Self>,
+        ) -> Option<Range<usize>> {
+            None
+        }
+
+        fn unmark_text(&mut self, _window: &mut Window, _cx: &mut Context<Self>) {}
+
+        fn replace_text_in_range(
+            &mut self,
+            _range: Option<Range<usize>>,
+            _text: &str,
+            _window: &mut Window,
+            _cx: &mut Context<Self>,
+        ) {
+        }
+
+        fn replace_and_mark_text_in_range(
+            &mut self,
+            _range: Option<Range<usize>>,
+            _new_text: &str,
+            _new_selected_range: Option<Range<usize>>,
+            _window: &mut Window,
+            _cx: &mut Context<Self>,
+        ) {
+        }
+
+        fn bounds_for_range(
+            &mut self,
+            _range_utf16: Range<usize>,
+            _element_bounds: Bounds<Pixels>,
+            _window: &mut Window,
+            _cx: &mut Context<Self>,
+        ) -> Option<Bounds<Pixels>> {
+            None
+        }
+
+        fn character_index_for_point(
+            &mut self,
+            _point: Point<Pixels>,
+            _window: &mut Window,
+            _cx: &mut Context<Self>,
+        ) -> Option<usize> {
+            None
+        }
+
+        fn accepts_text_input(&self, _window: &mut Window, _cx: &mut Context<Self>) -> bool {
+            false
+        }
+    }
+
+    #[gpui_macros::test]
+    fn element_input_handler_forwards_text_input_rejection(cx: &mut TestAppContext) {
+        let entity = cx.new(|_| RejectingEntityInputHandler);
+        let window = cx.add_window(|_, _| Empty);
+
+        cx.update_window(window.into(), |_, window, cx| {
+            let mut handler = ElementInputHandler::new(Bounds::default(), entity);
+            assert!(!handler.accepts_text_input(window, cx));
+        })
+        .unwrap();
+    }
+
+    #[gpui_macros::test]
+    fn platform_input_handler_accepts_text_when_window_update_fails(cx: &mut TestAppContext) {
+        let entity = cx.new(|_| RejectingEntityInputHandler);
+        let window = cx.add_window(|_, _| Empty);
+        let window = AnyWindowHandle::from(window);
+        let async_cx = cx
+            .update_window(window, |_, window, cx| window.to_async(cx))
+            .unwrap();
+
+        cx.update_window(window, |_, window, _| window.remove_window())
+            .unwrap();
+        assert!(cx.update_window(window, |_, _, _| ()).is_err());
+
+        let mut handler = PlatformInputHandler::new(
+            async_cx,
+            Box::new(ElementInputHandler::new(Bounds::default(), entity)),
+        );
+        assert!(handler.query_accepts_text_input());
+    }
 
     fn bounds_at(offset: usize, y: f32) -> Bounds<Pixels> {
         Bounds::new(
