@@ -72,8 +72,6 @@ use xkbcommon::xkb::{self, KEYMAP_COMPILE_NO_FLAGS, Keycode};
 
 use super::{
     display::WaylandDisplay,
-    ext_layer_shell::client::ext_layer_shell_v1,
-    ext_layer_shell::client::ext_layer_surface_v1,
     window::{ImeInput, WaylandWindowStatePtr},
 };
 
@@ -89,12 +87,13 @@ use crate::{
 use crate::{
     SharedString,
     platform::linux::{
-        LinuxClient, get_xkb_compose_state, is_within_click_distance, open_uri_internal,
+        LinuxClient, PIPE_READ_TIMEOUT, get_xkb_compose_state, is_within_click_distance,
+        open_uri_internal,
         platform::{
             LinuxTrayClickEvent, LinuxTrayEventTarget, TrayIconClickEventCallback,
             TrayIconEventCallback, TrayMenuActionCallback, install_linux_tray_event_source,
         },
-        PIPE_READ_TIMEOUT, read_fd_with_timeout, reveal_path_internal,
+        read_fd_with_timeout, reveal_path_internal,
         wayland::{
             clipboard::{Clipboard, DataOffer, FILE_LIST_MIME_TYPE, TEXT_MIME_TYPES},
             cursor::Cursor,
@@ -126,7 +125,6 @@ pub struct Globals {
     pub fractional_scale_manager:
         Option<wp_fractional_scale_manager_v1::WpFractionalScaleManagerV1>,
     pub decoration_manager: Option<zxdg_decoration_manager_v1::ZxdgDecorationManagerV1>,
-    pub ext_layer_shell: Option<ext_layer_shell_v1::ExtLayerShellV1>,
     pub wlr_layer_shell: Option<zwlr_layer_shell_v1::ZwlrLayerShellV1>,
     pub blur_manager: Option<org_kde_kwin_blur_manager::OrgKdeKwinBlurManager>,
     pub text_input_manager: Option<zwp_text_input_manager_v3::ZwpTextInputManagerV3>,
@@ -167,7 +165,6 @@ impl Globals {
             viewporter: globals.bind(&qh, 1..=1, ()).ok(),
             fractional_scale_manager: globals.bind(&qh, 1..=1, ()).ok(),
             decoration_manager: globals.bind(&qh, 1..=1, ()).ok(),
-            ext_layer_shell: globals.bind(&qh, 1..=1, ()).ok(),
             wlr_layer_shell: globals.bind(&qh, 1..=5, ()).ok(),
             blur_manager: globals.bind(&qh, 1..=1, ()).ok(),
             text_input_manager: globals.bind(&qh, 1..=1, ()).ok(),
@@ -1099,7 +1096,6 @@ delegate_noop!(WaylandClientStatePtr: ignore wl_buffer::WlBuffer);
 delegate_noop!(WaylandClientStatePtr: ignore wl_region::WlRegion);
 delegate_noop!(WaylandClientStatePtr: ignore wp_fractional_scale_manager_v1::WpFractionalScaleManagerV1);
 delegate_noop!(WaylandClientStatePtr: ignore zxdg_decoration_manager_v1::ZxdgDecorationManagerV1);
-delegate_noop!(WaylandClientStatePtr: ignore ext_layer_shell_v1::ExtLayerShellV1);
 delegate_noop!(WaylandClientStatePtr: ignore zwlr_layer_shell_v1::ZwlrLayerShellV1);
 delegate_noop!(WaylandClientStatePtr: ignore org_kde_kwin_blur_manager::OrgKdeKwinBlurManager);
 delegate_noop!(WaylandClientStatePtr: ignore zwp_text_input_manager_v3::ZwpTextInputManagerV3);
@@ -2035,28 +2031,6 @@ impl Dispatch<zxdg_toplevel_decoration_v1::ZxdgToplevelDecorationV1, ObjectId>
 
         drop(state);
         window.handle_toplevel_decoration_event(event);
-    }
-}
-
-impl Dispatch<ext_layer_surface_v1::ExtLayerSurfaceV1, ObjectId> for WaylandClientStatePtr {
-    fn event(
-        this: &mut Self,
-        _: &ext_layer_surface_v1::ExtLayerSurfaceV1,
-        event: ext_layer_surface_v1::Event,
-        surface_id: &ObjectId,
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-        let client = this.get_client();
-        let mut state = client.borrow_mut();
-        let Some(window) = get_window(&mut state, surface_id) else {
-            return;
-        };
-
-        drop(state);
-        if window.handle_ext_layer_surface_event(event) {
-            window.close();
-        }
     }
 }
 

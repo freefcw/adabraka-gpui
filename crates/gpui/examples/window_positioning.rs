@@ -56,7 +56,11 @@ fn build_window_options(
     bounds: Bounds<Pixels>,
 ) -> WindowOptions {
     #[cfg(all(target_os = "linux", feature = "wayland"))]
-    let kind = WindowKind::LayerShell(layer_shell_options(display_bounds, bounds));
+    let kind = if gpui::guess_compositor() == "Wayland" {
+        WindowKind::LayerShell(layer_shell_options(display_bounds, bounds))
+    } else {
+        WindowKind::PopUp
+    };
     #[cfg(not(all(target_os = "linux", feature = "wayland")))]
     let kind = {
         let _ = display_bounds;

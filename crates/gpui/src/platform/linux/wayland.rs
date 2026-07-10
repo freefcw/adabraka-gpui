@@ -2,7 +2,6 @@ mod client;
 mod clipboard;
 mod cursor;
 mod display;
-mod ext_layer_shell;
 mod serial;
 mod window;
 

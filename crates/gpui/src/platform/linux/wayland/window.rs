@@ -27,6 +27,9 @@ use wayland_protocols::{
 use wayland_protocols_plasma::blur::client::org_kde_kwin_blur;
 use wayland_protocols_wlr::layer_shell::v1::client::{zwlr_layer_shell_v1, zwlr_layer_surface_v1};
 
+use crate::layer_shell::{
+    KeyboardInteractivity, Layer, LayerShellNotSupportedError, LayerShellOptions,
+};
 use crate::{
     AnyWindowHandle, Bounds, Decorations, DisplayId, Globals, GpuSpecs, Modifiers, Output, Pixels,
     PlatformDisplay, PlatformInput, Point, PromptButton, PromptLevel, RequestFrameOptions,
@@ -42,10 +45,6 @@ use crate::{
     },
 };
 use crate::{WindowKind, scene::Scene};
-use crate::{
-    layer_shell::{KeyboardInteractivity, Layer, LayerShellNotSupportedError, LayerShellOptions},
-    platform::linux::wayland::ext_layer_shell::client::ext_layer_surface_v1,
-};
 
 #[derive(Default)]
 pub(crate) struct Callbacks {
@@ -136,11 +135,6 @@ pub enum WaylandWindowRole {
         toplevel: xdg_toplevel::XdgToplevel,
         decoration: Option<zxdg_toplevel_decoration_v1::ZxdgToplevelDecorationV1>,
     },
-    ExtLayer {
-        layer_surface: ext_layer_surface_v1::ExtLayerSurfaceV1,
-        options: LayerShellOptions,
-        configured: bool,
-    },
     WlrLayer {
         layer_surface: zwlr_layer_surface_v1::ZwlrLayerSurfaceV1,
         options: LayerShellOptions,
@@ -152,16 +146,12 @@ impl WaylandWindowRole {
     fn toplevel(&self) -> Option<xdg_toplevel::XdgToplevel> {
         match self {
             WaylandWindowRole::XdgToplevel { toplevel, .. } => Some(toplevel.clone()),
-            WaylandWindowRole::ExtLayer { .. } => None,
             WaylandWindowRole::WlrLayer { .. } => None,
         }
     }
 
     fn is_layer_shell(&self) -> bool {
-        matches!(
-            self,
-            WaylandWindowRole::ExtLayer { .. } | WaylandWindowRole::WlrLayer { .. }
-        )
+        matches!(self, WaylandWindowRole::WlrLayer { .. })
     }
 }
 
@@ -306,9 +296,6 @@ impl Drop for WaylandWindow {
                 toplevel.destroy();
                 xdg_surface.destroy();
             }
-            WaylandWindowRole::ExtLayer { layer_surface, .. } => {
-                layer_surface.destroy();
-            }
             WaylandWindowRole::WlrLayer { layer_surface, .. } => {
                 layer_surface.destroy();
             }
@@ -415,30 +402,6 @@ fn create_layer_shell_role(
     outputs: &[Output],
 ) -> Option<WaylandWindowRole> {
     create_wlr_layer_shell_role(surface, globals, params, options, outputs)
-        .or_else(|| create_ext_layer_shell_role(surface, globals, params, options, outputs))
-}
-
-fn create_ext_layer_shell_role(
-    surface: &wl_surface::WlSurface,
-    globals: &Globals,
-    params: &WindowParams,
-    options: &LayerShellOptions,
-    outputs: &[Output],
-) -> Option<WaylandWindowRole> {
-    let layer_shell = globals.ext_layer_shell.as_ref()?;
-    let output = output_for_layer_shell(params, outputs);
-    let layer_surface =
-        layer_shell.get_layer_surface(surface, output.as_ref(), &globals.qh, surface.id());
-
-    configure_ext_layer_surface(&layer_surface, options, params.bounds.size);
-    if let Some(app_id) = &params.app_id {
-        layer_surface.set_app_id(app_id.clone());
-    }
-    Some(WaylandWindowRole::ExtLayer {
-        layer_surface,
-        options: options.clone(),
-        configured: false,
-    })
 }
 
 fn create_wlr_layer_shell_role(
@@ -532,7 +495,7 @@ fn configure_layer_surface_state(
     options: &LayerShellOptions,
     size: Size<Pixels>,
 ) {
-    set_size(size.width.0.max(1.0) as i32, size.height.0.max(1.0) as i32);
+    set_size(size.width.0 as i32, size.height.0 as i32);
     set_anchor(options.anchor.bits());
     if let Some((top, right, bottom, left)) = options.margin {
         set_margin(top.0 as i32, right.0 as i32, bottom.0 as i32, left.0 as i32);
@@ -541,40 +504,6 @@ fn configure_layer_surface_state(
         set_exclusive_zone(exclusive_zone.0 as i32);
     }
     set_keyboard_interactivity(options.keyboard_interactivity);
-}
-
-fn configure_ext_layer_surface(
-    layer_surface: &ext_layer_surface_v1::ExtLayerSurfaceV1,
-    options: &LayerShellOptions,
-    size: Size<Pixels>,
-) {
-    if options.exclusive_edge.is_some() {
-        log::warn!(
-            "Wayland: ext-layer-shell does not support selecting an exclusive edge; the compositor will infer it from the anchors."
-        );
-    }
-    layer_surface.set_layer(options.layer.to_ext());
-    configure_layer_surface_state(
-        |width, height| layer_surface.set_size(width, height),
-        |anchor| layer_surface.set_anchor(ext_layer_surface_v1::Anchor::from_bits_truncate(anchor)),
-        |top, right, bottom, left| layer_surface.set_margin(top, right, bottom, left),
-        |zone| layer_surface.set_exclusive_zone(zone),
-        |interactivity| {
-            let Some(interactivity) = interactivity.to_ext() else {
-                log::warn!(
-                    "Wayland: ext-layer-shell does not support exclusive keyboard \
-                     interactivity; using on-demand focus."
-                );
-                layer_surface.set_keyboard_interactivity(
-                    ext_layer_surface_v1::KeyboardInteractivity::OnDemand,
-                );
-                return;
-            };
-            layer_surface.set_keyboard_interactivity(interactivity);
-        },
-        options,
-        size,
-    );
 }
 
 fn configure_wlr_layer_surface(
@@ -594,7 +523,7 @@ fn configure_wlr_layer_surface(
         size,
     );
     if let Some(exclusive_edge) = options.exclusive_edge {
-        if layer_surface.version() >= zwlr_layer_surface_v1::REQ_SET_EXCLUSIVE_EDGE_SINCE {
+        if wlr_layer_shell_supports_exclusive_edge(layer_surface.version()) {
             layer_surface.set_exclusive_edge(exclusive_edge.to_wlr());
         } else {
             log::warn!(
@@ -603,6 +532,10 @@ fn configure_wlr_layer_surface(
             );
         }
     }
+}
+
+fn wlr_layer_shell_supports_exclusive_edge(version: u32) -> bool {
+    version >= zwlr_layer_surface_v1::REQ_SET_EXCLUSIVE_EDGE_SINCE
 }
 
 trait ToWlrLayerShell {
@@ -632,25 +565,6 @@ impl ToWlrLayerShell for crate::layer_shell::Anchor {
     }
 }
 
-trait ToExtLayerShell {
-    type Ext;
-
-    fn to_ext(self) -> Self::Ext;
-}
-
-impl ToExtLayerShell for Layer {
-    type Ext = ext_layer_surface_v1::Layer;
-
-    fn to_ext(self) -> Self::Ext {
-        match self {
-            Layer::Background => ext_layer_surface_v1::Layer::Background,
-            Layer::Bottom => ext_layer_surface_v1::Layer::Bottom,
-            Layer::Top => ext_layer_surface_v1::Layer::Top,
-            Layer::Overlay => ext_layer_surface_v1::Layer::Overlay,
-        }
-    }
-}
-
 impl ToWlrLayerShell for KeyboardInteractivity {
     type Wlr = zwlr_layer_surface_v1::KeyboardInteractivity;
 
@@ -663,20 +577,6 @@ impl ToWlrLayerShell for KeyboardInteractivity {
             KeyboardInteractivity::Exclusive => {
                 zwlr_layer_surface_v1::KeyboardInteractivity::Exclusive
             }
-        }
-    }
-}
-
-impl ToExtLayerShell for KeyboardInteractivity {
-    type Ext = Option<ext_layer_surface_v1::KeyboardInteractivity>;
-
-    fn to_ext(self) -> Self::Ext {
-        match self {
-            KeyboardInteractivity::None => Some(ext_layer_surface_v1::KeyboardInteractivity::None),
-            KeyboardInteractivity::OnDemand => {
-                Some(ext_layer_surface_v1::KeyboardInteractivity::OnDemand)
-            }
-            KeyboardInteractivity::Exclusive => None,
         }
     }
 }
@@ -799,7 +699,6 @@ impl WaylandWindowStatePtr {
             let mut state = self.state.borrow_mut();
             let xdg_surface = match &state.role {
                 WaylandWindowRole::XdgToplevel { xdg_surface, .. } => xdg_surface.clone(),
-                WaylandWindowRole::ExtLayer { .. } => return,
                 WaylandWindowRole::WlrLayer { .. } => return,
             };
             xdg_surface.ack_configure(serial);
@@ -858,38 +757,6 @@ impl WaylandWindowStatePtr {
         }
     }
 
-    pub fn handle_ext_layer_surface_event(&self, event: ext_layer_surface_v1::Event) -> bool {
-        match event {
-            ext_layer_surface_v1::Event::Configure {
-                serial,
-                width,
-                height,
-            } => {
-                let mut state = self.state.borrow_mut();
-                let size = layer_configure_size(state.bounds.size, width, height);
-                let layer_surface = match &mut state.role {
-                    WaylandWindowRole::ExtLayer {
-                        layer_surface,
-                        configured,
-                        ..
-                    } => {
-                        *configured = true;
-                        layer_surface.clone()
-                    }
-                    WaylandWindowRole::XdgToplevel { .. } | WaylandWindowRole::WlrLayer { .. } => {
-                        return false;
-                    }
-                };
-                layer_surface.ack_configure(serial);
-                drop(state);
-                self.resize(size);
-                self.frame();
-                false
-            }
-            ext_layer_surface_v1::Event::Closed => true,
-        }
-    }
-
     pub fn handle_wlr_layer_surface_event(&self, event: zwlr_layer_surface_v1::Event) -> bool {
         match event {
             zwlr_layer_surface_v1::Event::Configure {
@@ -908,9 +775,7 @@ impl WaylandWindowStatePtr {
                         *configured = true;
                         layer_surface.clone()
                     }
-                    WaylandWindowRole::XdgToplevel { .. } | WaylandWindowRole::ExtLayer { .. } => {
-                        return false;
-                    }
+                    WaylandWindowRole::XdgToplevel { .. } => return false,
                 };
                 layer_surface.ack_configure(serial);
                 drop(state);
@@ -1314,16 +1179,9 @@ impl PlatformWindow for WaylandWindow {
                     dp_size.height.0,
                 );
             }
-            WaylandWindowRole::ExtLayer { layer_surface, .. } => {
-                if state.visible {
-                    layer_surface
-                        .set_size(size.width.0.max(1.0) as i32, size.height.0.max(1.0) as i32);
-                }
-            }
             WaylandWindowRole::WlrLayer { layer_surface, .. } => {
                 if state.visible {
-                    layer_surface
-                        .set_size(size.width.0.max(1.0) as u32, size.height.0.max(1.0) as u32);
+                    layer_surface.set_size(size.width.0 as u32, size.height.0 as u32);
                 }
             }
         }
@@ -1426,9 +1284,6 @@ impl PlatformWindow for WaylandWindow {
         match &state.role {
             WaylandWindowRole::XdgToplevel { toplevel, .. } => {
                 toplevel.set_app_id(app_id.to_owned());
-            }
-            WaylandWindowRole::ExtLayer { layer_surface, .. } => {
-                layer_surface.set_app_id(app_id.to_owned());
             }
             WaylandWindowRole::WlrLayer { .. } => {}
         }
@@ -1615,7 +1470,6 @@ impl PlatformWindow for WaylandWindow {
         state.decorations = decorations;
         let decoration = match &state.role {
             WaylandWindowRole::XdgToplevel { decoration, .. } => decoration.clone(),
-            WaylandWindowRole::ExtLayer { .. } => None,
             WaylandWindowRole::WlrLayer { .. } => None,
         };
         if let Some(decoration) = decoration {
@@ -1657,14 +1511,6 @@ impl PlatformWindow for WaylandWindow {
         state.visible = true;
         let size = state.bounds.size;
         match &mut state.role {
-            WaylandWindowRole::ExtLayer {
-                configured,
-                layer_surface,
-                options,
-            } => {
-                *configured = false;
-                configure_ext_layer_surface(layer_surface, options, size);
-            }
             WaylandWindowRole::WlrLayer {
                 configured,
                 layer_surface,
@@ -1811,10 +1657,7 @@ impl accesskit::DeactivationHandler for A11yDeactivationHandler {
 fn is_unconfigured_layer_shell(role: &WaylandWindowRole) -> bool {
     matches!(
         role,
-        WaylandWindowRole::ExtLayer {
-            configured: false,
-            ..
-        } | WaylandWindowRole::WlrLayer {
+        WaylandWindowRole::WlrLayer {
             configured: false,
             ..
         }
@@ -1980,30 +1823,14 @@ mod layer_shell_tests {
     }
 
     #[test]
-    fn layer_keyboard_interactivity_maps_to_ext_protocol_limits() {
-        assert_eq!(
-            KeyboardInteractivity::None.to_ext(),
-            Some(ext_layer_surface_v1::KeyboardInteractivity::None)
-        );
-        assert_eq!(
-            KeyboardInteractivity::OnDemand.to_ext(),
-            Some(ext_layer_surface_v1::KeyboardInteractivity::OnDemand)
-        );
-        assert_eq!(KeyboardInteractivity::Exclusive.to_ext(), None);
-    }
-
-    #[test]
-    fn layer_values_map_to_both_wayland_protocols() {
+    fn layer_values_map_to_wlr_protocol() {
         assert_eq!(
             Layer::Background.to_wlr(),
             zwlr_layer_shell_v1::Layer::Background
         );
-        assert_eq!(Layer::Bottom.to_ext(), ext_layer_surface_v1::Layer::Bottom);
+        assert_eq!(Layer::Bottom.to_wlr(), zwlr_layer_shell_v1::Layer::Bottom);
         assert_eq!(Layer::Top.to_wlr(), zwlr_layer_shell_v1::Layer::Top);
-        assert_eq!(
-            Layer::Overlay.to_ext(),
-            ext_layer_surface_v1::Layer::Overlay
-        );
+        assert_eq!(Layer::Overlay.to_wlr(), zwlr_layer_shell_v1::Layer::Overlay);
     }
 
     #[test]

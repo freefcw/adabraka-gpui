@@ -103,8 +103,19 @@ fn window_type_for_kind(kind: &WindowKind) -> X11WindowType {
         WindowKind::Floating => X11WindowType::Dialog,
         WindowKind::Overlay => X11WindowType::Dock,
         #[cfg(feature = "wayland")]
-        WindowKind::LayerShell(_) => X11WindowType::Normal,
+        WindowKind::LayerShell(_) => {
+            unreachable!("layer-shell windows are rejected before X11 window creation")
+        }
     }
+}
+
+fn ensure_window_kind_supported(kind: &WindowKind) -> anyhow::Result<()> {
+    #[cfg(feature = "wayland")]
+    if matches!(kind, WindowKind::LayerShell(_)) {
+        return Err(crate::layer_shell::LayerShellNotSupportedError.into());
+    }
+
+    Ok(())
 }
 
 fn query_render_extent(
@@ -483,6 +494,8 @@ impl X11WindowState {
         supports_xinput_gestures: bool,
         parent_window: Option<xproto::Window>,
     ) -> anyhow::Result<Self> {
+        ensure_window_kind_supported(&params.kind)?;
+
         let x_screen_index = params
             .display_id
             .map_or(x_main_screen_index, |did| did.0 as usize);

@@ -72,11 +72,11 @@ values, switches, and list metadata.
 
 ### Wayland Layer Shell
 
-Create a layer-shell surface with `WindowKind::LayerShell`. GPUI uses `wlr-layer-shell` when
-available and falls back to `ext-layer-shell`; opening the window fails when the compositor
-supports neither protocol. The ext fallback cannot select `exclusive_edge` or request exclusive
-keyboard focus, and wlr compositors older than protocol version 5 cannot select `exclusive_edge`;
-those options are downgraded with a warning.
+Create a layer-shell surface with `WindowKind::LayerShell`. The Wayland backend requires
+`wlr-layer-shell`; opening the window fails with `LayerShellNotSupportedError` when the selected
+backend or compositor does not support that protocol. Compositors older than wlr-layer-shell
+version 5 cannot select `exclusive_edge`, so that option is ignored with a warning. A width or
+height of zero is passed through to let the compositor choose that dimension.
 
 ```rust
 use gpui::{
