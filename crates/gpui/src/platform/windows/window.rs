@@ -64,6 +64,7 @@ pub struct WindowsWindowState {
     fullscreen: Option<StyleAndBounds>,
     initial_placement: Option<WindowOpenStatus>,
     hwnd: HWND,
+    #[cfg(feature = "accessibility")]
     pub(crate) a11y: RefCell<Option<A11yState>>,
 }
 
@@ -163,6 +164,7 @@ impl WindowsWindowState {
             fullscreen,
             initial_placement,
             hwnd,
+            #[cfg(feature = "accessibility")]
             a11y: RefCell::new(None),
         })
     }
@@ -960,6 +962,7 @@ impl PlatformWindow for WindowsWindow {
         }
     }
 
+    #[cfg(feature = "accessibility")]
     fn a11y_init(&self, callbacks: crate::A11yCallbacks) {
         let action_handler = A11yActionHandler(callbacks.action);
         let is_focused = unsafe { GetForegroundWindow() } == self.0.hwnd;
@@ -981,6 +984,7 @@ impl PlatformWindow for WindowsWindow {
         });
     }
 
+    #[cfg(feature = "accessibility")]
     fn a11y_tree_update(&self, tree_update: accesskit::TreeUpdate) {
         let events = {
             let state = self.0.state.borrow();
@@ -994,28 +998,34 @@ impl PlatformWindow for WindowsWindow {
         }
     }
 
+    #[cfg(feature = "accessibility")]
     fn a11y_update_window_bounds(&self) {
         // Windows UIA tracks window bounds automatically.
     }
 }
 
+#[cfg(feature = "accessibility")]
 pub(crate) struct A11yState {
     pub(crate) adapter: accesskit_windows::Adapter,
     pub(crate) activation_handler: A11yActivationHandler,
 }
 
+#[cfg(feature = "accessibility")]
 pub(crate) struct A11yActivationHandler {
     callback: Box<dyn Fn() -> Option<accesskit::TreeUpdate> + Send + 'static>,
 }
 
+#[cfg(feature = "accessibility")]
 impl accesskit::ActivationHandler for A11yActivationHandler {
     fn request_initial_tree(&mut self) -> Option<accesskit::TreeUpdate> {
         (self.callback)()
     }
 }
 
+#[cfg(feature = "accessibility")]
 struct A11yActionHandler(Box<dyn Fn(accesskit::ActionRequest) + Send + 'static>);
 
+#[cfg(feature = "accessibility")]
 impl accesskit::ActionHandler for A11yActionHandler {
     fn do_action(&mut self, request: accesskit::ActionRequest) {
         (self.0)(request);

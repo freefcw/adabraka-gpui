@@ -115,6 +115,7 @@ impl WindowsWindowInner {
             WM_GPUI_FORCE_UPDATE_WINDOW => self.draw_window(handle, true),
             WM_GPUI_GPU_DEVICE_LOST => self.handle_device_lost(lparam),
             DM_POINTERHITTEST => self.handle_dm_pointer_hit_test(wparam),
+            #[cfg(feature = "accessibility")]
             WM_GETOBJECT => self.handle_wm_getobject(wparam, lparam),
             _ => None,
         };
@@ -763,16 +764,18 @@ impl WindowsWindowInner {
     fn handle_activate_msg(self: &Rc<Self>, wparam: WPARAM) -> Option<isize> {
         let activated = wparam.loword() > 0;
 
-        let events = {
-            let state = self.state.borrow();
-            let events =
-                state.a11y.try_borrow_mut().ok().and_then(|mut a11y| {
+        #[cfg(feature = "accessibility")]
+        {
+            let events = {
+                let state = self.state.borrow();
+                let events = state.a11y.try_borrow_mut().ok().and_then(|mut a11y| {
                     a11y.as_mut()?.adapter.update_window_focus_state(activated)
                 });
-            events
-        };
-        if let Some(events) = events {
-            events.raise();
+                events
+            };
+            if let Some(events) = events {
+                events.raise();
+            }
         }
 
         let this = self.clone();
@@ -806,6 +809,7 @@ impl WindowsWindowInner {
         None
     }
 
+    #[cfg(feature = "accessibility")]
     fn handle_wm_getobject(&self, wparam: WPARAM, lparam: LPARAM) -> Option<isize> {
         let result = {
             let state = self.state.borrow();

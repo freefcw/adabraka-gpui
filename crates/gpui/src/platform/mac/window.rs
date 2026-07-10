@@ -622,6 +622,7 @@ struct MacWindowState {
     toggle_tab_bar_callback: Option<Box<dyn FnMut()>>,
     activated_least_once: bool,
     is_closing: bool,
+    #[cfg(feature = "accessibility")]
     accesskit_adapter: Option<accesskit_macos::SubclassingAdapter>,
 }
 
@@ -971,6 +972,7 @@ impl MacWindow {
                     toggle_tab_bar_callback: None,
                     activated_least_once: false,
                     is_closing: false,
+                    #[cfg(feature = "accessibility")]
                     accesskit_adapter: None,
                 })
             }));
@@ -1784,6 +1786,7 @@ impl PlatformWindow for MacWindow {
         NSBeep()
     }
 
+    #[cfg(feature = "accessibility")]
     fn a11y_init(&self, callbacks: crate::A11yCallbacks) {
         let mut lock = self.0.lock();
         let activation_handler = A11yActivationHandler {
@@ -1800,6 +1803,7 @@ impl PlatformWindow for MacWindow {
         lock.accesskit_adapter = Some(adapter);
     }
 
+    #[cfg(feature = "accessibility")]
     fn a11y_tree_update(&self, tree_update: accesskit::TreeUpdate) {
         let events = {
             let mut lock = self.0.lock();
@@ -1812,6 +1816,7 @@ impl PlatformWindow for MacWindow {
         }
     }
 
+    #[cfg(feature = "accessibility")]
     fn a11y_update_window_bounds(&self) {
         // macOS tracks window bounds automatically through NSAccessibility.
     }
@@ -1957,18 +1962,22 @@ impl PlatformWindow for MacWindow {
     }
 }
 
+#[cfg(feature = "accessibility")]
 struct A11yActivationHandler {
     callback: Box<dyn Fn() -> Option<accesskit::TreeUpdate> + Send + 'static>,
 }
 
+#[cfg(feature = "accessibility")]
 impl accesskit::ActivationHandler for A11yActivationHandler {
     fn request_initial_tree(&mut self) -> Option<accesskit::TreeUpdate> {
         (self.callback)()
     }
 }
 
+#[cfg(feature = "accessibility")]
 struct A11yActionHandler(Box<dyn Fn(accesskit::ActionRequest) + Send + 'static>);
 
+#[cfg(feature = "accessibility")]
 impl accesskit::ActionHandler for A11yActionHandler {
     fn do_action(&mut self, request: accesskit::ActionRequest) {
         (self.0)(request);
@@ -2511,14 +2520,17 @@ extern "C" fn window_did_change_key_status(this: &Object, selector: Sel, _: id) 
     let executor = lock.executor.clone();
     drop(lock);
 
-    let a11y_events = {
-        let mut lock = window_state.lock();
-        lock.accesskit_adapter
-            .as_mut()
-            .and_then(|adapter| adapter.update_view_focus_state(is_active))
-    };
-    if let Some(events) = a11y_events {
-        events.raise();
+    #[cfg(feature = "accessibility")]
+    {
+        let a11y_events = {
+            let mut lock = window_state.lock();
+            lock.accesskit_adapter
+                .as_mut()
+                .and_then(|adapter| adapter.update_view_focus_state(is_active))
+        };
+        if let Some(events) = a11y_events {
+            events.raise();
+        }
     }
 
     // When a window becomes active, trigger an immediate synchronous frame request to prevent

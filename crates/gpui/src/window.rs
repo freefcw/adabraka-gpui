@@ -1181,7 +1181,8 @@ impl Window {
             }
         }
 
-        let accessibility_force_disabled = cx.accessibility_force_disabled;
+        let accessibility_force_disabled =
+            cx.accessibility_force_disabled || !cfg!(feature = "accessibility");
         let a11y_active_flag = Arc::new(AtomicBool::new(false));
 
         #[cfg(not(target_family = "wasm"))]

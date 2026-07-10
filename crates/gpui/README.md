@@ -60,6 +60,9 @@ Adabraka GPUI exposes AccessKit-backed roles, labels, values, focus, and action 
 elements. Native adapters connect the generated accessibility tree to macOS Accessibility,
 Linux AT-SPI, and Windows UI Automation.
 
+Native adapters are enabled by the default `accessibility` feature. Disable default features to
+exclude their platform dependencies; the core accessibility API remains available but inactive.
+
 ```sh
 cargo run -p adabraka-gpui --example a11y
 ```

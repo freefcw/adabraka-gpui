@@ -301,6 +301,7 @@ pub struct X11WindowState {
     edge_constraints: Option<EdgeConstraints>,
     pub handle: AnyWindowHandle,
     last_insets: [u32; 4],
+    #[cfg(feature = "accessibility")]
     accesskit_adapter: Option<accesskit_unix::Adapter>,
 }
 
@@ -796,6 +797,7 @@ impl X11WindowState {
                 decorations: WindowDecorations::Server,
                 last_insets: [0, 0, 0, 0],
                 edge_constraints: None,
+                #[cfg(feature = "accessibility")]
                 accesskit_adapter: None,
                 counter_id: sync_request_counter,
                 last_sync_counter: None,
@@ -1248,8 +1250,11 @@ impl X11WindowStatePtr {
         if let Some(ref mut fun) = self.callbacks.borrow_mut().active_status_change {
             fun(focus);
         }
-        if let Some(adapter) = self.state.borrow_mut().accesskit_adapter.as_mut() {
-            adapter.update_window_focus_state(focus);
+        #[cfg(feature = "accessibility")]
+        {
+            if let Some(adapter) = self.state.borrow_mut().accesskit_adapter.as_mut() {
+                adapter.update_window_focus_state(focus);
+            }
         }
     }
 
@@ -1905,6 +1910,7 @@ impl PlatformWindow for X11Window {
         xcb_flush(&self.0.xcb);
     }
 
+    #[cfg(feature = "accessibility")]
     fn a11y_init(&self, callbacks: crate::A11yCallbacks) {
         let activation_handler = A11yActivationHandler {
             callback: callbacks.activation,
@@ -1920,6 +1926,7 @@ impl PlatformWindow for X11Window {
         self.0.state.borrow_mut().accesskit_adapter = Some(adapter);
     }
 
+    #[cfg(feature = "accessibility")]
     fn a11y_tree_update(&self, tree_update: accesskit::TreeUpdate) {
         let mut state = self.0.state.borrow_mut();
         if let Some(adapter) = state.accesskit_adapter.as_mut() {
@@ -1927,6 +1934,7 @@ impl PlatformWindow for X11Window {
         }
     }
 
+    #[cfg(feature = "accessibility")]
     fn a11y_update_window_bounds(&self) {
         let mut state = self.0.state.borrow_mut();
         let scale = state.scale_factor;
@@ -1958,28 +1966,34 @@ impl PlatformWindow for X11Window {
     }
 }
 
+#[cfg(feature = "accessibility")]
 struct A11yActivationHandler {
     callback: Box<dyn Fn() -> Option<accesskit::TreeUpdate> + Send + 'static>,
 }
 
+#[cfg(feature = "accessibility")]
 impl accesskit::ActivationHandler for A11yActivationHandler {
     fn request_initial_tree(&mut self) -> Option<accesskit::TreeUpdate> {
         (self.callback)()
     }
 }
 
+#[cfg(feature = "accessibility")]
 struct A11yActionHandler(Box<dyn Fn(accesskit::ActionRequest) + Send + 'static>);
 
+#[cfg(feature = "accessibility")]
 impl accesskit::ActionHandler for A11yActionHandler {
     fn do_action(&mut self, request: accesskit::ActionRequest) {
         (self.0)(request);
     }
 }
 
+#[cfg(feature = "accessibility")]
 struct A11yDeactivationHandler {
     callback: Box<dyn Fn() + Send + 'static>,
 }
 
+#[cfg(feature = "accessibility")]
 impl accesskit::DeactivationHandler for A11yDeactivationHandler {
     fn deactivate_accessibility(&mut self) {
         (self.callback)();
