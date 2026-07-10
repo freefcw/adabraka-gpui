@@ -1,4 +1,8 @@
+# Changelog
+
 ## Unreleased
+
+## 0.7.0 (2026-07-11)
 
 ### Breaking changes
 
@@ -40,8 +44,6 @@
 
 - Added batch 2 evaluation report documenting architectural constraints
 - Added immediate actions completion report
-
-# Changelog
 
 ## 0.6.1 (2026-04-30)
 
