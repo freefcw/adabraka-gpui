@@ -1,0 +1,85 @@
+name: GPUI feature matrix
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+env:
+  CARGO_INCREMENTAL: "0"
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux / default
+            os: ubuntu-24.04
+            cache-key: linux-default
+            linux-native: true
+            command: cargo check -p adabraka-gpui --lib --locked
+          - name: Linux / no default features
+            os: ubuntu-24.04
+            cache-key: linux-no-default
+            linux-native: false
+            command: cargo check -p adabraka-gpui --lib --no-default-features --locked
+          - name: Linux / accessibility + X11
+            os: ubuntu-24.04
+            cache-key: linux-accessibility-x11
+            linux-native: true
+            command: cargo check -p adabraka-gpui --lib --no-default-features --features accessibility,font-kit,x11 --locked
+          - name: Linux / accessibility + Wayland
+            os: ubuntu-24.04
+            cache-key: linux-accessibility-wayland
+            linux-native: true
+            command: cargo check -p adabraka-gpui --lib --no-default-features --features accessibility,font-kit,wayland --locked
+          - name: macOS / default
+            os: macos-14
+            cache-key: macos-default
+            linux-native: false
+            command: cargo check -p adabraka-gpui --lib --locked
+          - name: macOS / no default features
+            os: macos-14
+            cache-key: macos-no-default
+            linux-native: false
+            command: cargo check -p adabraka-gpui --lib --no-default-features --locked
+          - name: Windows / default
+            os: windows-2022
+            cache-key: windows-default
+            linux-native: false
+            command: cargo check -p adabraka-gpui --lib --locked
+          - name: Windows / no default features
+            os: windows-2022
+            cache-key: windows-no-default
+            linux-native: false
+            command: cargo check -p adabraka-gpui --lib --no-default-features --locked
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Linux native dependencies
+        if: runner.os == 'Linux' && matrix.linux-native
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libwayland-dev libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev pkg-config
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: gpui-${{ matrix.cache-key }}
+
+      - name: Check GPUI feature combination
+        run: ${{ matrix.command }}
