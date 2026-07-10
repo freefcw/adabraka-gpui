@@ -2061,6 +2061,21 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "wayland")]
+    #[test]
+    fn layer_shell_window_kind_is_rejected() {
+        let error = ensure_window_kind_supported(&WindowKind::LayerShell(
+            crate::layer_shell::LayerShellOptions::default(),
+        ))
+        .expect_err("X11 must reject Wayland layer-shell windows");
+
+        assert!(
+            error
+                .downcast_ref::<crate::layer_shell::LayerShellNotSupportedError>()
+                .is_some()
+        );
+    }
+
     #[test]
     fn resizable_window_without_min_size_has_no_size_hints() {
         assert!(normal_size_hints(&window_params(true, None)).is_none());

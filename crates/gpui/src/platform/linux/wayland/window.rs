@@ -487,7 +487,7 @@ fn create_xdg_toplevel_role(
 }
 
 fn configure_layer_surface_state(
-    set_size: impl FnOnce(i32, i32),
+    set_size: impl FnOnce(u32, u32),
     set_anchor: impl FnOnce(u32),
     set_margin: impl FnOnce(i32, i32, i32, i32),
     set_exclusive_zone: impl FnOnce(i32),
@@ -495,7 +495,8 @@ fn configure_layer_surface_state(
     options: &LayerShellOptions,
     size: Size<Pixels>,
 ) {
-    set_size(size.width.0 as i32, size.height.0 as i32);
+    let (width, height) = layer_surface_request_size(size);
+    set_size(width, height);
     set_anchor(options.anchor.bits());
     if let Some((top, right, bottom, left)) = options.margin {
         set_margin(top.0 as i32, right.0 as i32, bottom.0 as i32, left.0 as i32);
@@ -506,13 +507,17 @@ fn configure_layer_surface_state(
     set_keyboard_interactivity(options.keyboard_interactivity);
 }
 
+fn layer_surface_request_size(size: Size<Pixels>) -> (u32, u32) {
+    (size.width.0 as u32, size.height.0 as u32)
+}
+
 fn configure_wlr_layer_surface(
     layer_surface: &zwlr_layer_surface_v1::ZwlrLayerSurfaceV1,
     options: &LayerShellOptions,
     size: Size<Pixels>,
 ) {
     configure_layer_surface_state(
-        |width, height| layer_surface.set_size(width as u32, height as u32),
+        |width, height| layer_surface.set_size(width, height),
         |anchor| {
             layer_surface.set_anchor(zwlr_layer_surface_v1::Anchor::from_bits_truncate(anchor))
         },
@@ -1181,7 +1186,8 @@ impl PlatformWindow for WaylandWindow {
             }
             WaylandWindowRole::WlrLayer { layer_surface, .. } => {
                 if state.visible {
-                    layer_surface.set_size(size.width.0 as u32, size.height.0 as u32);
+                    let (width, height) = layer_surface_request_size(size);
+                    layer_surface.set_size(width, height);
                 }
             }
         }
@@ -1787,6 +1793,35 @@ fn inset_by_tiling(mut bounds: Bounds<Pixels>, inset: Pixels, tiling: Tiling) ->
 mod layer_shell_tests {
     use super::*;
 
+    fn requested_layer_surface_size(size: Size<Pixels>) -> (u32, u32) {
+        let mut requested_size = None;
+
+        configure_layer_surface_state(
+            |width, height| requested_size = Some((width, height)),
+            |_| {},
+            |_, _, _, _| {},
+            |_| {},
+            |_| {},
+            &LayerShellOptions::default(),
+            size,
+        );
+
+        requested_size.expect("layer surface size should be requested")
+    }
+
+    #[test]
+    fn layer_surface_size_preserves_zero_dimensions() {
+        assert_eq!(
+            requested_layer_surface_size(size(px(0.0), px(240.0))),
+            (0, 240)
+        );
+        assert_eq!(
+            requested_layer_surface_size(size(px(320.0), px(0.0))),
+            (320, 0)
+        );
+        assert_eq!(requested_layer_surface_size(size(px(0.0), px(0.0))), (0, 0));
+    }
+
     #[test]
     fn layer_configure_size_keeps_current_zero_dimensions() {
         let current_size = size(px(320.0), px(240.0));
@@ -1834,13 +1869,35 @@ mod layer_shell_tests {
     }
 
     #[test]
-    fn layer_anchor_maps_to_wlr_protocol() {
-        let anchor = crate::layer_shell::Anchor::TOP | crate::layer_shell::Anchor::LEFT;
+    fn layer_anchor_bits_map_to_wlr_protocol() {
+        use crate::layer_shell::Anchor;
 
+        assert_eq!(Anchor::TOP.to_wlr(), zwlr_layer_surface_v1::Anchor::Top);
         assert_eq!(
-            anchor.to_wlr(),
-            zwlr_layer_surface_v1::Anchor::Top | zwlr_layer_surface_v1::Anchor::Left
+            Anchor::BOTTOM.to_wlr(),
+            zwlr_layer_surface_v1::Anchor::Bottom
         );
+        assert_eq!(Anchor::LEFT.to_wlr(), zwlr_layer_surface_v1::Anchor::Left);
+        assert_eq!(
+            Anchor::RIGHT.to_wlr(),
+            zwlr_layer_surface_v1::Anchor::Right
+        );
+        assert_eq!(
+            (Anchor::TOP | Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT).to_wlr(),
+            zwlr_layer_surface_v1::Anchor::Top
+                | zwlr_layer_surface_v1::Anchor::Bottom
+                | zwlr_layer_surface_v1::Anchor::Left
+                | zwlr_layer_surface_v1::Anchor::Right
+        );
+    }
+
+    #[test]
+    fn exclusive_edge_requires_wlr_layer_shell_v5() {
+        let required_version = zwlr_layer_surface_v1::REQ_SET_EXCLUSIVE_EDGE_SINCE;
+
+        assert!(!wlr_layer_shell_supports_exclusive_edge(required_version - 1));
+        assert!(wlr_layer_shell_supports_exclusive_edge(required_version));
+        assert!(wlr_layer_shell_supports_exclusive_edge(required_version + 1));
     }
 }
 

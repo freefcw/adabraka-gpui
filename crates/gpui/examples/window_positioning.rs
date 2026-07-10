@@ -56,11 +56,7 @@ fn build_window_options(
     bounds: Bounds<Pixels>,
 ) -> WindowOptions {
     #[cfg(all(target_os = "linux", feature = "wayland"))]
-    let kind = if gpui::guess_compositor() == "Wayland" {
-        WindowKind::LayerShell(layer_shell_options(display_bounds, bounds))
-    } else {
-        WindowKind::PopUp
-    };
+    let kind = window_kind_for_compositor(gpui::guess_compositor(), display_bounds, bounds);
     #[cfg(not(all(target_os = "linux", feature = "wayland")))]
     let kind = {
         let _ = display_bounds;
@@ -83,6 +79,19 @@ fn build_window_options(
         window_decorations: None,
         tabbing_identifier: None,
         ..Default::default()
+    }
+}
+
+#[cfg(all(target_os = "linux", feature = "wayland"))]
+fn window_kind_for_compositor(
+    compositor: &str,
+    display_bounds: Bounds<Pixels>,
+    bounds: Bounds<Pixels>,
+) -> WindowKind {
+    if compositor == "Wayland" {
+        WindowKind::LayerShell(layer_shell_options(display_bounds, bounds))
+    } else {
+        WindowKind::PopUp
     }
 }
 
@@ -122,6 +131,37 @@ fn layer_shell_options(display: Bounds<Pixels>, bounds: Bounds<Pixels>) -> Layer
         margin: Some((margin_top, margin_right, margin_bottom, margin_left)),
         keyboard_interactivity: KeyboardInteractivity::None,
         ..Default::default()
+    }
+}
+
+#[cfg(all(test, target_os = "linux", feature = "wayland"))]
+mod tests {
+    use super::*;
+
+    fn test_bounds() -> (Bounds<Pixels>, Bounds<Pixels>) {
+        let display = Bounds::new(point(px(0.0), px(0.0)), Size::new(px(1920.0), px(1080.0)));
+        let window = Bounds::new(point(px(1520.0), px(820.0)), Size::new(px(320.0), px(220.0)));
+        (display, window)
+    }
+
+    #[test]
+    fn wayland_compositor_uses_layer_shell() {
+        let (display, window) = test_bounds();
+
+        assert!(matches!(
+            window_kind_for_compositor("Wayland", display, window),
+            WindowKind::LayerShell(_)
+        ));
+    }
+
+    #[test]
+    fn x11_compositor_uses_popup_window() {
+        let (display, window) = test_bounds();
+
+        assert_eq!(
+            window_kind_for_compositor("X11", display, window),
+            WindowKind::PopUp
+        );
     }
 }
 
