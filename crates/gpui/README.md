@@ -52,7 +52,7 @@ no longer part of the crate. The default macOS renderer is Metal and Windows use
 
 This does not introduce a public `gpui_wgpu` crate or change the `Application::new()` entry point.
 The renderer protocol stays crate-internal so downstream application APIs remain stable. See
-[`../../docs/wgpu-migration.md`](../../docs/wgpu-migration.md) for details.
+[the WGPU migration notes](https://github.com/freefcw/adabraka-gpui/blob/main/docs/wgpu-migration.md) for details.
 
 ### Accessibility
 

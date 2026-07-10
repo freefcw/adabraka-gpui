@@ -6,7 +6,7 @@ authors = ["Adabraka Team"]
 build = "build.rs"
 publish = true
 description = "GPU-accelerated UI framework with system tray, global hotkeys, notifications, and daemon mode support (fork of Zed's GPUI)"
-homepage = "https://github.com/Augani/adabraka-gpui"
+homepage = "https://github.com/freefcw/adabraka-gpui"
 readme = "README.md"
 keywords = [
     "gui",
@@ -17,7 +17,7 @@ keywords = [
 ]
 categories = ["gui"]
 license = "Apache-2.0"
-repository = "https://github.com/Augani/adabraka-gpui"
+repository = "https://github.com/freefcw/adabraka-gpui"
 
 [features]
 accessibility = [
@@ -363,6 +363,7 @@ optional = true
 version = "0.6"
 
 [dependencies.wgpu]
+version = "29.0.0"
 git = "https://github.com/zed-industries/wgpu.git"
 branch = "v29"
 optional = true
