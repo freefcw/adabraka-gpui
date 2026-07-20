@@ -1396,8 +1396,14 @@ pub struct WindowOptions {
     /// The kind of window to create
     pub kind: WindowKind,
 
-    /// Whether the window should be movable by the user
+    /// Whether the window should be movable by the user.
     pub is_movable: bool,
+
+    /// Whether the application owns dragging of its custom titlebar on macOS.
+    ///
+    /// This prevents AppKit from claiming the titlebar region or delaying clicks,
+    /// while leaving `is_movable` enabled for application-driven window moves.
+    pub app_owns_titlebar_drag: bool,
 
     /// Whether the window should be resizable by the user
     pub is_resizable: bool,
@@ -1458,6 +1464,13 @@ pub(crate) struct WindowParams {
     /// Whether the window should be movable by the user
     #[cfg_attr(any(target_os = "linux", target_os = "freebsd"), allow(dead_code))]
     pub is_movable: bool,
+
+    /// Whether the application owns custom-titlebar dragging on macOS.
+    #[cfg_attr(
+        any(target_os = "linux", target_os = "freebsd", target_os = "windows"),
+        allow(dead_code)
+    )]
+    pub app_owns_titlebar_drag: bool,
 
     /// Whether the window should be resizable by the user
     #[cfg_attr(any(target_os = "linux", target_os = "freebsd"), allow(dead_code))]
@@ -1545,6 +1558,7 @@ impl Default for WindowOptions {
             show: true,
             kind: WindowKind::Normal,
             is_movable: true,
+            app_owns_titlebar_drag: false,
             is_resizable: true,
             is_minimizable: true,
             display_id: None,

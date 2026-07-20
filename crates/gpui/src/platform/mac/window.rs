@@ -446,6 +446,12 @@ unsafe fn build_classes() {
                 );
 
                 decl.add_method(
+                    sel!(_opaqueRectForWindowMoveWhenInTitlebar),
+                    opaque_rect_for_window_move_when_in_titlebar
+                        as extern "C" fn(&Object, Sel) -> NSRect,
+                );
+
+                decl.add_method(
                     sel!(characterIndexForPoint:),
                     character_index_for_point as extern "C" fn(&Object, Sel, NSPoint) -> u64,
                 );
@@ -615,6 +621,7 @@ struct MacWindowState {
     external_files_dragged: bool,
     // Whether the next left-mouse click is also the focusing click.
     first_mouse: bool,
+    app_owns_titlebar_drag: bool,
     fullscreen_restore_bounds: Bounds<Pixels>,
     move_tab_to_new_window_callback: Option<Box<dyn FnMut()>>,
     merge_all_windows_callback: Option<Box<dyn FnMut()>>,
@@ -813,6 +820,7 @@ impl MacWindow {
             titlebar,
             kind,
             is_movable,
+            app_owns_titlebar_drag,
             is_resizable,
             is_minimizable,
             focus,
@@ -966,6 +974,7 @@ impl MacWindow {
                     do_command_handled: None,
                     external_files_dragged: false,
                     first_mouse: false,
+                    app_owns_titlebar_drag,
                     fullscreen_restore_bounds: Bounds::default(),
                     move_tab_to_new_window_callback: None,
                     merge_all_windows_callback: None,
@@ -2889,6 +2898,21 @@ extern "C" fn accepts_first_mouse(this: &Object, _: Sel, _: id) -> BOOL {
     YES
 }
 
+fn titlebar_move_rect(bounds: NSRect, app_owns_titlebar_drag: bool) -> NSRect {
+    if app_owns_titlebar_drag {
+        bounds
+    } else {
+        NSRect::new(NSPoint::new(0., 0.), NSSize::new(0., 0.))
+    }
+}
+
+extern "C" fn opaque_rect_for_window_move_when_in_titlebar(this: &Object, _: Sel) -> NSRect {
+    let window_state = unsafe { get_window_state(this) };
+    let app_owns_titlebar_drag = window_state.as_ref().lock().app_owns_titlebar_drag;
+    let bounds = unsafe { msg_send![this, bounds] };
+    titlebar_move_rect(bounds, app_owns_titlebar_drag)
+}
+
 extern "C" fn character_index_for_point(this: &Object, _: Sel, position: NSPoint) -> u64 {
     let position = screen_point_to_gpui_point(this, position);
     with_input_handler(this, |input_handler| {
@@ -3181,5 +3205,26 @@ extern "C" fn toggle_tab_bar(this: &Object, _sel: Sel, _id: id) {
             callback();
             window_state.lock().toggle_tab_bar_callback = Some(callback);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn app_owned_titlebar_claims_the_content_view_for_window_moves() {
+        let bounds = NSRect::new(NSPoint::new(10., 20.), NSSize::new(300., 200.));
+        let claimed = titlebar_move_rect(bounds, true);
+        assert_eq!(claimed.origin.x, 10.);
+        assert_eq!(claimed.origin.y, 20.);
+        assert_eq!(claimed.size.width, 300.);
+        assert_eq!(claimed.size.height, 200.);
+
+        let native = titlebar_move_rect(bounds, false);
+        assert_eq!(native.origin.x, 0.);
+        assert_eq!(native.origin.y, 0.);
+        assert_eq!(native.size.width, 0.);
+        assert_eq!(native.size.height, 0.);
     }
 }

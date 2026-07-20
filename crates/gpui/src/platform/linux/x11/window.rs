@@ -2027,6 +2027,7 @@ mod tests {
             titlebar: None,
             kind: WindowKind::Normal,
             is_movable: true,
+            app_owns_titlebar_drag: false,
             is_resizable,
             is_minimizable: true,
             focus: true,
