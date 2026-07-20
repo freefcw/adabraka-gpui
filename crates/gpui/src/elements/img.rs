@@ -2,22 +2,21 @@ use crate::{
     AnyElement, AnyImageCache, App, Asset, AssetLogger, Bounds, DefiniteLength, Element, ElementId,
     Entity, GlobalElementId, Hitbox, Image, ImageCache, InspectorElementId, InteractiveElement,
     Interactivity, IntoElement, LayoutId, Length, ObjectFit, Pixels, RenderImage, Resource,
-    SharedString, SharedUri, StyleRefinement, Styled, Task, Window, px,
+    SharedString, SharedUri, StyleRefinement, Styled, Task, Window, decode_static_image,
+    decode_static_image_from_decoder, px,
 };
 use anyhow::{Context as _, Result};
 
 use futures::{AsyncReadExt, Future};
 #[cfg(any(feature = "image-format-gif", feature = "image-format-webp"))]
 use image::AnimationDecoder;
-#[cfg(feature = "image-format-webp")]
-use image::DynamicImage;
+use image::ImageError;
 #[cfg(feature = "image-format-webp")]
 use image::Rgba;
 #[cfg(feature = "image-format-gif")]
 use image::codecs::gif::GifDecoder;
 #[cfg(feature = "image-format-webp")]
 use image::codecs::webp::WebPDecoder;
-use image::{Frame, ImageError};
 use smallvec::SmallVec;
 #[cfg(any(feature = "image-format-gif", feature = "image-format-webp"))]
 use std::io::Cursor;
@@ -723,27 +722,10 @@ impl Asset for ImageAssetLoader {
 
                             frames
                         } else {
-                            let mut data = DynamicImage::from_decoder(decoder)?.into_rgba8();
-
-                            // Convert from RGBA to BGRA.
-                            for pixel in data.chunks_exact_mut(4) {
-                                pixel.swap(0, 2);
-                            }
-
-                            SmallVec::from_elem(Frame::new(data), 1)
+                            decode_static_image_from_decoder(decoder)?
                         }
                     }
-                    _ => {
-                        let mut data =
-                            image::load_from_memory_with_format(&bytes, format)?.into_rgba8();
-
-                        // Convert from RGBA to BGRA.
-                        for pixel in data.chunks_exact_mut(4) {
-                            pixel.swap(0, 2);
-                        }
-
-                        SmallVec::from_elem(Frame::new(data), 1)
-                    }
+                    _ => decode_static_image(&bytes, format)?,
                 };
 
                 RenderImage::new(data)

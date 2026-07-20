@@ -47,14 +47,14 @@ use crate::{
     RenderSvgParams, Scene, ShapedGlyph, ShapedRun, SharedString, Size, SvgRenderer,
     SystemWindowTab, Task, TaskLabel, Window, WindowControlArea, hash, point, px, size,
 };
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use async_task::Runnable;
 use futures::channel::oneshot;
 #[cfg(feature = "image-format-gif")]
 use image::AnimationDecoder as _;
-use image::Frame;
 #[cfg(feature = "image-format-gif")]
 use image::codecs::gif::GifDecoder;
+use image::{DynamicImage, Frame};
 use parking::Unparker;
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use schemars::JsonSchema;
@@ -63,7 +63,6 @@ use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use std::borrow::Cow;
 use std::hash::{Hash, Hasher};
-#[cfg(feature = "image-format-gif")]
 use std::io::Cursor;
 use std::ops;
 use std::time::{Duration, Instant};
@@ -2500,6 +2499,31 @@ impl Hash for Image {
     }
 }
 
+pub(crate) fn decode_static_image(
+    bytes: &[u8],
+    format: image::ImageFormat,
+) -> Result<SmallVec<[Frame; 1]>> {
+    let decoder = image::ImageReader::with_format(Cursor::new(bytes), format)
+        .into_decoder()
+        .context("creating image decoder")?;
+    decode_static_image_from_decoder(decoder)
+}
+
+pub(crate) fn decode_static_image_from_decoder(
+    mut decoder: impl image::ImageDecoder,
+) -> Result<SmallVec<[Frame; 1]>> {
+    let orientation = decoder.orientation().context("reading image orientation")?;
+    let mut image = DynamicImage::from_decoder(decoder).context("decoding static image")?;
+    image.apply_orientation(orientation);
+
+    let mut data = image.into_rgba8();
+    for pixel in data.chunks_exact_mut(4) {
+        pixel.swap(0, 2);
+    }
+
+    Ok(SmallVec::from_elem(Frame::new(data), 1))
+}
+
 impl Image {
     /// An empty image containing no data
     pub fn empty() -> Self {
@@ -2549,20 +2573,6 @@ impl Image {
 
     /// Convert the clipboard image to an `ImageData` object.
     pub fn to_image_data(&self, svg_renderer: SvgRenderer) -> Result<Arc<RenderImage>> {
-        fn frames_for_image(
-            bytes: &[u8],
-            format: image::ImageFormat,
-        ) -> Result<SmallVec<[Frame; 1]>> {
-            let mut data = image::load_from_memory_with_format(bytes, format)?.into_rgba8();
-
-            // Convert from RGBA to BGRA.
-            for pixel in data.chunks_exact_mut(4) {
-                pixel.swap(0, 2);
-            }
-
-            Ok(SmallVec::from_elem(Frame::new(data), 1))
-        }
-
         let frames = match self.format {
             #[cfg(feature = "image-format-gif")]
             ImageFormat::Gif => {
@@ -2581,12 +2591,12 @@ impl Image {
                 frames
             }
             #[cfg(not(feature = "image-format-gif"))]
-            ImageFormat::Gif => frames_for_image(&self.bytes, image::ImageFormat::Gif)?,
-            ImageFormat::Png => frames_for_image(&self.bytes, image::ImageFormat::Png)?,
-            ImageFormat::Jpeg => frames_for_image(&self.bytes, image::ImageFormat::Jpeg)?,
-            ImageFormat::Webp => frames_for_image(&self.bytes, image::ImageFormat::WebP)?,
-            ImageFormat::Bmp => frames_for_image(&self.bytes, image::ImageFormat::Bmp)?,
-            ImageFormat::Tiff => frames_for_image(&self.bytes, image::ImageFormat::Tiff)?,
+            ImageFormat::Gif => decode_static_image(&self.bytes, image::ImageFormat::Gif)?,
+            ImageFormat::Png => decode_static_image(&self.bytes, image::ImageFormat::Png)?,
+            ImageFormat::Jpeg => decode_static_image(&self.bytes, image::ImageFormat::Jpeg)?,
+            ImageFormat::Webp => decode_static_image(&self.bytes, image::ImageFormat::WebP)?,
+            ImageFormat::Bmp => decode_static_image(&self.bytes, image::ImageFormat::Bmp)?,
+            ImageFormat::Tiff => decode_static_image(&self.bytes, image::ImageFormat::Tiff)?,
             ImageFormat::Svg => {
                 return svg_renderer
                     .render_single_frame(&self.bytes, 1.0)
@@ -2605,6 +2615,26 @@ impl Image {
     /// Get the raw bytes of the clipboard image
     pub fn bytes(&self) -> &[u8] {
         self.bytes.as_slice()
+    }
+}
+
+#[cfg(test)]
+mod image_tests {
+    use super::*;
+
+    #[test]
+    fn image_to_image_data_applies_exif_orientation() {
+        let image = Image::from_bytes(
+            ImageFormat::Jpeg,
+            include_bytes!("../examples/image/exif-orientation-rotate-180.jpg").to_vec(),
+        );
+
+        let render_image = image.to_image_data(SvgRenderer::new(Arc::new(()))).unwrap();
+
+        assert_eq!(render_image.size(0), size(16.into(), 32.into()));
+        let bytes = render_image.as_bytes(0).unwrap();
+        assert_eq!(&bytes[..4], &[255, 255, 255, 255]);
+        assert_eq!(&bytes[(16 * 32 - 1) * 4..], &[0, 0, 0, 255]);
     }
 }
 
