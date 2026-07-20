@@ -238,7 +238,10 @@ impl Interactivity {
     ) {
         self.mouse_down_listeners
             .push(Box::new(move |event, phase, hitbox, window, cx| {
-                if phase == DispatchPhase::Capture && !hitbox.contains(&window.mouse_position()) {
+                if phase == DispatchPhase::Capture
+                    && !window.has_active_prompt()
+                    && !hitbox.contains(&window.mouse_position())
+                {
                     (listener)(event, window, cx)
                 }
             }));
@@ -3697,7 +3700,67 @@ impl ScrollHandle {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{hsla, point};
+    use crate::{
+        Context, MouseButton, Render, TestAppContext, fallback_prompt_renderer, hsla, point,
+    };
+    use std::{cell::Cell, rc::Rc};
+
+    struct MouseDownOutOwner {
+        mouse_down_out_count: Rc<Cell<usize>>,
+    }
+
+    impl Render for MouseDownOutOwner {
+        fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+            let mouse_down_out_count = self.mouse_down_out_count.clone();
+            div()
+                .size_full()
+                .child(
+                    div()
+                        .id("target")
+                        .size(px(50.))
+                        .on_mouse_down_out(move |_, _, _| {
+                            mouse_down_out_count.set(mouse_down_out_count.get() + 1);
+                        }),
+                )
+        }
+    }
+
+    #[test]
+    fn mouse_down_out_is_suppressed_while_window_prompt_is_active() {
+        let mut test_app = TestAppContext::single();
+        let mouse_down_out_count = Rc::new(Cell::new(0));
+        let (_, cx) = test_app.add_window_view({
+            let mouse_down_out_count = mouse_down_out_count.clone();
+            move |_, _| MouseDownOutOwner {
+                mouse_down_out_count,
+            }
+        });
+
+        cx.simulate_mouse_down(
+            point(px(75.), px(75.)),
+            MouseButton::Left,
+            Default::default(),
+        );
+        assert_eq!(mouse_down_out_count.get(), 1);
+
+        cx.update(|window, cx| {
+            cx.set_prompt_builder(fallback_prompt_renderer);
+            let _receiver =
+                window.prompt(crate::PromptLevel::Warning, "message", None, &["Ok"], cx);
+        });
+        cx.run_until_parked();
+
+        cx.simulate_mouse_down(
+            point(px(75.), px(75.)),
+            MouseButton::Left,
+            Default::default(),
+        );
+        assert_eq!(
+            mouse_down_out_count.get(),
+            1,
+            "mouse down over an active prompt must not reach underlying listeners"
+        );
+    }
 
     #[test]
     fn test_tooltip_show_delay_sets_interactivity_state() {
