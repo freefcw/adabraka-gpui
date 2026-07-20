@@ -1504,6 +1504,19 @@ impl PlatformWindow for MacWindow {
             .detach();
     }
 
+    fn request_attention(&self) {
+        if self.is_active() {
+            return;
+        }
+
+        let executor = self.0.lock().executor.clone();
+        executor
+            .spawn(async move {
+                super::dock::request_user_attention(crate::AttentionType::Informational);
+            })
+            .detach();
+    }
+
     fn is_active(&self) -> bool {
         unsafe {
             let is_key_window: BOOL = msg_send![self.0.lock().native_window, isKeyWindow];

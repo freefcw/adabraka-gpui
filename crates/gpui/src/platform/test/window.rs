@@ -29,6 +29,7 @@ pub(crate) struct TestWindowState {
     moved_callback: Option<Box<dyn FnMut()>>,
     input_handler: Option<PlatformInputHandler>,
     is_fullscreen: bool,
+    pub(crate) attention_requests: usize,
     render_artifact: Option<VisualRenderArtifact>,
 }
 
@@ -123,6 +124,7 @@ impl TestWindow {
             moved_callback: None,
             input_handler: None,
             is_fullscreen: false,
+            attention_requests: 0,
             render_artifact: None,
         })))
     }
@@ -166,6 +168,10 @@ impl TestWindow {
 }
 
 impl PlatformWindow for TestWindow {
+    fn request_attention(&self) {
+        self.0.lock().attention_requests += 1;
+    }
+
     fn bounds(&self) -> Bounds<Pixels> {
         self.0.lock().bounds
     }

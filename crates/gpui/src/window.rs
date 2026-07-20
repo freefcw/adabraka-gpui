@@ -4739,6 +4739,11 @@ impl Window {
         self.platform_window.activate();
     }
 
+    /// Requests that the operating system draw attention to this window.
+    pub fn request_attention(&self) {
+        self.platform_window.request_attention();
+    }
+
     /// Minimize the current window at the platform level.
     pub fn minimize_window(&self) {
         self.platform_window.minimize();
@@ -6076,5 +6081,17 @@ mod tests {
             .unwrap();
 
         assert_eq!(primitive_count, 4);
+    }
+
+    #[test]
+    fn window_attention_is_forwarded_to_the_platform_window() {
+        let mut cx = TestAppContext::single();
+        let window = cx.add_window(|_, _| BorderOnlyQuadView);
+        let window = AnyWindowHandle::from(window);
+
+        cx.update_window(window, |_, window, _| window.request_attention())
+            .unwrap();
+
+        assert_eq!(cx.test_window(window).0.lock().attention_requests, 1);
     }
 }
