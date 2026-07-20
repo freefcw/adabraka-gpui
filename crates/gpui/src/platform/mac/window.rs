@@ -2,13 +2,14 @@ use super::{
     BoolExt, MacDisplay, NSRange, NSStringExt, display_id_for_screen, ns_string, renderer,
 };
 use crate::{
-    AnyWindowHandle, Bounds, Capslock, CursorStyle, DisplayLink, ExternalPaths, FileDropEvent,
+    AnyWindowHandle, Bounds, Capslock, CursorStyle, ExternalPaths, FileDropEvent,
     ForegroundExecutor, KeyDownEvent, Keystroke, Modifiers, ModifiersChangedEvent, MouseButton,
     MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, PlatformAtlas, PlatformDisplay,
     PlatformInput, PlatformWindow, Point, PromptButton, PromptLevel, RequestFrameOptions,
     SharedString, Size, SystemWindowTab, Timer, WindowAppearance, WindowBackgroundAppearance,
-    WindowBounds, WindowControlArea, WindowKind, WindowParams, dispatch_get_main_queue,
-    dispatch_sys::dispatch_async_f, platform::PlatformInputHandler, point, px, size,
+    WindowBounds, WindowControlArea, WindowFrameSource, WindowKind, WindowParams,
+    dispatch_get_main_queue, dispatch_sys::dispatch_async_f, platform::PlatformInputHandler, point,
+    px, size,
 };
 use block::ConcreteBlock;
 use core_graphics::display::{CGPoint, CGRect};
@@ -593,7 +594,7 @@ struct MacWindowState {
     blurred_view: Option<id>,
     cursor_style: CursorStyle,
     cursor_hidden: bool,
-    display_link: Option<DisplayLink>,
+    frame_source: Option<WindowFrameSource>,
     renderer: renderer::Renderer,
     request_frame_callback: Option<Box<dyn FnMut(RequestFrameOptions)>>,
     event_callback: Option<Box<dyn FnMut(PlatformInput) -> crate::DispatchEventResult>>,
@@ -711,24 +712,26 @@ impl MacWindowState {
             // AppKit can temporarily report no screen while displays are being reconfigured.
             return;
         };
-        let frame_request_context = Box::new(FrameRequestContext {
-            window_state: self.self_ref.clone(),
-        });
-        if let Some(mut display_link) = DisplayLink::new(
-            display_id.0 as u32,
-            Box::into_raw(frame_request_context) as *mut c_void,
-            step,
-            drop_frame_request_context,
-        )
-        .log_err()
-        {
-            display_link.start().log_err();
-            self.display_link = Some(display_link);
-        }
+
+        self.frame_source
+            .get_or_insert_with(|| {
+                let context = Box::new(FrameRequestContext {
+                    window_state: self.self_ref.clone(),
+                });
+                WindowFrameSource::new(
+                    Box::into_raw(context).cast::<c_void>(),
+                    step,
+                    drop_frame_request_context,
+                )
+            })
+            .start(display_id.0 as u32)
+            .log_err();
     }
 
     fn stop_display_link(&mut self) {
-        self.display_link = None;
+        if let Some(frame_source) = self.frame_source.as_mut() {
+            frame_source.stop();
+        }
     }
 
     fn is_maximized(&self) -> bool {
@@ -932,7 +935,7 @@ impl MacWindow {
                     blurred_view: None,
                     cursor_style: CursorStyle::Arrow,
                     cursor_hidden: false,
-                    display_link: None,
+                    frame_source: None,
                     renderer: renderer::new_renderer(
                         renderer_context,
                         native_window as *mut _,
@@ -1221,6 +1224,7 @@ impl Drop for MacWindow {
         let mut this = self.0.lock();
         let window = this.native_window;
         this.begin_close();
+        this.frame_source.take();
         this.renderer.destroy();
         unsafe {
             let _: () = msg_send![this.native_window, setDelegate: nil];

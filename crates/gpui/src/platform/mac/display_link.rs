@@ -1,22 +1,56 @@
-use crate::{
-    dispatch_get_main_queue,
-    dispatch_sys::{
-        _dispatch_source_type_data_add, dispatch_resume, dispatch_set_context,
-        dispatch_source_cancel, dispatch_source_create, dispatch_source_merge_data,
-        dispatch_source_set_cancel_handler_f, dispatch_source_set_event_handler_f,
-        dispatch_source_t,
-    },
-};
+//! Frame pacing for macOS windows, built on `CVDisplayLink`.
+//!
+//! CoreVideo does not provide a safe teardown barrier for a stopped display
+//! link. Keep one immortal link per display and register per-window dispatch
+//! sources so straggling callbacks cannot dereference released window state.
+//!
+//! Display links are intentionally never removed from the registry. Window
+//! sources are removed before cancellation, so a late CoreVideo callback can
+//! only find live sources. Registry mutations run on the main thread, and no
+//! CoreVideo create/start/stop call may occur while holding the registry lock;
+//! this avoids lock cycles with CoreVideo's display-link thread.
+
 use anyhow::Result;
 use core_graphics::display::CGDirectDisplayID;
-use std::ffi::c_void;
+use dispatch2::{
+    _dispatch_source_type_data_add, DispatchObject, DispatchQueue, DispatchRetained, DispatchSource,
+};
+use std::{
+    collections::{BTreeMap, btree_map},
+    ffi::c_void,
+    sync::{Mutex, MutexGuard, PoisonError},
+};
 use util::ResultExt;
 
-pub struct DisplayLink {
-    display_link: Option<sys::DisplayLink>,
-    frame_requests: dispatch_source_t,
-    frame_requests_resumed: bool,
+static REGISTRY: Mutex<Registry> = Mutex::new(Registry::new());
+
+struct Registry {
+    displays: BTreeMap<CGDirectDisplayID, DisplayEntry>,
+    next_subscriber_id: u64,
 }
+
+impl Registry {
+    const fn new() -> Self {
+        Self {
+            displays: BTreeMap::new(),
+            next_subscriber_id: 0,
+        }
+    }
+}
+
+struct DisplayEntry {
+    link: sys::DisplayLink,
+    running: bool,
+    subscribers: Vec<(SubscriberId, DispatchRetained<DispatchSource>)>,
+}
+
+// SAFETY: The foreign handles are thread-safe refcounted objects. Registry
+// mutation is serialized by `REGISTRY`; CoreVideo only reads subscribers while
+// holding the same lock.
+unsafe impl Send for DisplayEntry {}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct SubscriberId(u64);
 
 struct FrameRequestsContext {
     data: *mut c_void,
@@ -26,128 +60,189 @@ struct FrameRequestsContext {
 
 impl Drop for FrameRequestsContext {
     fn drop(&mut self) {
-        unsafe {
-            (self.drop_data)(self.data);
+        unsafe { (self.drop_data)(self.data) };
+    }
+}
+
+fn lock_registry() -> MutexGuard<'static, Registry> {
+    REGISTRY.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+fn debug_assert_main_thread() {
+    #[cfg(debug_assertions)]
+    {
+        use objc::{class, msg_send, sel, sel_impl};
+        let is_main_thread: objc::runtime::BOOL =
+            unsafe { msg_send![class!(NSThread), isMainThread] };
+        debug_assert!(
+            is_main_thread == objc::runtime::YES,
+            "display-link registry mutations must run on the main thread"
+        );
+    }
+}
+
+extern "C" fn handle_frame_requests(context: *mut c_void) {
+    let context = unsafe { &*context.cast::<FrameRequestsContext>() };
+    unsafe { (context.callback)(context.data) };
+}
+
+extern "C" fn release_frame_requests(context: *mut c_void) {
+    unsafe { drop(Box::from_raw(context.cast::<FrameRequestsContext>())) };
+}
+
+unsafe extern "C" fn display_link_output_callback(
+    _display_link_out: *mut sys::CVDisplayLink,
+    _current_time: *const sys::CVTimeStamp,
+    _output_time: *const sys::CVTimeStamp,
+    _flags_in: i64,
+    _flags_out: *mut i64,
+    display_id: *mut c_void,
+) -> i32 {
+    let display_id = display_id as usize as CGDirectDisplayID;
+    let registry = lock_registry();
+    if let Some(entry) = registry.displays.get(&display_id) {
+        for (_, frame_requests) in &entry.subscribers {
+            frame_requests.merge_data(1);
         }
     }
+    0
 }
 
-unsafe extern "C" fn handle_frame_requests(context: *mut c_void) {
-    let context = unsafe { &*(context as *const FrameRequestsContext) };
-    unsafe {
-        (context.callback)(context.data);
+fn subscribe(
+    display_id: CGDirectDisplayID,
+    frame_requests: DispatchRetained<DispatchSource>,
+) -> Result<SubscriberId> {
+    debug_assert_main_thread();
+
+    let needs_link = !lock_registry().displays.contains_key(&display_id);
+    let new_link = if needs_link {
+        Some(unsafe {
+            sys::DisplayLink::new(
+                display_id,
+                display_link_output_callback,
+                display_id as usize as *mut c_void,
+            )?
+        })
+    } else {
+        None
+    };
+
+    let (subscriber_id, link_to_start) = {
+        let mut registry = lock_registry();
+        let subscriber_id = SubscriberId(registry.next_subscriber_id);
+        registry.next_subscriber_id += 1;
+        let entry = match (registry.displays.entry(display_id), new_link) {
+            (btree_map::Entry::Occupied(entry), _) => entry.into_mut(),
+            (btree_map::Entry::Vacant(entry), Some(link)) => entry.insert(DisplayEntry {
+                link,
+                running: false,
+                subscribers: Vec::new(),
+            }),
+            (btree_map::Entry::Vacant(_), None) => {
+                anyhow::bail!("display-link registry entry vanished for display {display_id}")
+            }
+        };
+        entry.subscribers.push((subscriber_id, frame_requests));
+        let link_to_start = if entry.running {
+            None
+        } else {
+            entry.running = true;
+            Some(entry.link.clone())
+        };
+        (subscriber_id, link_to_start)
+    };
+
+    if let Some(mut link) = link_to_start {
+        if let Err(error) = unsafe { link.start() } {
+            let mut registry = lock_registry();
+            if let Some(entry) = registry.displays.get_mut(&display_id) {
+                entry.running = false;
+                entry.subscribers.retain(|(id, _)| *id != subscriber_id);
+            }
+            return Err(error);
+        }
+    }
+
+    Ok(subscriber_id)
+}
+
+fn unsubscribe(display_id: CGDirectDisplayID, subscriber_id: SubscriberId) {
+    debug_assert_main_thread();
+
+    let link_to_stop = {
+        let mut registry = lock_registry();
+        let Some(entry) = registry.displays.get_mut(&display_id) else {
+            return;
+        };
+        entry.subscribers.retain(|(id, _)| *id != subscriber_id);
+        if entry.subscribers.is_empty() && entry.running {
+            entry.running = false;
+            Some(entry.link.clone())
+        } else {
+            None
+        }
+    };
+
+    if let Some(mut link) = link_to_stop {
+        unsafe { link.stop().log_err() };
     }
 }
 
-unsafe extern "C" fn release_frame_requests(context: *mut c_void) {
-    unsafe {
-        drop(Box::from_raw(context as *mut FrameRequestsContext));
-    }
+/// A persistent per-window dispatch source paced by its current display.
+pub struct WindowFrameSource {
+    frame_requests: DispatchRetained<DispatchSource>,
+    registration: Option<(CGDirectDisplayID, SubscriberId)>,
 }
 
-impl DisplayLink {
+impl WindowFrameSource {
     pub fn new(
-        display_id: CGDirectDisplayID,
         data: *mut c_void,
         callback: unsafe extern "C" fn(*mut c_void),
         drop_data: unsafe extern "C" fn(*mut c_void),
-    ) -> Result<DisplayLink> {
-        unsafe extern "C" fn display_link_callback(
-            _display_link_out: *mut sys::CVDisplayLink,
-            _current_time: *const sys::CVTimeStamp,
-            _output_time: *const sys::CVTimeStamp,
-            _flags_in: i64,
-            _flags_out: *mut i64,
-            frame_requests: *mut c_void,
-        ) -> i32 {
-            unsafe {
-                let frame_requests = frame_requests as dispatch_source_t;
-                dispatch_source_merge_data(frame_requests, 1);
-                0
-            }
-        }
-
+    ) -> Self {
+        let frame_requests = unsafe {
+            DispatchSource::new(
+                &raw const _dispatch_source_type_data_add as *mut _,
+                0,
+                0,
+                Some(DispatchQueue::main()),
+            )
+        };
+        let context = Box::into_raw(Box::new(FrameRequestsContext {
+            data,
+            callback,
+            drop_data,
+        }));
         unsafe {
-            let frame_requests = dispatch_source_create(
-                &_dispatch_source_type_data_add,
-                0,
-                0,
-                dispatch_get_main_queue(),
-            );
-
-            let display_link = match sys::DisplayLink::new(
-                display_id,
-                display_link_callback,
-                frame_requests as *mut c_void,
-            ) {
-                Ok(display_link) => display_link,
-                Err(err) => {
-                    drop_data(data);
-                    dispatch_source_cancel(frame_requests);
-                    dispatch_resume(crate::dispatch_sys::dispatch_object_t {
-                        _ds: frame_requests,
-                    });
-                    return Err(err);
-                }
-            };
-
-            let context = Box::into_raw(Box::new(FrameRequestsContext {
-                data,
-                callback,
-                drop_data,
-            }));
-            dispatch_set_context(
-                crate::dispatch_sys::dispatch_object_t {
-                    _ds: frame_requests,
-                },
-                context as *mut c_void,
-            );
-            dispatch_source_set_event_handler_f(frame_requests, Some(handle_frame_requests));
-            dispatch_source_set_cancel_handler_f(frame_requests, Some(release_frame_requests));
-
-            Ok(Self {
-                display_link: Some(display_link),
-                frame_requests,
-                frame_requests_resumed: false,
-            })
+            frame_requests.set_context(context.cast::<c_void>());
+            frame_requests.set_event_handler_f(handle_frame_requests);
+            frame_requests.set_cancel_handler_f(release_frame_requests);
+            frame_requests.resume();
+        }
+        Self {
+            frame_requests,
+            registration: None,
         }
     }
 
-    pub fn start(&mut self) -> Result<()> {
-        unsafe {
-            if !self.frame_requests_resumed {
-                dispatch_resume(crate::dispatch_sys::dispatch_object_t {
-                    _ds: self.frame_requests,
-                });
-                self.frame_requests_resumed = true;
-            }
-            self.display_link.as_mut().unwrap().start()?;
-        }
+    pub fn start(&mut self, display_id: CGDirectDisplayID) -> Result<()> {
+        self.stop();
+        let subscriber_id = subscribe(display_id, self.frame_requests.clone())?;
+        self.registration = Some((display_id, subscriber_id));
         Ok(())
+    }
+
+    pub fn stop(&mut self) {
+        if let Some((display_id, subscriber_id)) = self.registration.take() {
+            unsubscribe(display_id, subscriber_id);
+        }
     }
 }
 
-impl Drop for DisplayLink {
+impl Drop for WindowFrameSource {
     fn drop(&mut self) {
-        unsafe {
-            self.display_link.as_mut().unwrap().stop().log_err();
-        }
-        // We see occasional segfaults on the CVDisplayLink thread.
-        //
-        // It seems possible that this happens because CVDisplayLinkRelease releases the CVDisplayLink
-        // on the main thread immediately, but the background thread that CVDisplayLink uses for timers
-        // is still accessing it.
-        //
-        // We might also want to upgrade to CADisplayLink, but that requires dropping old macOS support.
-        std::mem::forget(self.display_link.take());
-        unsafe {
-            dispatch_source_cancel(self.frame_requests);
-            if !self.frame_requests_resumed {
-                dispatch_resume(crate::dispatch_sys::dispatch_object_t {
-                    _ds: self.frame_requests,
-                });
-            }
-        }
+        self.stop();
+        self.frame_requests.cancel();
     }
 }
 

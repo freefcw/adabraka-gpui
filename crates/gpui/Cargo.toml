@@ -696,6 +696,11 @@ version = "=21.0.0"
 version = "0.5.2"
 features = ["metal"]
 
+[target.'cfg(target_os = "macos")'.dependencies.dispatch2]
+version = "0.3.1"
+features = ["std"]
+default-features = false
+
 [target.'cfg(target_os = "macos")'.dependencies.font-kit]
 version = "0.14.1-zed"
 optional = true
