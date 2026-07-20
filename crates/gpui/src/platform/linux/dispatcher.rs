@@ -126,9 +126,11 @@ impl PlatformDispatcher for LinuxDispatcher {
     }
 
     fn dispatch_after(&self, duration: Duration, runnable: Runnable) {
-        self.timer_sender
-            .send(TimerAfter { duration, runnable })
-            .ok();
+        if let Err(error) = self.timer_sender.send(TimerAfter { duration, runnable }) {
+            // Dropping a scheduled runnable cancels its task and can make an
+            // awaiting task panic. During shutdown, leave it pending instead.
+            std::mem::forget(error);
+        }
     }
 
     fn park(&self, timeout: Option<Duration>) -> bool {
