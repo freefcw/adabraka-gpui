@@ -1093,6 +1093,48 @@ fn default_bounds(display_id: Option<DisplayId>, cx: &mut App) -> Bounds<Pixels>
         })
 }
 
+fn border_only_quad_strips(
+    outer_bounds: Bounds<ScaledPixels>,
+    widths: Edges<ScaledPixels>,
+    radii: Corners<ScaledPixels>,
+) -> Option<[Bounds<ScaledPixels>; 4]> {
+    let antialias_slack = point(ScaledPixels(1.0), ScaledPixels(1.0));
+    let top_left_inset = point(
+        widths.left,
+        widths.top.max(radii.top_left).max(radii.top_right),
+    ) + antialias_slack;
+    let bottom_right_inset = point(
+        widths.right,
+        widths.bottom.max(radii.bottom_left).max(radii.bottom_right),
+    ) + antialias_slack;
+    let inner_bounds = Bounds::from_corners(
+        outer_bounds.origin + top_left_inset,
+        outer_bounds.bottom_right() - bottom_right_inset,
+    );
+    if inner_bounds.is_empty() {
+        return None;
+    }
+
+    Some([
+        Bounds::from_corners(
+            outer_bounds.origin,
+            point(outer_bounds.right(), inner_bounds.top()),
+        ),
+        Bounds::from_corners(
+            point(outer_bounds.left(), inner_bounds.bottom()),
+            outer_bounds.bottom_right(),
+        ),
+        Bounds::from_corners(
+            point(outer_bounds.left(), inner_bounds.top()),
+            inner_bounds.bottom_left(),
+        ),
+        Bounds::from_corners(
+            inner_bounds.top_right(),
+            point(outer_bounds.right(), inner_bounds.bottom()),
+        ),
+    ])
+}
+
 impl Window {
     pub(crate) fn new(
         handle: AnyWindowHandle,
@@ -3363,7 +3405,7 @@ impl Window {
         let opacity = self.element_opacity();
         let snapped_bounds = self.snap_bounds(quad.bounds);
         let snapped_border_widths = self.snap_border_widths(quad.border_widths);
-        self.next_frame.scene.insert_primitive(Quad {
+        let quad = Quad {
             order: 0,
             bounds: snapped_bounds,
             content_mask: self.snapped_content_mask(),
@@ -3377,7 +3419,31 @@ impl Window {
             transform: quad.transform,
             blend_mode: quad.blend_mode as u32,
             _pad_end: 0,
-        });
+        };
+
+        if !quad.background.is_transparent() {
+            self.next_frame.scene.insert_primitive(quad);
+            return;
+        }
+
+        let Some(strips) =
+            border_only_quad_strips(quad.bounds, quad.border_widths, quad.corner_radii)
+        else {
+            self.next_frame.scene.insert_primitive(quad);
+            return;
+        };
+
+        for strip in strips {
+            let mask_bounds = quad.content_mask.bounds.intersect(&strip);
+            if !mask_bounds.is_empty() {
+                self.next_frame.scene.insert_primitive(Quad {
+                    content_mask: ContentMask {
+                        bounds: mask_bounds,
+                    },
+                    ..quad
+                });
+            }
+        }
     }
 
     /// Paint the given `Path` into the scene for the next frame at the current z-index.
@@ -5853,7 +5919,7 @@ pub fn outline(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Context, Render, TestAppContext, canvas, div, px, size};
+    use crate::{Context, Render, TestAppContext, canvas, div, hsla, px, size};
     use std::{cell::Cell, rc::Rc};
 
     struct RootView {
@@ -5918,5 +5984,97 @@ mod tests {
         .unwrap();
 
         assert_eq!(child_bounds.get().size, size(px(300.), px(200.)));
+    }
+
+    fn scaled(value: f32) -> ScaledPixels {
+        ScaledPixels(value)
+    }
+
+    #[test]
+    fn border_only_quad_strips_cover_asymmetric_borders_and_corners() {
+        let bounds = Bounds::new(
+            point(scaled(0.), scaled(0.)),
+            size(scaled(100.), scaled(80.)),
+        );
+        let widths = Edges {
+            top: scaled(6.),
+            right: scaled(4.),
+            bottom: scaled(8.),
+            left: scaled(2.),
+        };
+        let radii = Corners {
+            top_left: scaled(10.),
+            top_right: scaled(12.),
+            bottom_right: scaled(16.),
+            bottom_left: scaled(14.),
+        };
+
+        let strips = border_only_quad_strips(bounds, widths, radii).unwrap();
+        assert_eq!(
+            strips,
+            [
+                Bounds::from_corners(
+                    point(scaled(0.), scaled(0.)),
+                    point(scaled(100.), scaled(13.)),
+                ),
+                Bounds::from_corners(
+                    point(scaled(0.), scaled(63.)),
+                    point(scaled(100.), scaled(80.)),
+                ),
+                Bounds::from_corners(
+                    point(scaled(0.), scaled(13.)),
+                    point(scaled(3.), scaled(63.)),
+                ),
+                Bounds::from_corners(
+                    point(scaled(95.), scaled(13.)),
+                    point(scaled(100.), scaled(63.)),
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn border_only_quad_keeps_one_primitive_when_interior_is_too_small() {
+        let bounds = Bounds::new(
+            point(scaled(0.), scaled(0.)),
+            size(scaled(10.), scaled(10.)),
+        );
+        let widths = Edges {
+            top: scaled(5.),
+            right: scaled(5.),
+            bottom: scaled(5.),
+            left: scaled(5.),
+        };
+
+        assert!(border_only_quad_strips(bounds, widths, Corners::default()).is_none());
+    }
+
+    struct BorderOnlyQuadView;
+
+    impl Render for BorderOnlyQuadView {
+        fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+            canvas(
+                |_, _, _| {},
+                |bounds, _, window, _| {
+                    window.paint_quad(outline(bounds, hsla(0., 0., 1., 1.), BorderStyle::Solid));
+                },
+            )
+            .size(px(100.))
+        }
+    }
+
+    #[test]
+    fn border_only_quad_emits_four_clipped_primitives() {
+        let mut cx = TestAppContext::single();
+        let window = cx.add_window(|_, _| BorderOnlyQuadView);
+
+        let primitive_count = cx
+            .update_window(window.into(), |_, window, cx| {
+                window.draw(cx).clear();
+                window.rendered_frame.scene.quads.len()
+            })
+            .unwrap();
+
+        assert_eq!(primitive_count, 4);
     }
 }
