@@ -657,14 +657,18 @@ impl DirectWriteState {
             }
 
             let mut runs = Vec::new();
-            let renderer_context = RendererContext {
+            let mut renderer_context = RendererContext {
                 text_system: self,
                 index_converter: StringIndexConverter::new(text),
                 runs: &mut runs,
                 width: 0.0,
             };
             text_layout.Draw(
-                Some(&renderer_context as *const _ as _),
+                Some(
+                    (&raw mut renderer_context)
+                        .cast::<std::ffi::c_void>()
+                        .cast_const(),
+                ),
                 &text_renderer.0,
                 0.0,
                 0.0,
@@ -869,6 +873,8 @@ impl DirectWriteState {
         params: &RenderGlyphParams,
         glyph_bounds: Bounds<DevicePixels>,
     ) -> Result<Vec<u8>> {
+        // This path drives the shared, non-thread-safe D3D11 immediate context.
+        // Text rasterization must remain on the main UI thread.
         let bitmap_size = glyph_bounds.size;
         let subpixel_shift = params
             .subpixel_variant
@@ -1152,6 +1158,7 @@ impl DirectWriteState {
                 )
             };
         }
+        unsafe { device_context.Unmap(&staging_texture, 0) };
 
         // Convert from premultiplied to straight alpha
         for chunk in rasterized.chunks_exact_mut(4) {
@@ -1497,13 +1504,34 @@ impl IDWriteTextRenderer_Impl for TextRenderer_Impl {
             context.text_system.select_font(&font_struct)
         };
 
-        let glyph_ids = unsafe { std::slice::from_raw_parts(glyphrun.glyphIndices, glyph_count) };
-        let glyph_advances =
-            unsafe { std::slice::from_raw_parts(glyphrun.glyphAdvances, glyph_count) };
-        let glyph_offsets =
-            unsafe { std::slice::from_raw_parts(glyphrun.glyphOffsets, glyph_count) };
-        let cluster_map =
-            unsafe { std::slice::from_raw_parts(desc.clusterMap, desc.stringLength as usize) };
+        let glyph_ids = unsafe {
+            slice_from_nullable(
+                glyphrun.glyphIndices,
+                glyph_count,
+                "DirectWrite returned a null glyph indices array",
+            )?
+        };
+        let glyph_advances = unsafe {
+            slice_from_nullable(
+                glyphrun.glyphAdvances,
+                glyph_count,
+                "DirectWrite returned a null glyph advances array",
+            )?
+        };
+        let glyph_offsets = unsafe {
+            slice_from_nullable(
+                glyphrun.glyphOffsets,
+                glyph_count,
+                "DirectWrite returned a null glyph offsets array",
+            )?
+        };
+        let cluster_map = unsafe {
+            slice_from_nullable(
+                desc.clusterMap,
+                desc.stringLength as usize,
+                "DirectWrite returned a null cluster map",
+            )?
+        };
 
         let mut cluster_analyzer = ClusterAnalyzer::new(cluster_map, glyph_count);
         let mut utf16_idx = desc.textPosition as usize;
@@ -1580,6 +1608,30 @@ impl IDWriteTextRenderer_Impl for TextRenderer_Impl {
             E_NOTIMPL,
             "DrawInlineObject unimplemented",
         ))
+    }
+}
+
+/// Interprets an optional DirectWrite array pointer as a slice.
+///
+/// A null pointer is valid only for an empty array. DirectWrite input with a
+/// null pointer and nonzero length is rejected before constructing a Rust slice.
+///
+/// # Safety
+///
+/// A non-null `ptr` must reference at least `len` initialized values that live
+/// for the returned slice's lifetime.
+unsafe fn slice_from_nullable<'a, T>(
+    ptr: *const T,
+    len: usize,
+    null_error_message: &str,
+) -> windows::core::Result<&'a [T]> {
+    if ptr.is_null() {
+        if len != 0 {
+            return Err(Error::new(E_INVALIDARG, null_error_message));
+        }
+        Ok(&[])
+    } else {
+        Ok(unsafe { std::slice::from_raw_parts(ptr, len) })
     }
 }
 

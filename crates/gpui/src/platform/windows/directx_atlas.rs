@@ -267,6 +267,23 @@ impl DirectXAtlasTexture {
         bounds: Bounds<DevicePixels>,
         bytes: &[u8],
     ) {
+        let row_bytes = bounds.size.width.to_bytes(self.bytes_per_pixel as u8) as usize;
+        let height = bounds.size.height.0.max(0) as usize;
+        let Some(expected_bytes) = row_bytes.checked_mul(height) else {
+            log::error!("DirectX atlas upload size overflow; skipping upload");
+            return;
+        };
+        if bytes.len() < expected_bytes {
+            log::error!(
+                "DirectX atlas source has {} bytes, but the {}x{} region requires {}; skipping upload",
+                bytes.len(),
+                bounds.size.width.0,
+                bounds.size.height.0,
+                expected_bytes,
+            );
+            return;
+        }
+
         unsafe {
             device_context.UpdateSubresource(
                 &self.texture,
@@ -280,7 +297,7 @@ impl DirectXAtlasTexture {
                     back: 1,
                 }),
                 bytes.as_ptr() as _,
-                bounds.size.width.to_bytes(self.bytes_per_pixel as u8),
+                row_bytes as u32,
                 0,
             );
         }
