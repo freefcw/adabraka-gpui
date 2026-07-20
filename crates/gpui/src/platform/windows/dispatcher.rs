@@ -1,4 +1,5 @@
 use std::{
+    ffi::c_void,
     thread::{ThreadId, current},
     time::Duration,
 };
@@ -8,14 +9,14 @@ use flume::Sender;
 use parking::Parker;
 use parking_lot::Mutex;
 use util::ResultExt;
-use windows::{
+use windows::Win32::{
+    Foundation::{FILETIME, LPARAM, WPARAM},
     System::Threading::{
-        ThreadPool, ThreadPoolTimer, TimerElapsedHandler, WorkItemHandler, WorkItemPriority,
+        CloseThreadpoolTimer, CreateThreadpoolTimer, PTP_CALLBACK_INSTANCE, PTP_TIMER,
+        SetThreadpoolTimer, TP_CALLBACK_ENVIRON_V3, TP_CALLBACK_PRIORITY_HIGH,
+        TrySubmitThreadpoolCallback,
     },
-    Win32::{
-        Foundation::{LPARAM, WPARAM},
-        UI::WindowsAndMessaging::PostMessageW,
-    },
+    UI::WindowsAndMessaging::PostMessageW,
 };
 
 use crate::{
@@ -50,25 +51,42 @@ impl WindowsDispatcher {
     }
 
     fn dispatch_on_threadpool(&self, runnable: Runnable) {
-        let handler = {
-            let mut task_wrapper = Some(runnable);
-            WorkItemHandler::new(move |_| {
-                task_wrapper.take().unwrap().run();
-                Ok(())
-            })
+        let environment = TP_CALLBACK_ENVIRON_V3 {
+            Version: 3,
+            CallbackPriority: TP_CALLBACK_PRIORITY_HIGH,
+            Size: size_of::<TP_CALLBACK_ENVIRON_V3>() as u32,
+            ..Default::default()
         };
-        ThreadPool::RunWithPriorityAsync(&handler, WorkItemPriority::High).log_err();
+        let context = Box::into_raw(Box::new(runnable)).cast::<c_void>();
+
+        // On submission failure the callback cannot consume `context`. Leaking
+        // it keeps the scheduled task pending instead of cancelling it.
+        unsafe {
+            TrySubmitThreadpoolCallback(Some(run_work_callback), Some(context), Some(&environment))
+                .log_err();
+        }
     }
 
     fn dispatch_on_threadpool_after(&self, runnable: Runnable, duration: Duration) {
-        let handler = {
-            let mut task_wrapper = Some(runnable);
-            TimerElapsedHandler::new(move |_| {
-                task_wrapper.take().unwrap().run();
-                Ok(())
-            })
-        };
-        ThreadPoolTimer::CreateTimer(&handler, duration.into()).log_err();
+        let context = Box::into_raw(Box::new(runnable)).cast::<c_void>();
+
+        unsafe {
+            let Ok(timer) = CreateThreadpoolTimer(Some(run_timer_callback), Some(context), None)
+            else {
+                // Keep the task pending when Windows cannot create the timer.
+                return;
+            };
+
+            // Negative FILETIME values are relative delays in 100ns ticks.
+            // Round up so the timer never fires before the requested duration.
+            let ticks = duration.as_nanos().div_ceil(100).clamp(1, i64::MAX as u128) as i64;
+            let due = (-ticks) as u64;
+            let due_time = FILETIME {
+                dwLowDateTime: due as u32,
+                dwHighDateTime: (due >> 32) as u32,
+            };
+            SetThreadpoolTimer(timer, Some(&due_time), 0, None);
+        }
     }
 }
 
@@ -125,4 +143,30 @@ impl PlatformDispatcher for WindowsDispatcher {
     fn unparker(&self) -> parking::Unparker {
         self.parker.lock().unparker()
     }
+}
+
+/// Reclaims the runnable transferred to a Windows thread-pool callback.
+///
+/// # Safety
+///
+/// `context` must come from `Box::into_raw(Box::new(runnable))` and this
+/// function must be called exactly once for that pointer.
+unsafe fn take_runnable(context: *mut c_void) -> Runnable {
+    *unsafe { Box::from_raw(context.cast::<Runnable>()) }
+}
+
+unsafe extern "system" fn run_work_callback(
+    _instance: PTP_CALLBACK_INSTANCE,
+    context: *mut c_void,
+) {
+    unsafe { take_runnable(context) }.run();
+}
+
+unsafe extern "system" fn run_timer_callback(
+    _instance: PTP_CALLBACK_INSTANCE,
+    context: *mut c_void,
+    timer: PTP_TIMER,
+) {
+    unsafe { take_runnable(context) }.run();
+    unsafe { CloseThreadpoolTimer(timer) };
 }
