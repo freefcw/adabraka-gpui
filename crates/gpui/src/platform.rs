@@ -736,6 +736,9 @@ pub(crate) trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
     fn show_window_menu(&self, _position: Point<Pixels>) {}
     fn start_window_move(&self) {}
     fn start_window_resize(&self, _edge: ResizeEdge) {}
+    fn set_exclusive_zone(&self, _zone: Pixels) {}
+    #[cfg(all(any(target_os = "linux", target_os = "freebsd"), feature = "wayland"))]
+    fn set_exclusive_edge(&self, _edge: layer_shell::Anchor) {}
     fn set_input_region(&self, _region: Option<&[Bounds<Pixels>]>) {}
     fn window_decorations(&self) -> Decorations {
         Decorations::Server

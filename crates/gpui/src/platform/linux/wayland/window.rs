@@ -153,6 +153,26 @@ impl WaylandWindowRole {
     fn is_layer_shell(&self) -> bool {
         matches!(self, WaylandWindowRole::LayerShell { .. })
     }
+
+    fn set_exclusive_zone(&self, zone: i32) -> bool {
+        let WaylandWindowRole::LayerShell { layer_surface, .. } = self else {
+            return false;
+        };
+        layer_surface.set_exclusive_zone(zone);
+        true
+    }
+
+    fn set_exclusive_edge(&self, edge: Anchor) -> bool {
+        let WaylandWindowRole::LayerShell {
+            layer_surface,
+            options,
+            ..
+        } = self
+        else {
+            return false;
+        };
+        apply_exclusive_edge(layer_surface, options.anchor, edge)
+    }
 }
 
 #[derive(Clone)]
@@ -499,15 +519,35 @@ fn configure_layer_shell_surface(
     ));
 
     if let Some(exclusive_edge) = options.exclusive_edge {
-        if layer_shell_supports_exclusive_edge(layer_surface.version()) {
-            layer_surface.set_exclusive_edge(wayland_anchor(exclusive_edge));
-        } else {
-            log::warn!(
-                "Wayland: wlr-layer-shell v{} does not support selecting an exclusive edge; the compositor will infer it from the anchors.",
-                layer_surface.version()
-            );
-        }
+        apply_exclusive_edge(layer_surface, options.anchor, exclusive_edge);
     }
+}
+
+fn exclusive_edge_is_valid(anchor: Anchor, edge: Anchor) -> bool {
+    edge.bits().count_ones() == 1 && anchor.contains(edge)
+}
+
+fn apply_exclusive_edge(
+    layer_surface: &zwlr_layer_surface_v1::ZwlrLayerSurfaceV1,
+    anchor: Anchor,
+    edge: Anchor,
+) -> bool {
+    if !layer_shell_supports_exclusive_edge(layer_surface.version()) {
+        log::warn!(
+            "Wayland: wlr-layer-shell v{} does not support selecting an exclusive edge; the compositor will infer it from the anchors.",
+            layer_surface.version()
+        );
+        return false;
+    }
+    if !exclusive_edge_is_valid(anchor, edge) {
+        log::warn!(
+            "Wayland: ignoring exclusive edge {edge:?}; it must be one edge contained in anchor {anchor:?}"
+        );
+        return false;
+    }
+
+    layer_surface.set_exclusive_edge(wayland_anchor(edge));
+    true
 }
 
 fn layer_shell_supports_exclusive_edge(version: u32) -> bool {
@@ -1496,6 +1536,20 @@ impl PlatformWindow for WaylandWindow {
         self.borrow().visible
     }
 
+    fn set_exclusive_zone(&self, zone: Pixels) {
+        let state = self.borrow();
+        if state.role.set_exclusive_zone(f32::from(zone) as i32) {
+            state.surface.commit();
+        }
+    }
+
+    fn set_exclusive_edge(&self, edge: Anchor) {
+        let state = self.borrow();
+        if state.role.set_exclusive_edge(edge) {
+            state.surface.commit();
+        }
+    }
+
     fn set_input_region(&self, region: Option<&[Bounds<Pixels>]>) {
         let state = self.borrow();
         match region {
@@ -1836,6 +1890,17 @@ mod layer_shell_tests {
                 | zwlr_layer_surface_v1::Anchor::Left
                 | zwlr_layer_surface_v1::Anchor::Right
         );
+    }
+
+    #[test]
+    fn exclusive_edge_must_be_one_of_the_surface_anchors() {
+        let anchor = Anchor::TOP | Anchor::LEFT;
+
+        assert!(exclusive_edge_is_valid(anchor, Anchor::TOP));
+        assert!(exclusive_edge_is_valid(anchor, Anchor::LEFT));
+        assert!(!exclusive_edge_is_valid(anchor, Anchor::RIGHT));
+        assert!(!exclusive_edge_is_valid(anchor, Anchor::empty()));
+        assert!(!exclusive_edge_is_valid(anchor, Anchor::TOP | Anchor::LEFT));
     }
 
     #[test]

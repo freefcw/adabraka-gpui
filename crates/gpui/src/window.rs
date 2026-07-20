@@ -1758,6 +1758,18 @@ impl Window {
         self.platform_window.request_decorations(decorations);
     }
 
+    /// Sets how much space a Wayland layer-shell surface reserves from its anchored edge.
+    pub fn set_exclusive_zone(&self, zone: Pixels) {
+        self.platform_window.set_exclusive_zone(zone);
+    }
+
+    /// Selects the anchored edge used by a Wayland layer-shell surface's exclusive zone.
+    /// Invalid or unsupported edges are ignored by the platform implementation.
+    #[cfg(all(any(target_os = "linux", target_os = "freebsd"), feature = "wayland"))]
+    pub fn set_exclusive_edge(&self, edge: crate::layer_shell::Anchor) {
+        self.platform_window.set_exclusive_edge(edge);
+    }
+
     /// Start a window resize operation (Wayland)
     pub fn start_window_resize(&self, edge: ResizeEdge) {
         self.platform_window.start_window_resize(edge);
