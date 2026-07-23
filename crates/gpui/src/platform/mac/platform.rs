@@ -1454,8 +1454,9 @@ impl Platform for MacPlatform {
         super::permissions::accessibility_status()
     }
 
-    fn request_accessibility_permission(&self) {
+    fn request_accessibility_permission(&self) -> crate::PermissionRequestStatus {
         super::permissions::request_accessibility_permission();
+        crate::PermissionRequestStatus::Requested
     }
 
     fn set_auto_launch(&self, app_id: &str, enabled: bool) -> Result<()> {

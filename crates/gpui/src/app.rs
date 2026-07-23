@@ -39,13 +39,13 @@ use crate::{
     Bounds, ClipboardItem, CrashReport, CursorStyle, DialogOptions, DispatchPhase, DisplayId,
     EventEmitter, FocusHandle, FocusMap, FocusedWindowInfo, ForegroundExecutor, Global, KeyBinding,
     KeyContext, Keymap, Keystroke, LayoutId, MediaKeyEvent, Menu, MenuItem, NetworkStatus, OsInfo,
-    OwnedMenu, PathPromptOptions, PermissionStatus, Pixels, Platform, PlatformDisplay,
-    PlatformKeyboardLayout, PlatformKeyboardMapper, Point, PowerSaveBlockerKind, PromptBuilder,
-    PromptButton, PromptHandle, PromptLevel, Render, RenderImage, RenderablePromptHandle,
-    Reservation, ScreenCaptureSource, SharedString, Size, SubscriberSet, Subscription, SvgRenderer,
-    SystemPowerEvent, Task, TextSystem, ThermalState, TrayAnchor, TrayIconClickEvent,
-    TrayIconEvent, TrayIconRenderingMode, TrayMenuItem, Window, WindowAppearance, WindowHandle,
-    WindowId, WindowInvalidator, WindowPosition,
+    OwnedMenu, PathPromptOptions, PermissionRequestStatus, PermissionStatus, Pixels, Platform,
+    PlatformDisplay, PlatformKeyboardLayout, PlatformKeyboardMapper, Point, PowerSaveBlockerKind,
+    PromptBuilder, PromptButton, PromptHandle, PromptLevel, Render, RenderImage,
+    RenderablePromptHandle, Reservation, ScreenCaptureSource, SharedString, Size, SubscriberSet,
+    Subscription, SvgRenderer, SystemPowerEvent, Task, TextSystem, ThermalState, TrayAnchor,
+    TrayIconClickEvent, TrayIconEvent, TrayIconRenderingMode, TrayMenuItem, Window,
+    WindowAppearance, WindowHandle, WindowId, WindowInvalidator, WindowPosition,
     colors::{Colors, GlobalColors},
     current_platform, hash, init_app_menus, point, px, size,
 };
@@ -1296,8 +1296,8 @@ impl App {
     }
 
     /// Request accessibility permission from the user.
-    pub fn request_accessibility_permission(&self) {
-        self.platform.request_accessibility_permission();
+    pub fn request_accessibility_permission(&self) -> PermissionRequestStatus {
+        self.platform.request_accessibility_permission()
     }
 
     /// Check microphone permission status.
@@ -1306,9 +1306,12 @@ impl App {
     }
 
     /// Request microphone permission from the user.
-    pub fn request_microphone_permission(&self, callback: impl FnOnce(bool) + 'static) {
+    pub fn request_microphone_permission(
+        &self,
+        callback: impl FnOnce(bool) + 'static,
+    ) -> PermissionRequestStatus {
         self.platform
-            .request_microphone_permission(Box::new(callback));
+            .request_microphone_permission(Box::new(callback))
     }
 
     /// Set whether the application should auto-launch at login.

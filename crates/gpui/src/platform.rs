@@ -350,15 +350,21 @@ pub(crate) trait Platform: 'static {
     }
 
     fn accessibility_status(&self) -> PermissionStatus {
-        PermissionStatus::Granted
+        PermissionStatus::Unavailable
     }
-    fn request_accessibility_permission(&self) {}
+    fn request_accessibility_permission(&self) -> PermissionRequestStatus {
+        PermissionRequestStatus::Unavailable
+    }
 
     fn microphone_status(&self) -> PermissionStatus {
-        PermissionStatus::Granted
+        PermissionStatus::Unavailable
     }
-    fn request_microphone_permission(&self, callback: Box<dyn FnOnce(bool)>) {
-        callback(true);
+    fn request_microphone_permission(
+        &self,
+        callback: Box<dyn FnOnce(bool)>,
+    ) -> PermissionRequestStatus {
+        callback(false);
+        PermissionRequestStatus::Unavailable
     }
 
     fn set_auto_launch(&self, _app_id: &str, _enabled: bool) -> Result<()> {
@@ -1948,6 +1954,17 @@ pub enum PermissionStatus {
     Denied,
     /// Permission has not yet been requested.
     NotDetermined,
+    /// The platform does not expose this permission capability.
+    Unavailable,
+}
+
+/// Whether the platform accepted a permission request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PermissionRequestStatus {
+    /// The platform accepted the request and will resolve it through its normal flow.
+    Requested,
+    /// The platform does not expose this permission request.
+    Unavailable,
 }
 
 /// System power state change events.
