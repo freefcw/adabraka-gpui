@@ -817,6 +817,7 @@ impl MacWindow {
         WindowParams {
             bounds,
             atlas_initial_size,
+            instance_buffer_initial_size: _,
             titlebar,
             kind,
             is_movable,

@@ -3,7 +3,9 @@ use crate::platform::AtlasTextureId;
 use crate::scene::{
     MonochromeSprite, PolychromeSprite, PrimitiveBatch, Quad, Scene, Shadow, Underline,
 };
-use crate::{Background, Bounds, DevicePixels, GpuSpecs, Path, Point, ScaledPixels, Size};
+use crate::{
+    Background, Bounds, DevicePixels, GpuResourceBudget, GpuSpecs, Path, Point, ScaledPixels, Size,
+};
 use bytemuck::{Pod, Zeroable};
 use log::warn;
 #[cfg(not(target_family = "wasm"))]
@@ -141,6 +143,7 @@ pub struct WgpuRenderer {
     path_globals_offset: u64,
     gamma_offset: u64,
     instance_buffer_capacity: u64,
+    requested_instance_buffer_initial_size: usize,
     max_buffer_size: u64,
     storage_buffer_alignment: u64,
     rendering_params: RenderingParameters,
@@ -185,6 +188,7 @@ impl WgpuRenderer {
         config: WgpuSurfaceConfig,
         compositor_gpu: Option<CompositorGpuHint>,
         atlas_initial_size: Size<DevicePixels>,
+        instance_buffer_initial_size: usize,
     ) -> anyhow::Result<Self>
     where
         W: HasWindowHandle + HasDisplayHandle + std::fmt::Debug + Send + Sync + Clone + 'static,
@@ -235,6 +239,7 @@ impl WgpuRenderer {
             config,
             compositor_gpu,
             atlas,
+            instance_buffer_initial_size,
         )
     }
 
@@ -245,6 +250,7 @@ impl WgpuRenderer {
         config: WgpuSurfaceConfig,
         compositor_gpu: Option<CompositorGpuHint>,
         atlas: Arc<WgpuAtlas>,
+        instance_buffer_initial_size: usize,
     ) -> anyhow::Result<Self> {
         let surface_caps = surface.get_capabilities(&context.adapter);
         let preferred_formats = [
@@ -364,7 +370,17 @@ impl WgpuRenderer {
 
         let max_buffer_size = device.limits().max_buffer_size;
         let storage_buffer_alignment = device.limits().min_storage_buffer_offset_alignment as u64;
-        let initial_instance_buffer_capacity = 2 * 1024 * 1024;
+        let initial_instance_buffer_capacity =
+            GpuResourceBudget::normalize_instance_buffer_capacity(
+                instance_buffer_initial_size,
+                max_buffer_size,
+            );
+        if initial_instance_buffer_capacity != instance_buffer_initial_size as u64 {
+            warn!(
+                "clamped WGPU instance buffer initial size from {} to {} bytes",
+                instance_buffer_initial_size, initial_instance_buffer_capacity
+            );
+        }
         let instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("instance_buffer"),
             size: initial_instance_buffer_capacity,
@@ -455,6 +471,7 @@ impl WgpuRenderer {
             path_globals_offset,
             gamma_offset,
             instance_buffer_capacity: initial_instance_buffer_capacity,
+            requested_instance_buffer_initial_size: instance_buffer_initial_size,
             max_buffer_size,
             storage_buffer_alignment,
             rendering_params,
@@ -1710,6 +1727,7 @@ impl WgpuRenderer {
             preferred_present_mode: Some(self.surface_config.present_mode),
         };
         let gpu_context = Rc::clone(gpu_context);
+        let requested_instance_buffer_initial_size = self.requested_instance_buffer_initial_size;
         let ctx_ref = gpu_context.borrow();
         let context = ctx_ref.as_ref().expect("context should exist");
 
@@ -1723,6 +1741,7 @@ impl WgpuRenderer {
             config,
             self.compositor_gpu,
             self.atlas.clone(),
+            requested_instance_buffer_initial_size,
         )?;
 
         log::info!("GPU recovery complete");

@@ -215,6 +215,7 @@ impl WaylandWindowState {
                 config,
                 None,
                 options.atlas_initial_size,
+                options.instance_buffer_initial_size,
             )?
         };
 

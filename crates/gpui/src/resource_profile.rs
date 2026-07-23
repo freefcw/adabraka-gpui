@@ -213,6 +213,12 @@ pub struct TextResourceBudget {
     pub raster_bounds_cache_max_entries: Option<usize>,
 }
 
+#[cfg_attr(
+    not(any(target_os = "linux", target_os = "freebsd", test)),
+    allow(dead_code)
+)]
+const MIN_INSTANCE_BUFFER_CAPACITY: u64 = 16;
+
 /// GPU resource budget.
 #[derive(Clone, Debug)]
 pub struct GpuResourceBudget {
@@ -240,4 +246,47 @@ pub struct GpuResourceBudget {
     ///
     /// Default: 2 MiB for desktop applications.
     pub instance_buffer_initial_size: usize,
+}
+
+impl GpuResourceBudget {
+    /// Returns a renderer-safe instance-buffer capacity for a requested budget.
+    ///
+    /// Renderers require at least 16 bytes for a dynamic buffer binding, while
+    /// a device may impose a smaller upper bound than the requested profile.
+    #[cfg_attr(
+        not(any(target_os = "linux", target_os = "freebsd", test)),
+        allow(dead_code)
+    )]
+    pub(crate) fn normalize_instance_buffer_capacity(
+        instance_buffer_initial_size: usize,
+        max_buffer_size: u64,
+    ) -> u64 {
+        (instance_buffer_initial_size as u64)
+            .max(MIN_INSTANCE_BUFFER_CAPACITY)
+            .min(max_buffer_size)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::GpuResourceBudget;
+
+    #[test]
+    fn instance_buffer_capacity_uses_the_requested_budget_within_device_limits() {
+        assert_eq!(
+            GpuResourceBudget::normalize_instance_buffer_capacity(768 * 1024, 8 * 1024 * 1024),
+            768 * 1024
+        );
+        assert_eq!(
+            GpuResourceBudget::normalize_instance_buffer_capacity(0, 8 * 1024 * 1024),
+            16
+        );
+        assert_eq!(
+            GpuResourceBudget::normalize_instance_buffer_capacity(
+                16 * 1024 * 1024,
+                8 * 1024 * 1024,
+            ),
+            8 * 1024 * 1024
+        );
+    }
 }

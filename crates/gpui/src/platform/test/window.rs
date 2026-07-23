@@ -14,6 +14,7 @@ use std::{
 
 pub(crate) struct TestWindowState {
     pub(crate) bounds: Bounds<Pixels>,
+    pub(crate) instance_buffer_initial_size: usize,
     pub(crate) handle: AnyWindowHandle,
     display: Rc<dyn PlatformDisplay>,
     pub(crate) title: Option<String>,
@@ -109,6 +110,7 @@ impl TestWindow {
     ) -> Self {
         Self(Rc::new(Mutex::new(TestWindowState {
             bounds: params.bounds,
+            instance_buffer_initial_size: params.instance_buffer_initial_size,
             display,
             platform,
             handle,

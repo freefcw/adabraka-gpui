@@ -779,7 +779,14 @@ impl X11WindowState {
                     transparent: false,
                     preferred_present_mode: None,
                 };
-                WgpuRenderer::new(gpu_context, &raw_window, config, None, params.atlas_initial_size)?
+                WgpuRenderer::new(
+                    gpu_context,
+                    &raw_window,
+                    config,
+                    None,
+                    params.atlas_initial_size,
+                    params.instance_buffer_initial_size,
+                )?
             };
 
             let display = Rc::new(X11Display::new(xcb, scale_factor, x_screen_index)?);
@@ -2051,6 +2058,7 @@ mod tests {
         WindowParams {
             bounds: Bounds::new(point(px(10.0), px(20.0)), size(px(320.0), px(240.0))),
             atlas_initial_size: size(DevicePixels(1024), DevicePixels(1024)),
+            instance_buffer_initial_size: 2 * 1024 * 1024,
             titlebar: None,
             kind: WindowKind::Normal,
             is_movable: true,
