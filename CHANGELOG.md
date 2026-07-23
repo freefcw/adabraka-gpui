@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+### Breaking changes
+
+- **Permission capability reporting** — `PermissionStatus` now includes `Unavailable`, and
+  accessibility and microphone permission requests return `PermissionRequestStatus`. Unsupported
+  platforms no longer report permissions as granted.
+
+### Features
+
+- **Screen-capture lifecycle** — callers can opt into exactly-once `Ended`, `Cancelled`, or `Failed`
+  notifications for streams that start successfully. Existing `ScreenCaptureSource::stream`
+  implementations remain source-compatible.
+
+### Fixes
+
+- **macOS screen capture** — releases native setup, startup-failure, and frame-callback resources
+  so repeated screen-sharing attempts do not accumulate them.
+
+### Improvements
+
+- **Linux/WGPU resource profiles** — new windows now apply
+  `GpuResourceBudget::instance_buffer_initial_size`, including after GPU device recovery, while
+  clamping the allocation to renderer and device limits.
+
 ## 0.7.0 (2026-07-11)
 
 ### Breaking changes

@@ -38,6 +38,7 @@ Designed for full desktop applications like IDEs, editors, or browsers.
 **Characteristics:**
 - Large text layout caches (10,000 entries)
 - Standard atlas textures (1024×1024)
+- 2 MiB initial instance buffer
 - 1 MiB element arena
 - Unlimited raster bounds cache
 
@@ -59,6 +60,7 @@ Designed for lightweight utility windows like settings panels, dialog boxes, or 
 **Characteristics:**
 - Moderate text layout caches (3,000 entries)
 - Standard atlas textures (1024×1024)
+- 1 MiB initial instance buffer
 - 512 KiB element arena
 - Raster bounds cache limited to 5,000 entries
 
@@ -80,6 +82,7 @@ Designed for minimal resource usage like tray icons, status bars, or notificatio
 **Characteristics:**
 - Small text layout caches (500 entries)
 - Smaller atlas textures (512×512)
+- 512 KiB initial instance buffer
 - 256 KiB element arena
 - Raster bounds cache limited to 2,000 entries
 
@@ -139,6 +142,25 @@ Controls the initial dimensions of GPU textures allocated for the glyph/image at
 - 512×512: Halves GPU memory, suitable for limited glyph sets
 - Smaller sizes may cause texture growth if large glyphs are used
 
+### Instance Buffer Initial Size
+
+Controls the initial capacity of each renderer's per-frame instance buffer.
+
+**Field:**
+- `instance_buffer_initial_size`: Initial capacity in bytes
+
+**How It Works:**
+- The configured value is applied when a WGPU renderer is created.
+- A renderer may grow beyond this value when a scene requires more space.
+- Values below the renderer minimum are raised to 16 bytes; values above the device limit are clamped.
+- The WGPU backend applies this setting on Linux. Other backends may use their own support path.
+
+**Tuning Guidelines:**
+- 2 MiB: default for desktop applications
+- 1 MiB: suitable for utility windows
+- 512 KiB: suitable for minimal applications
+- Increase it when complex scenes frequently trigger early buffer growth.
+
 ### Element Arena Size
 
 Controls the initial capacity of the per-thread element arena (bump allocator).
@@ -193,6 +215,7 @@ Application::new()
         },
         gpu: GpuResourceBudget {
             atlas_initial_size: 768,  // Non-standard size
+            instance_buffer_initial_size: 768 * 1024,
         },
         element_arena_size: 384 * 1024,  // 384 KiB
     }))
