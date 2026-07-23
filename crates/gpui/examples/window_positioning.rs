@@ -140,7 +140,10 @@ mod tests {
 
     fn test_bounds() -> (Bounds<Pixels>, Bounds<Pixels>) {
         let display = Bounds::new(point(px(0.0), px(0.0)), Size::new(px(1920.0), px(1080.0)));
-        let window = Bounds::new(point(px(1520.0), px(820.0)), Size::new(px(320.0), px(220.0)));
+        let window = Bounds::new(
+            point(px(1520.0), px(820.0)),
+            Size::new(px(320.0), px(220.0)),
+        );
         (display, window)
     }
 

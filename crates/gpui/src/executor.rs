@@ -893,10 +893,8 @@ mod tests {
         let executor = cx.executor();
         executor.set_block_on_ticks(0..=0);
 
-        let result = executor.block_with_timeout(
-            Duration::from_millis(1),
-            futures::future::pending::<()>(),
-        );
+        let result =
+            executor.block_with_timeout(Duration::from_millis(1), futures::future::pending::<()>());
 
         assert!(result.is_err());
     }

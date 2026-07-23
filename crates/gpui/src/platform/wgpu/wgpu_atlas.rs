@@ -463,7 +463,12 @@ mod tests {
             width: DevicePixels(1024),
             height: DevicePixels(1024),
         };
-        let atlas = WgpuAtlas::new(device, queue, wgpu::TextureFormat::Bgra8Unorm, default_atlas_size);
+        let atlas = WgpuAtlas::new(
+            device,
+            queue,
+            wgpu::TextureFormat::Bgra8Unorm,
+            default_atlas_size,
+        );
         let key = make_image_key(1, 0);
         let size = Size {
             width: DevicePixels(1),
@@ -485,7 +490,12 @@ mod tests {
             width: DevicePixels(1024),
             height: DevicePixels(1024),
         };
-        let atlas = WgpuAtlas::new(device, queue, wgpu::TextureFormat::Bgra8Unorm, default_atlas_size);
+        let atlas = WgpuAtlas::new(
+            device,
+            queue,
+            wgpu::TextureFormat::Bgra8Unorm,
+            default_atlas_size,
+        );
         let small = Size {
             width: DevicePixels(64),
             height: DevicePixels(64),

@@ -112,8 +112,8 @@ impl NSRange {
 
     fn to_range(self) -> Option<Range<usize>> {
         if self.is_valid() {
-            let start = self.location as usize;
-            let end = start + self.length as usize;
+            let start = self.location;
+            let end = start + self.length;
             Some(start..end)
         } else {
             None

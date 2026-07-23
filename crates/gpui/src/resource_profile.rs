@@ -44,12 +44,13 @@ use crate::{DevicePixels, Size};
 ///
 /// Use these as a convenient starting point. For fine-grained control, use
 /// [`AppProfile::Custom`] with a manually constructed [`AppResourceProfile`].
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub enum AppProfile {
     /// Full desktop application (IDE, editor, browser).
     ///
     /// Large caches, standard atlas size. This is the default if no profile is
     /// specified.
+    #[default]
     Desktop,
 
     /// Lightweight utility window (settings panel, dialog box).
@@ -76,12 +77,6 @@ impl AppProfile {
             AppProfile::Minimal => AppResourceProfile::minimal(),
             AppProfile::Custom(profile) => profile.clone(),
         }
-    }
-}
-
-impl Default for AppProfile {
-    fn default() -> Self {
-        AppProfile::Desktop
     }
 }
 

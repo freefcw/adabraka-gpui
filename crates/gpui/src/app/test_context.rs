@@ -145,7 +145,10 @@ impl TestAppContext {
         let asset_source = Arc::new(());
         let http_client = http_client::FakeHttpClient::with_404_response();
         let default_profile = crate::AppResourceProfile::default();
-        let text_system = Arc::new(TextSystem::new(platform.text_system(), &default_profile.text));
+        let text_system = Arc::new(TextSystem::new(
+            platform.text_system(),
+            &default_profile.text,
+        ));
 
         Self {
             app: App::new_app(platform.clone(), asset_source, http_client, default_profile),
@@ -600,7 +603,11 @@ impl TestApp {
     ) -> Self {
         let dispatcher = TestDispatcher::new(StdRng::seed_from_u64(0));
         Self {
-            cx: TestAppContext::build_with_text_system(dispatcher, None, Some(platform_text_system)),
+            cx: TestAppContext::build_with_text_system(
+                dispatcher,
+                None,
+                Some(platform_text_system),
+            ),
         }
     }
 
@@ -726,10 +733,7 @@ impl<V: 'static + Render> TestAppWindow<V> {
     }
 
     /// Updates the root view and then flushes pending effects.
-    pub fn update<R>(
-        &mut self,
-        f: impl FnOnce(&mut V, &mut Window, &mut Context<V>) -> R,
-    ) -> R {
+    pub fn update<R>(&mut self, f: impl FnOnce(&mut V, &mut Window, &mut Context<V>) -> R) -> R {
         let result = self.handle.update(&mut self.cx, f).unwrap();
         self.flush();
         result
@@ -1485,12 +1489,12 @@ mod test_app_tests {
         )
     ))]
     use crate::{TextRun, font};
+    #[cfg(target_os = "macos")]
+    use std::sync::atomic::AtomicBool;
     use std::sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
     };
-    #[cfg(target_os = "macos")]
-    use std::sync::atomic::AtomicBool;
     #[cfg(target_os = "macos")]
     use std::time::Duration;
 

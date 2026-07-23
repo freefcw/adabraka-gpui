@@ -329,7 +329,7 @@ impl MacPlatform {
         }))
     }
 
-    fn ensure_tray<'a>(state: &'a mut MacPlatformState) -> &'a MacTray {
+    fn ensure_tray(state: &mut MacPlatformState) -> &MacTray {
         state.tray.get_or_insert_with(MacTray::new)
     }
 

@@ -1,6 +1,6 @@
 use crate::{
-    swap_rgba_pa_to_bgra, AssetSource, DevicePixels, IsZero, RenderImage, Result, SharedString,
-    Size,
+    AssetSource, DevicePixels, IsZero, RenderImage, Result, SharedString, Size,
+    swap_rgba_pa_to_bgra,
 };
 use image::Frame;
 use resvg::tiny_skia::Pixmap;

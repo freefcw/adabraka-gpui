@@ -1455,7 +1455,7 @@ impl PlatformWindow for MacWindow {
                 let _: () = msg_send![button, setTag: ix as NSInteger];
 
                 if answer.is_cancel() {
-                    if let Some(key) = std::char::from_u32(super::events::ESCAPE_KEY as u32) {
+                    if let Some(key) = std::char::from_u32(super::events::ESCAPE_KEY) {
                         let _: () =
                             msg_send![button, setKeyEquivalent: ns_string(&key.to_string())];
                     }
