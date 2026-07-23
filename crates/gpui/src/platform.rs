@@ -497,6 +497,40 @@ pub trait ScreenCaptureSource {
         foreground_executor: &ForegroundExecutor,
         frame_callback: Box<dyn Fn(ScreenCaptureFrame) + Send>,
     ) -> oneshot::Receiver<Result<Box<dyn ScreenCaptureStream>>>;
+
+    /// Starts capture and reports its terminal state.
+    ///
+    /// Startup failures are returned through the receiver. Implementations
+    /// invoke `termination_callback` exactly once after a started stream ends,
+    /// is cancelled, or fails.
+    fn stream_with_termination(
+        &self,
+        _foreground_executor: &ForegroundExecutor,
+        _frame_callback: Box<dyn Fn(ScreenCaptureFrame) + Send>,
+        _termination_callback: ScreenCaptureTerminationCallback,
+    ) -> oneshot::Receiver<Result<Box<dyn ScreenCaptureStream>>> {
+        let (mut sender, receiver) = oneshot::channel();
+        sender
+            .send(Err(anyhow::anyhow!(
+                "runtime termination notification is not supported by this screen capture source"
+            )))
+            .ok();
+        receiver
+    }
+}
+
+/// Receives a single terminal state from a started screen-capture stream.
+pub type ScreenCaptureTerminationCallback = Box<dyn FnOnce(ScreenCaptureStreamTermination) + Send>;
+
+/// The terminal state of a started screen-capture stream.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ScreenCaptureStreamTermination {
+    /// The stream completed without an error.
+    Ended,
+    /// The stream was cancelled before completion.
+    Cancelled,
+    /// The stream ended because capture failed at runtime.
+    Failed(SharedString),
 }
 
 /// A video stream captured from a screen.

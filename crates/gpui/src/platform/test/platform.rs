@@ -2,9 +2,9 @@ use crate::{
     AnyWindowHandle, BackgroundExecutor, ClipboardItem, CursorStyle, DevicePixels,
     DummyKeyboardMapper, ForegroundExecutor, Keymap, NoopTextSystem, Platform, PlatformDisplay,
     PlatformKeyboardLayout, PlatformKeyboardMapper, PlatformTextSystem, PromptButton,
-    ScreenCaptureFrame, ScreenCaptureSource, ScreenCaptureStream, SourceMetadata, Task,
-    TestDisplay, TestWindow, TrayIconClickEvent, TrayIconEvent, TrayIconRenderingMode,
-    WindowAppearance, WindowParams, size,
+    ScreenCaptureFrame, ScreenCaptureSource, ScreenCaptureStream, ScreenCaptureStreamTermination,
+    ScreenCaptureTerminationCallback, SourceMetadata, Task, TestDisplay, TestWindow,
+    TrayIconClickEvent, TrayIconEvent, TrayIconRenderingMode, WindowAppearance, WindowParams, size,
 };
 use anyhow::Result;
 use collections::VecDeque;
@@ -48,10 +48,35 @@ pub(crate) struct TestPlatform {
 
 #[derive(Clone)]
 /// A fake screen capture source, used for testing.
-pub struct TestScreenCaptureSource {}
+pub struct TestScreenCaptureSource {
+    active_termination: Arc<Mutex<Option<Arc<TestStreamTerminationNotifier>>>>,
+}
 
 /// A fake screen capture stream, used for testing.
 pub struct TestScreenCaptureStream {}
+
+struct ActiveTestScreenCaptureStream {
+    termination: Arc<TestStreamTerminationNotifier>,
+}
+
+struct TestStreamTerminationNotifier {
+    callback: Mutex<Option<ScreenCaptureTerminationCallback>>,
+}
+
+impl TestStreamTerminationNotifier {
+    fn new(callback: ScreenCaptureTerminationCallback) -> Self {
+        Self {
+            callback: Mutex::new(Some(callback)),
+        }
+    }
+
+    fn notify(&self, termination: ScreenCaptureStreamTermination) {
+        let callback = self.callback.lock().take();
+        if let Some(callback) = callback {
+            callback(termination);
+        }
+    }
+}
 
 impl ScreenCaptureSource for TestScreenCaptureSource {
     fn metadata(&self) -> Result<SourceMetadata> {
@@ -68,17 +93,37 @@ impl ScreenCaptureSource for TestScreenCaptureSource {
         _foreground_executor: &ForegroundExecutor,
         _frame_callback: Box<dyn Fn(ScreenCaptureFrame) + Send>,
     ) -> oneshot::Receiver<Result<Box<dyn ScreenCaptureStream>>> {
-        let (mut tx, rx) = oneshot::channel();
-        let stream = TestScreenCaptureStream {};
-        tx.send(Ok(Box::new(stream) as Box<dyn ScreenCaptureStream>))
-            .ok();
-        rx
+        self.start_stream()
+    }
+
+    fn stream_with_termination(
+        &self,
+        _foreground_executor: &ForegroundExecutor,
+        _frame_callback: Box<dyn Fn(ScreenCaptureFrame) + Send>,
+        termination_callback: ScreenCaptureTerminationCallback,
+    ) -> oneshot::Receiver<Result<Box<dyn ScreenCaptureStream>>> {
+        let termination = Arc::new(TestStreamTerminationNotifier::new(termination_callback));
+        self.replace_active_termination(termination.clone());
+        self.start_stream_with_termination(termination)
     }
 }
 
 impl ScreenCaptureStream for TestScreenCaptureStream {
     fn metadata(&self) -> Result<SourceMetadata> {
-        TestScreenCaptureSource {}.metadata()
+        TestScreenCaptureSource::new().metadata()
+    }
+}
+
+impl ScreenCaptureStream for ActiveTestScreenCaptureStream {
+    fn metadata(&self) -> Result<SourceMetadata> {
+        TestScreenCaptureSource::new().metadata()
+    }
+}
+
+impl Drop for ActiveTestScreenCaptureStream {
+    fn drop(&mut self) {
+        self.termination
+            .notify(ScreenCaptureStreamTermination::Cancelled);
     }
 }
 
@@ -497,9 +542,235 @@ impl Platform for TestPlatform {
 }
 
 impl TestScreenCaptureSource {
-    /// Create a fake screen capture source, for testing.
+    /// Create a fake screen capture source, used for testing.
     pub fn new() -> Self {
-        Self {}
+        Self {
+            active_termination: Default::default(),
+        }
+    }
+
+    /// Completes the active test stream with a terminal state.
+    pub fn finish_stream(&self, termination: ScreenCaptureStreamTermination) {
+        let active = self.active_termination.lock().take();
+        if let Some(active) = active {
+            active.notify(termination);
+        }
+    }
+
+    fn start_stream(&self) -> oneshot::Receiver<Result<Box<dyn ScreenCaptureStream>>> {
+        let (mut tx, rx) = oneshot::channel();
+        tx.send(Ok(
+            Box::new(TestScreenCaptureStream {}) as Box<dyn ScreenCaptureStream>
+        ))
+        .ok();
+        rx
+    }
+
+    fn start_stream_with_termination(
+        &self,
+        termination: Arc<TestStreamTerminationNotifier>,
+    ) -> oneshot::Receiver<Result<Box<dyn ScreenCaptureStream>>> {
+        let (mut tx, rx) = oneshot::channel();
+        tx.send(Ok(
+            Box::new(ActiveTestScreenCaptureStream { termination }) as Box<dyn ScreenCaptureStream>
+        ))
+        .ok();
+        rx
+    }
+
+    fn replace_active_termination(&self, termination: Arc<TestStreamTerminationNotifier>) {
+        let previous = self.active_termination.lock().replace(termination);
+        if let Some(previous) = previous {
+            previous.notify(ScreenCaptureStreamTermination::Cancelled);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{PermissionRequestStatus, PermissionStatus, TestDispatcher};
+    use rand::{SeedableRng, rngs::StdRng};
+    use std::{
+        sync::{Arc, mpsc},
+        time::Duration,
+    };
+
+    fn test_platform() -> Rc<TestPlatform> {
+        let dispatcher = Arc::new(TestDispatcher::new(StdRng::seed_from_u64(0)));
+        TestPlatform::new(
+            BackgroundExecutor::new(dispatcher.clone()),
+            ForegroundExecutor::new(dispatcher),
+        )
+    }
+
+    #[test]
+    fn unsupported_permissions_do_not_report_success() {
+        let platform = test_platform();
+
+        assert_eq!(
+            platform.accessibility_status(),
+            PermissionStatus::Unavailable
+        );
+        assert_eq!(platform.microphone_status(), PermissionStatus::Unavailable);
+
+        assert_eq!(
+            platform.request_accessibility_permission(),
+            PermissionRequestStatus::Unavailable
+        );
+
+        let (sender, receiver) = mpsc::channel();
+        let request_status = platform.request_microphone_permission(Box::new(move |granted| {
+            sender.send(granted).unwrap();
+        }));
+
+        assert_eq!(request_status, PermissionRequestStatus::Unavailable);
+        assert!(!receiver.recv().unwrap());
+    }
+
+    #[cfg(feature = "screen-capture")]
+    #[test]
+    fn legacy_screen_capture_source_rejects_unsupported_termination_notification() {
+        struct LegacySource;
+
+        impl ScreenCaptureSource for LegacySource {
+            fn metadata(&self) -> Result<SourceMetadata> {
+                TestScreenCaptureSource::new().metadata()
+            }
+
+            fn stream(
+                &self,
+                _foreground_executor: &ForegroundExecutor,
+                _frame_callback: Box<dyn Fn(ScreenCaptureFrame) + Send>,
+            ) -> oneshot::Receiver<Result<Box<dyn ScreenCaptureStream>>> {
+                TestScreenCaptureSource::new().start_stream()
+            }
+        }
+
+        let dispatcher = Arc::new(TestDispatcher::new(StdRng::seed_from_u64(0)));
+        let foreground_executor = ForegroundExecutor::new(dispatcher);
+        let stream = LegacySource.stream_with_termination(
+            &foreground_executor,
+            Box::new(|_| {}),
+            Box::new(|_| {}),
+        );
+
+        let error = match smol::block_on(stream).unwrap() {
+            Ok(_) => panic!("legacy source unexpectedly accepted termination notification"),
+            Err(error) => error,
+        };
+        assert!(
+            error
+                .to_string()
+                .contains("runtime termination notification is not supported")
+        );
+
+        let stream = LegacySource.stream(&foreground_executor, Box::new(|_| {}));
+        assert!(smol::block_on(stream).unwrap().is_ok());
+    }
+
+    #[cfg(feature = "screen-capture")]
+    #[test]
+    fn screen_capture_source_reports_its_first_terminal_status() {
+        let source = TestScreenCaptureSource::new();
+        let dispatcher = Arc::new(TestDispatcher::new(StdRng::seed_from_u64(0)));
+        let foreground_executor = ForegroundExecutor::new(dispatcher);
+        let (sender, receiver) = mpsc::channel();
+
+        let stream = source.stream_with_termination(
+            &foreground_executor,
+            Box::new(|_| {}),
+            Box::new(move |termination| sender.send(termination).unwrap()),
+        );
+        let stream = smol::block_on(stream).unwrap().unwrap();
+
+        source.finish_stream(ScreenCaptureStreamTermination::Failed(
+            "capture device disconnected".into(),
+        ));
+        source.finish_stream(ScreenCaptureStreamTermination::Ended);
+        drop(stream);
+
+        assert!(matches!(
+            receiver.recv().unwrap(),
+            ScreenCaptureStreamTermination::Failed(message) if message == "capture device disconnected"
+        ));
+        assert!(matches!(
+            receiver.try_recv(),
+            Err(mpsc::TryRecvError::Disconnected)
+        ));
+    }
+
+    #[cfg(feature = "screen-capture")]
+    #[test]
+    fn dropping_screen_capture_stream_reports_cancelled_once() {
+        let source = TestScreenCaptureSource::new();
+        let dispatcher = Arc::new(TestDispatcher::new(StdRng::seed_from_u64(0)));
+        let foreground_executor = ForegroundExecutor::new(dispatcher);
+        let (sender, receiver) = mpsc::channel();
+
+        let stream = source.stream_with_termination(
+            &foreground_executor,
+            Box::new(|_| {}),
+            Box::new(move |termination| sender.send(termination).unwrap()),
+        );
+        let stream = smol::block_on(stream).unwrap().unwrap();
+
+        drop(stream);
+        assert_eq!(
+            receiver.recv_timeout(Duration::from_millis(100)),
+            Ok(ScreenCaptureStreamTermination::Cancelled)
+        );
+
+        source.finish_stream(ScreenCaptureStreamTermination::Ended);
+        assert!(matches!(
+            receiver.try_recv(),
+            Err(mpsc::TryRecvError::Disconnected)
+        ));
+    }
+
+    #[cfg(feature = "screen-capture")]
+    #[test]
+    fn replacing_a_screen_capture_stream_keeps_callback_ownership_isolated() {
+        let source = TestScreenCaptureSource::new();
+        let dispatcher = Arc::new(TestDispatcher::new(StdRng::seed_from_u64(0)));
+        let foreground_executor = ForegroundExecutor::new(dispatcher);
+        let (first_sender, first_receiver) = mpsc::channel();
+        let (second_sender, second_receiver) = mpsc::channel();
+
+        let first_stream = source.stream_with_termination(
+            &foreground_executor,
+            Box::new(|_| {}),
+            Box::new(move |termination| first_sender.send(termination).unwrap()),
+        );
+        let first_stream = smol::block_on(first_stream).unwrap().unwrap();
+
+        let second_stream = source.stream_with_termination(
+            &foreground_executor,
+            Box::new(|_| {}),
+            Box::new(move |termination| second_sender.send(termination).unwrap()),
+        );
+        let second_stream = smol::block_on(second_stream).unwrap().unwrap();
+
+        assert_eq!(
+            first_receiver.recv_timeout(Duration::from_millis(100)),
+            Ok(ScreenCaptureStreamTermination::Cancelled)
+        );
+        drop(first_stream);
+        assert!(matches!(
+            second_receiver.try_recv(),
+            Err(mpsc::TryRecvError::Empty)
+        ));
+
+        source.finish_stream(ScreenCaptureStreamTermination::Ended);
+        assert_eq!(
+            second_receiver.recv_timeout(Duration::from_millis(100)),
+            Ok(ScreenCaptureStreamTermination::Ended)
+        );
+        drop(second_stream);
+        assert!(matches!(
+            second_receiver.try_recv(),
+            Err(mpsc::TryRecvError::Disconnected)
+        ));
     }
 }
 

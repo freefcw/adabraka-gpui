@@ -1,10 +1,11 @@
 //! Screen capture for Linux and Windows
 use crate::{
     DevicePixels, ForegroundExecutor, ScreenCaptureFrame, ScreenCaptureSource, ScreenCaptureStream,
-    Size, SourceMetadata, size,
+    ScreenCaptureStreamTermination, ScreenCaptureTerminationCallback, Size, SourceMetadata, size,
 };
 use anyhow::{Context as _, Result, anyhow};
 use futures::channel::oneshot;
+use parking_lot::Mutex;
 use scap::Target;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -88,6 +89,26 @@ impl ScreenCaptureSource for ScapCaptureSource {
         foreground_executor: &ForegroundExecutor,
         frame_callback: Box<dyn Fn(ScreenCaptureFrame) + Send>,
     ) -> oneshot::Receiver<Result<Box<dyn ScreenCaptureStream>>> {
+        self.stream_with_termination(foreground_executor, frame_callback, Box::new(|_| {}))
+    }
+
+    fn stream_with_termination(
+        &self,
+        foreground_executor: &ForegroundExecutor,
+        frame_callback: Box<dyn Fn(ScreenCaptureFrame) + Send>,
+        termination_callback: ScreenCaptureTerminationCallback,
+    ) -> oneshot::Receiver<Result<Box<dyn ScreenCaptureStream>>> {
+        self.start_stream(foreground_executor, frame_callback, termination_callback)
+    }
+}
+
+impl ScapCaptureSource {
+    fn start_stream(
+        &self,
+        foreground_executor: &ForegroundExecutor,
+        frame_callback: Box<dyn Fn(ScreenCaptureFrame) + Send>,
+        termination_callback: ScreenCaptureTerminationCallback,
+    ) -> oneshot::Receiver<Result<Box<dyn ScreenCaptureStream>>> {
         let (stream_tx, stream_rx) = oneshot::channel();
         let target = self.target.clone();
 
@@ -96,7 +117,13 @@ impl ScreenCaptureSource for ScapCaptureSource {
             match new_scap_capturer(Some(scap::Target::Display(target.clone()))) {
                 Ok(mut capturer) => {
                     capturer.start_capture();
-                    run_capture(capturer, target.clone(), frame_callback, stream_tx);
+                    run_capture(
+                        capturer,
+                        target.clone(),
+                        frame_callback,
+                        termination_callback,
+                        stream_tx,
+                    );
                 }
                 Err(e) => {
                     stream_tx.send(Err(e)).ok();
@@ -115,6 +142,8 @@ struct ScapDefaultTargetCaptureSource {
         oneshot::Sender<Result<ScapStream>>,
         // Callback for frames.
         Box<dyn Fn(ScreenCaptureFrame) + Send>,
+        // Callback for stream termination.
+        ScreenCaptureTerminationCallback,
     )>,
     target: scap::Display,
     size: Size<DevicePixels>,
@@ -150,10 +179,16 @@ fn start_default_target_screen_capture(
                         target: display.clone(),
                     }]))
                     .ok();
-                let Ok((stream_tx, frame_callback)) = stream_rx.recv() else {
+                let Ok((stream_tx, frame_callback, termination_callback)) = stream_rx.recv() else {
                     return;
                 };
-                run_capture(capturer, display, frame_callback, stream_tx);
+                run_capture(
+                    capturer,
+                    display,
+                    frame_callback,
+                    termination_callback,
+                    stream_tx,
+                );
             }
             Err(e) => {
                 sources_tx.send(Err(e)).ok();
@@ -182,11 +217,34 @@ impl ScreenCaptureSource for ScapDefaultTargetCaptureSource {
         foreground_executor: &ForegroundExecutor,
         frame_callback: Box<dyn Fn(ScreenCaptureFrame) + Send>,
     ) -> oneshot::Receiver<Result<Box<dyn ScreenCaptureStream>>> {
+        self.stream_with_termination(foreground_executor, frame_callback, Box::new(|_| {}))
+    }
+
+    fn stream_with_termination(
+        &self,
+        foreground_executor: &ForegroundExecutor,
+        frame_callback: Box<dyn Fn(ScreenCaptureFrame) + Send>,
+        termination_callback: ScreenCaptureTerminationCallback,
+    ) -> oneshot::Receiver<Result<Box<dyn ScreenCaptureStream>>> {
+        self.start_stream(foreground_executor, frame_callback, termination_callback)
+    }
+}
+
+impl ScapDefaultTargetCaptureSource {
+    fn start_stream(
+        &self,
+        foreground_executor: &ForegroundExecutor,
+        frame_callback: Box<dyn Fn(ScreenCaptureFrame) + Send>,
+        termination_callback: ScreenCaptureTerminationCallback,
+    ) -> oneshot::Receiver<Result<Box<dyn ScreenCaptureStream>>> {
         let (tx, rx) = oneshot::channel();
-        match self.stream_call_tx.try_send((tx, frame_callback)) {
+        match self
+            .stream_call_tx
+            .try_send((tx, frame_callback, termination_callback))
+        {
             Ok(()) => {}
-            Err(std::sync::mpsc::TrySendError::Full((tx, _)))
-            | Err(std::sync::mpsc::TrySendError::Disconnected((tx, _))) => {
+            Err(std::sync::mpsc::TrySendError::Full((tx, _, _)))
+            | Err(std::sync::mpsc::TrySendError::Disconnected((tx, _, _))) => {
                 // Note: support could be added for being called again after end of prior stream.
                 tx.send(Err(anyhow!(
                     "Can't call ScapDefaultTargetCaptureSource::stream multiple times."
@@ -216,15 +274,18 @@ fn run_capture(
     mut capturer: scap::capturer::Capturer,
     display: scap::Display,
     frame_callback: Box<dyn Fn(ScreenCaptureFrame) + Send>,
+    termination_callback: ScreenCaptureTerminationCallback,
     stream_tx: oneshot::Sender<Result<ScapStream>>,
 ) {
     let cancel_stream = Arc::new(AtomicBool::new(false));
+    let termination = Arc::new(StreamTerminationNotifier::new(termination_callback));
     let size = Size {
         width: DevicePixels(display.width as i32),
         height: DevicePixels(display.height as i32),
     };
     let stream_send_result = stream_tx.send(Ok(ScapStream {
         cancel_stream: cancel_stream.clone(),
+        termination: termination.clone(),
         display,
         size,
     }));
@@ -236,6 +297,9 @@ fn run_capture(
             Ok(frame) => frame_callback(ScreenCaptureFrame(frame)),
             Err(err) => {
                 log::error!("Halting screen capture due to error: {err}");
+                termination.notify(ScreenCaptureStreamTermination::Failed(
+                    err.to_string().into(),
+                ));
                 break;
             }
         }
@@ -245,6 +309,7 @@ fn run_capture(
 
 struct ScapStream {
     cancel_stream: Arc<AtomicBool>,
+    termination: Arc<StreamTerminationNotifier>,
     display: scap::Display,
     size: Size<DevicePixels>,
 }
@@ -263,6 +328,27 @@ impl ScreenCaptureStream for ScapStream {
 impl Drop for ScapStream {
     fn drop(&mut self) {
         self.cancel_stream.store(true, atomic::Ordering::SeqCst);
+        self.termination
+            .notify(ScreenCaptureStreamTermination::Cancelled);
+    }
+}
+
+struct StreamTerminationNotifier {
+    callback: Mutex<Option<ScreenCaptureTerminationCallback>>,
+}
+
+impl StreamTerminationNotifier {
+    fn new(callback: ScreenCaptureTerminationCallback) -> Self {
+        Self {
+            callback: Mutex::new(Some(callback)),
+        }
+    }
+
+    fn notify(&self, termination: ScreenCaptureStreamTermination) {
+        let callback = self.callback.lock().take();
+        if let Some(callback) = callback {
+            callback(termination);
+        }
     }
 }
 
