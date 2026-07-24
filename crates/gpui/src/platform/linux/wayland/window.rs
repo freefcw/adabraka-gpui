@@ -1256,7 +1256,7 @@ impl PlatformWindow for WaylandWindow {
             // The serial isn't exactly important here, since the activation is probably going to be rejected anyway.
             let serial = state.client.get_serial(SerialKind::MousePress);
             token.set_app_id(app_id);
-            token.set_serial(serial, &state.globals.seat);
+            token.set_serial(serial.as_raw(), &state.globals.seat);
             token.set_surface(&state.surface);
             token.commit();
         }
@@ -1426,7 +1426,7 @@ impl PlatformWindow for WaylandWindow {
         let serial = state.client.get_serial(SerialKind::MousePress);
         toplevel.show_window_menu(
             &state.globals.seat,
-            serial,
+            serial.as_raw(),
             position.x.0 as i32,
             position.y.0 as i32,
         );
@@ -1438,7 +1438,7 @@ impl PlatformWindow for WaylandWindow {
             return;
         };
         let serial = state.client.get_serial(SerialKind::MousePress);
-        toplevel._move(&state.globals.seat, serial);
+        toplevel._move(&state.globals.seat, serial.as_raw());
     }
 
     fn start_window_resize(&self, edge: crate::ResizeEdge) {
@@ -1448,7 +1448,7 @@ impl PlatformWindow for WaylandWindow {
         };
         toplevel.resize(
             &state.globals.seat,
-            state.client.get_serial(SerialKind::MousePress),
+            state.client.get_serial(SerialKind::MousePress).as_raw(),
             edge.to_xdg(),
         )
     }
