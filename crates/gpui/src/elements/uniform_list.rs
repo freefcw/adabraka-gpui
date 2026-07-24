@@ -685,9 +685,7 @@ impl UniformList {
             return Size::default();
         };
         let available_space = size(
-            list_width.map_or(AvailableSpace::MinContent, |width| {
-                AvailableSpace::Definite(width)
-            }),
+            crate::taffy::available_space_for_optional_width(list_width),
             AvailableSpace::MinContent,
         );
         item_to_measure.layout_as_root(available_space, window, cx)

@@ -980,9 +980,7 @@ impl StateInner {
         let mut rendered_focused_item = false;
 
         let available_item_space = size(
-            available_width.map_or(AvailableSpace::MinContent, |width| {
-                AvailableSpace::Definite(width)
-            }),
+            crate::taffy::available_space_for_optional_width(available_width),
             AvailableSpace::MinContent,
         );
 

@@ -380,18 +380,21 @@ impl ToTaffy<taffy::style::Style> for Style {
         ) -> Vec<taffy::GridTemplateComponent<T>> {
             unit.map(|template| match template.min_size {
                 crate::TemplateColumnMinSize::Zero => {
-                    vec![repeat(template.repeat, vec![minmax(length(0.0), fr(1.0))])]
+                    vec![repeat(
+                        template.repeat,
+                        vec![minmax(length(0.0_f32), fr(1.0_f32))],
+                    )]
                 }
                 crate::TemplateColumnMinSize::MinContent => {
                     vec![repeat(
                         template.repeat,
-                        vec![minmax(min_content(), fr(1.0))],
+                        vec![minmax(min_content(), fr(1.0_f32))],
                     )]
                 }
                 crate::TemplateColumnMinSize::MaxContent => {
                     vec![repeat(
                         template.repeat,
-                        vec![minmax(length(0.0), max_content())],
+                        vec![minmax(length(0.0_f32), max_content())],
                     )]
                 }
             })
@@ -603,6 +606,10 @@ pub enum AvailableSpace {
     MaxContent,
 }
 
+pub(crate) fn available_space_for_optional_width(width: Option<Pixels>) -> AvailableSpace {
+    width.map_or(AvailableSpace::MaxContent, AvailableSpace::Definite)
+}
+
 impl AvailableSpace {
     /// Returns a `Size` with both width and height set to `AvailableSpace::MinContent`.
     ///
@@ -657,5 +664,23 @@ impl From<Size<Pixels>> for Size<AvailableSpace> {
             width: AvailableSpace::Definite(size.width),
             height: AvailableSpace::Definite(size.height),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::px;
+
+    #[test]
+    fn optional_width_uses_max_content_when_unbounded() {
+        assert_eq!(
+            available_space_for_optional_width(None),
+            AvailableSpace::MaxContent
+        );
+        assert_eq!(
+            available_space_for_optional_width(Some(px(320.0))),
+            AvailableSpace::Definite(px(320.0))
+        );
     }
 }
