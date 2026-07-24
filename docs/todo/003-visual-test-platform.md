@@ -87,7 +87,7 @@
 
 - macOS：优先支持真实 renderer + screenshot。
 - Linux：依赖 Wayland/X11/wgpu/headless 环境，先 smoke。
-- Windows：先 smoke，截图后续补。
+- Windows：DirectX readback 和 `RealVisualTestContext` 已接入；Windows GNU 目标编译及原生 CI smoke 负责验收。
 - CI 无显示：skip 真实 visual test。
 
 探测信号：
@@ -172,10 +172,9 @@ cargo test -p adabraka-gpui --lib --features test-support
 
 CI 策略：
 
-- 默认 CI 只跑 mock visual tests 和 capability detection。
-- 真实 renderer tests 标记 `#[ignore]`。
-- 需要单独 GPU runner 或本机手动执行 ignored tests。
-- Linux runner 必须显式提供 `DISPLAY` / `WAYLAND_DISPLAY` 或 headless renderer 配置，否则 skip。
+- 通用 CI 运行 mock visual tests 和 capability detection。
+- 真实 renderer test 仍由 `-- --ignored` 显式启用。
+- Windows `windows-2022` matrix 运行 DirectX `real_visual_smoke`；Linux 需要显式提供 `DISPLAY` / `WAYLAND_DISPLAY` 或 headless renderer 配置，否则 skip。
 
 ### macOS 手动 smoke
 
@@ -216,24 +215,21 @@ cargo test -p adabraka-gpui --test real_visual_smoke --features test-support -- 
 已完成首版（2026-05-17）：
 
 - 已新增 `VisualTestCapabilities::detect()`，用于报告 `real_renderer`、`screenshot_capture`、`offscreen_positioned_window`、`deterministic_clock`。
-- macOS 当前报告真实 renderer、截图和屏幕外坐标窗口可用；Linux/FreeBSD 根据 `DISPLAY` / `WAYLAND_DISPLAY` 探测真实 renderer；Windows 当前报告真实 renderer 可用。
+- macOS 和 Windows 当前报告真实 renderer、截图及屏外坐标窗口可用；Linux/FreeBSD 根据 `DISPLAY` / `WAYLAND_DISPLAY` 探测真实 renderer，并在 X11 下支持屏外坐标及 WGPU 截图。
 - 已新增 capability detection 自动测试，不创建真实窗口、不触发 GPU smoke。
 - 已新增 mock visual render artifact：`TestWindow::draw(scene)` 会记录场景结构，`TestAppWindow::visual_render_artifact()` 可读取最近一次 mock draw 的 primitive 统计。
-- 已新增 macOS `RealVisualTestContext` / `VisualTestPlatform` 试点，并通过 `harness = false` 的 `real_visual_smoke` 在主线程打开屏外坐标窗口、绘制 simple div、调用真实 renderer present。
-- 已新增上游同名 `Window::render_to_image()` / `PlatformWindow::render_to_image(scene)` 接口；macOS Metal 已实现 scene-to-image readback，其他平台默认返回 unsupported。
+- 已新增 `RealVisualTestContext` / `VisualTestPlatform`：macOS、Windows 与 Linux X11 可在主线程打开屏外坐标窗口；Wayland 使用 compositor-selected 位置。`harness = false` 的 `real_visual_smoke` 会绘制 simple div、调用真实 renderer present 并执行截图读回。
+- 已新增上游同名 `Window::render_to_image()` / `PlatformWindow::render_to_image(scene)` 接口；macOS Metal、Linux WGPU 和 Windows DirectX 均已实现 scene-to-image readback，其他平台默认返回 unsupported。
 - 验证脚本：`scripts/verify-003.sh`。
 
 当前 screenshot 后续边界：
 
-- `real_visual_smoke` 已覆盖 macOS 截图尺寸、非透明和非纯色断言。
-- Windows/Linux renderer 还没有具体 scene-to-image 读回实现。
-- 后续如需 golden snapshot，应另行加入阈值比较，不放进首版 smoke。
-
-下一步建议拆成独立小切片：
-
-1. 再评估 Linux wgpu headless surface 或 readback 路径。
-2. Windows DirectX readback 可以按同一 `PlatformWindow::render_to_image(scene)` 接口补。
-3. 如需 snapshot，再添加局部 golden baseline 和阈值工具。
+- `real_visual_smoke` 已覆盖截图尺寸、非透明和非纯色断言。
+- 2026-07-24 已补齐 Linux WGPU 和 Windows DirectX 的 `PlatformWindow::render_to_image(scene)`：两个后端复用正常 scene render pipeline，再通过 staging buffer/texture 读回；共享转换层处理 GPU row pitch 和 BGRA/RGBA 通道顺序。
+- Linux `RealVisualTestContext` 已支持真实 X11/Wayland renderer；X11 在 `mp-dev` 的 Xvfb + Vulkan/llvmpipe 环境通过真实截图 smoke。
+- Windows DirectX 路径此前已在 `mp-dev` 使用 `x86_64-pc-windows-gnu` 完成跨目标编译；visual harness 现已覆盖 Windows，并加入 `windows-2022` CI smoke，实际通过结果需等待该原生 job 执行。
+- Wayland + wlroots headless compositor 已完成编译和协议测试，但 `mp-dev` 缺少 DRM render node，WGPU surface 无法与 pixman compositor 匹配，因此真实 Wayland screenshot gate 仍需有 DRM render node 的 runner。
+- 后续如需 golden snapshot，应另行加入阈值比较，不放进当前 smoke。
 
 已验证：
 

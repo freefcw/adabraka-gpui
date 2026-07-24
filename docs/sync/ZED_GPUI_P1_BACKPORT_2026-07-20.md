@@ -147,6 +147,33 @@ Adabraka GPUI contains the seven applicable P1 correctness, interaction, platfor
 - Native Linux/Wayland, Windows/MSVC, and macOS manual gates as applicable
 - Independent review of the complete P1 commit range and every `Zed-Origin`
 
+## Validation Closure (2026-07-24)
+
+The previously deferred platform gates were revisited with the final migration-gap closure changes.
+
+| Gate | Environment | Result | Evidence |
+| --- | --- | --- | --- |
+| GPUI Linux suite | `mp-dev`, Ubuntu x86_64 | passed | `cargo test -p adabraka-gpui --lib --features test-support,wayland,x11 -- --test-threads=1`: 219 passed |
+| Linux feature compilation | `mp-dev` | passed | `cargo check -p adabraka-gpui --no-default-features --features wgpu,wayland,x11` |
+| X11 WGPU render/readback | `mp-dev`, Xvfb, Vulkan llvmpipe | passed | `real_visual_smoke` rendered, requested per-window attention, read back RGBA pixels, and exited 0 |
+| Wayland layer-shell edge validation | `mp-dev` native Linux build | passed | focused `exclusive_edge` tests: 2 passed; combined Wayland/X11 build passed |
+| Wayland real compositor smoke | `mp-dev`, Sway headless | environment blocked | Sway pixman starts and exposes layer-shell, but the VM has no DRM render node; WGPU's Vulkan adapter cannot configure the pixman Wayland surface. This remains a runner capability gate, not an unrecorded validation gap. |
+| Windows compilation | `mp-dev`, `x86_64-pc-windows-gnu` | passed | full GPUI Windows-target `cargo check`; DirectX readback and per-window attention compile |
+| Windows runtime | unavailable | deferred | Requires a Windows runner for taskbar attention and DirectX staging-texture execution |
+| macOS suite | local macOS host | passed | GPUI lib tests: 197 passed, 2 ignored; workspace check and rustfmt passed |
+
+This closes the missing validation-record problem. Linux X11 behavior is runtime-validated, Linux Wayland is compile/pure-test validated with the exact compositor blocker recorded, and Windows runtime acceptance remains an explicit platform-runner responsibility.
+
+## Follow-up Closure (2026-07-24)
+
+- Added direct regression contracts for unbounded list `MaxContent`, truncated text-cache rejection, and exact-fit shaped text.
+- Completed the bounded GPUI-only accessibility increment from upstream `2268045a119030735f762e5afaf59da0bda869f4`: `aria_description`, `aria_keyshortcuts`, and `Window::debug_a11y_tree_json`.
+- Kept landmarks/menu, focus provenance, and tab-group behavior out of this batch.
+- Enabled `VisualTestPlatform`, `RealVisualTestContext`, screenshot capability detection, and `real_visual_smoke` for Windows.
+- Added a native `windows-2022` DirectX visual smoke entry to `.github/workflows/gpui-feature-matrix.yml`.
+- Local final evidence after the follow-up: GPUI 203 passed/2 ignored; workspace 265 passed/2 ignored; workspace check, rustfmt, and diff check passed.
+- External proof still pending: `mp-dev` became unreachable before the updated Windows cfg could be re-cross-compiled; the native DirectX result will come from the new Windows CI job.
+
 ## First Execution Step
 
 Add the upstream group-hover transition regression test and confirm it fails by observing redundant render/paint counts before changing the notification logic.

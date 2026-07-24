@@ -194,9 +194,12 @@ AccessKit、benchmark/profiler 二期、web 平台和 scheduler 相关改动价�
 
 - 上游提交：`1d029c5ff5`，`gpui: Accesskit support`
 - 规模：约 19 个文件、1873 行新增。
-- 当前状态：当前仓库有 macOS 权限查询 API，但没有 GPUI element/window 级 AccessKit 树。
-- 建议：值得做，但应作为独立 `a11y` 迁移项目，先设计 feature flag、依赖、平台能力探测，再迁移。
-- 不建议：不要混入 P0/P1 bugfix 批次。
+- 2026-07-01 审计时状态：当时仓库只有 macOS 权限查询 API，尚无 GPUI element/window 级 AccessKit 树。
+- 2026-07-10 后当前状态：AccessKit core、element/window tree、macOS/Linux/Windows adapter、示例和运行时禁用开关已经分别通过 `bcef0db`、`2a5f592`、`5fa6f9c`、`fd7fe81`、`016e86b`、`a738f78` 等提交完成；`accessibility` 也是 GPUI 默认 feature。
+- 已完成证据：`crates/gpui/src/window/a11y.rs`、`crates/gpui/src/elements/div.rs`、`crates/gpui/src/platform/{mac,linux,windows}` 和 `crates/gpui/examples/a11y.rs`。
+- 2026-07-24 bounded increment：`aria_description`、`aria_keyshortcuts` 和 `Window::debug_a11y_tree_json` 已按 GPUI-only 范围迁入，并有 AccessKit node/JSON focused tests。
+- 剩余增量：上游 `2268045a119030735f762e5afaf59da0bda869f4` 中更广的 landmarks/menu、focus provenance 和 tab-group 行为仍未迁入。
+- 建议：不要重复实施 AccessKit core；后续将 landmarks/menu 作为独立行为批次，不与本次描述、快捷键和 debug-tree API 混合。
 
 ### Benchmark / profiler / scheduler 后续
 
