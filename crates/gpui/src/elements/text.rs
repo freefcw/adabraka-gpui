@@ -302,8 +302,31 @@ struct TextLayoutInner {
     lines: SmallVec<[WrappedLine; 1]>,
     line_height: Pixels,
     wrap_width: Option<Pixels>,
+    truncate_width: Option<Pixels>,
     size: Option<Size<Pixels>>,
     bounds: Option<Bounds<Pixels>>,
+}
+
+fn cached_size_for_constraints(
+    cached: &TextLayoutInner,
+    wrap_width: Option<Pixels>,
+    truncate_width: Option<Pixels>,
+) -> Option<Size<Pixels>> {
+    if (wrap_width.is_none() || wrap_width == cached.wrap_width)
+        && truncate_width.is_none()
+        && cached.truncate_width.is_none()
+    {
+        cached.size
+    } else {
+        None
+    }
+}
+
+fn all_shaped_line_widths_fit(
+    widths: impl IntoIterator<Item = Pixels>,
+    truncate_width: Pixels,
+) -> bool {
+    widths.into_iter().all(|width| width <= truncate_width)
 }
 
 impl TextLayout {
@@ -358,21 +381,36 @@ impl TextLayout {
                         (None, "".into())
                     };
 
-                if let Some(text_layout) = element_state.0.borrow().as_ref()
-                    && text_layout.size.is_some()
-                    && (wrap_width.is_none() || wrap_width == text_layout.wrap_width)
-                {
-                    return text_layout.size.unwrap();
+                if let Some(size) = element_state.0.borrow().as_ref().and_then(|cached| {
+                    cached_size_for_constraints(cached, wrap_width, truncate_width)
+                }) {
+                    return size;
                 }
 
                 let mut line_wrapper = cx.text_system().line_wrapper(text_style.font(), font_size);
                 let text = if let Some(truncate_width) = truncate_width {
-                    line_wrapper.truncate_line(
-                        text.clone(),
-                        truncate_width,
-                        &truncation_suffix,
-                        &mut runs,
-                    )
+                    let unclipped_text_fits = wrap_width.is_none()
+                        && window
+                            .text_system()
+                            .shape_text(text.clone(), font_size, &runs, None, None)
+                            .log_err()
+                            .is_some_and(|lines| {
+                                all_shaped_line_widths_fit(
+                                    lines.iter().map(|line| line.size(line_height).width),
+                                    truncate_width,
+                                )
+                            });
+
+                    if unclipped_text_fits {
+                        text.clone()
+                    } else {
+                        line_wrapper.truncate_line(
+                            text.clone(),
+                            truncate_width,
+                            &truncation_suffix,
+                            &mut runs,
+                        )
+                    }
                 } else {
                     text.clone()
                 };
@@ -394,6 +432,7 @@ impl TextLayout {
                         len: 0,
                         line_height,
                         wrap_width,
+                        truncate_width,
                         size: Some(Size::default()),
                         bounds: None,
                     });
@@ -412,6 +451,7 @@ impl TextLayout {
                     len,
                     line_height,
                     wrap_width,
+                    truncate_width,
                     size: Some(size),
                     bounds: None,
                 });
@@ -907,5 +947,32 @@ impl IntoElement for InteractiveText {
 
     fn into_element(self) -> Self::Element {
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{px, size};
+
+    #[test]
+    fn truncated_layout_is_not_reused_for_an_unconstrained_measurement() {
+        let cached = TextLayoutInner {
+            len: 4,
+            lines: SmallVec::new(),
+            line_height: px(16.0),
+            wrap_width: None,
+            truncate_width: Some(px(24.0)),
+            size: Some(size(px(24.0), px(16.0))),
+            bounds: None,
+        };
+
+        assert_eq!(cached_size_for_constraints(&cached, None, None), None);
+    }
+
+    #[test]
+    fn exact_fit_shaped_text_does_not_require_truncation() {
+        assert!(all_shaped_line_widths_fit([px(72.0), px(80.0)], px(80.0)));
+        assert!(!all_shaped_line_widths_fit([px(80.5)], px(80.0)));
     }
 }
