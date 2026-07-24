@@ -1164,6 +1164,20 @@ pub trait StatefulInteractiveElement: InteractiveElement {
         self
     }
 
+    /// Set supplementary information announced after this element's label, role, and value.
+    fn aria_description(mut self, description: impl Into<SharedString>) -> Self {
+        self.interactivity().aria_description = Some(description.into());
+        self
+    }
+
+    /// Report the keyboard shortcut that activates this element to assistive technology.
+    ///
+    /// This is metadata only and does not register a key binding.
+    fn aria_keyshortcuts(mut self, keyshortcuts: impl Into<SharedString>) -> Self {
+        self.interactivity().aria_keyshortcuts = Some(keyshortcuts.into());
+        self
+    }
+
     /// Set the selected state for this element.
     fn aria_selected(mut self, selected: bool) -> Self {
         self.interactivity().aria_selected = Some(selected);
@@ -1784,6 +1798,8 @@ pub struct Interactivity {
         Vec<(accesskit::Action, crate::window::a11y::A11yActionListener)>,
     pub(crate) override_role: Option<accesskit::Role>,
     pub(crate) aria_label: Option<SharedString>,
+    pub(crate) aria_description: Option<SharedString>,
+    pub(crate) aria_keyshortcuts: Option<SharedString>,
     pub(crate) aria_selected: Option<bool>,
     pub(crate) aria_expanded: Option<bool>,
     pub(crate) aria_toggled: Option<accesskit::Toggled>,
@@ -2910,6 +2926,12 @@ impl Interactivity {
         if let Some(label) = &self.aria_label {
             node.set_label(label.to_string());
         }
+        if let Some(description) = &self.aria_description {
+            node.set_description(description.to_string());
+        }
+        if let Some(keyshortcuts) = &self.aria_keyshortcuts {
+            node.set_keyboard_shortcut(keyshortcuts.to_string());
+        }
         if let Some(selected) = self.aria_selected {
             node.set_selected(selected);
         }
@@ -3771,6 +3793,21 @@ mod tests {
             element.element.interactivity.tooltip_show_delay,
             Some(delay)
         );
+    }
+
+    #[test]
+    fn aria_description_and_keyshortcuts_are_written_to_accesskit() {
+        let element = div()
+            .id("save-button")
+            .role(accesskit::Role::Button)
+            .aria_description("Save the active document")
+            .aria_keyshortcuts("Ctrl+S");
+        let mut node = accesskit::Node::new(accesskit::Role::Button);
+
+        element.element.interactivity.write_a11y_info(&mut node);
+
+        assert_eq!(node.description(), Some("Save the active document"));
+        assert_eq!(node.keyboard_shortcut(), Some("Ctrl+S"));
     }
 
     #[test]

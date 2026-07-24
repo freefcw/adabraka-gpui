@@ -5194,6 +5194,13 @@ impl Window {
         self.platform_window.play_system_bell()
     }
 
+    /// Returns a JSON representation of the latest completed accessibility frame.
+    ///
+    /// Returns `None` until accessibility has produced a tree for this window.
+    pub fn debug_a11y_tree_json(&self) -> Option<String> {
+        self.a11y.debug_tree_json()
+    }
+
     /// Register a listener for an accessibility action on a specific node.
     /// The listener is called when assistive technology requests the given
     /// action on the node identified by `node_id`.

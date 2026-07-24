@@ -27,6 +27,8 @@
 //!
 //! The state for both lives in the [`A11y`] struct in this module.
 
+pub(crate) mod debug;
+
 use crate::{App, Bounds, FocusId, Pixels, Window};
 use accesskit::{Action, NodeId, TreeUpdate};
 use collections::{FxHashMap, FxHashSet};
@@ -71,6 +73,7 @@ pub(crate) struct A11y {
     pub(crate) focus_ids: FxHashMap<NodeId, FocusId>,
     pub(crate) node_bounds: FxHashMap<NodeId, Bounds<Pixels>>,
     pub(crate) action_listeners: FxHashMap<NodeId, Vec<(Action, A11yActionListener)>>,
+    debug_tree_json: Option<String>,
 }
 
 impl A11y {
@@ -83,6 +86,7 @@ impl A11y {
             focus_ids: FxHashMap::default(),
             node_bounds: FxHashMap::default(),
             action_listeners: FxHashMap::default(),
+            debug_tree_json: None,
         }
     }
 
@@ -108,7 +112,13 @@ impl A11y {
 
     /// Finalize the tree and produce a [`TreeUpdate`] for the platform adapter.
     pub(crate) fn end_frame(&mut self) -> TreeUpdate {
-        self.nodes.finalize()
+        let update = self.nodes.finalize();
+        self.debug_tree_json = Some(debug::tree_update_to_json(&update));
+        update
+    }
+
+    pub(crate) fn debug_tree_json(&self) -> Option<String> {
+        self.debug_tree_json.clone()
     }
 }
 
@@ -337,5 +347,44 @@ mod tests {
         let update = builder.finalize();
 
         assert_eq!(update.focus, ROOT_NODE_ID);
+    }
+
+    #[test]
+    fn debug_tree_json_contains_focus_hierarchy_and_aria_metadata() {
+        let active_flag = Arc::new(AtomicBool::new(true));
+        let mut a11y = A11y::new(active_flag, false);
+        let button_id = NodeId(42);
+        let mut button = accesskit::Node::new(accesskit::Role::Button);
+        button.set_label("Save".to_string());
+        button.set_description("Save the active document".to_string());
+        button.set_keyboard_shortcut("Ctrl+S".to_string());
+
+        a11y.sync_active_flag();
+        a11y.begin_frame();
+        assert!(a11y.nodes.push(button_id, button));
+        a11y.nodes.set_focus(button_id);
+        a11y.nodes.pop();
+        let _ = a11y.end_frame();
+
+        let json: serde_json::Value = serde_json::from_str(
+            &a11y
+                .debug_tree_json()
+                .expect("a completed accessibility frame should be debuggable"),
+        )
+        .unwrap();
+
+        assert_eq!(json["root"], "a");
+        assert_eq!(json["focus"], "b");
+        assert_eq!(json["nodes"][0]["id"], "a");
+        assert_eq!(json["nodes"][0]["accesskit_id"], "0");
+        assert_eq!(json["nodes"][0]["children"][0], "b");
+        assert_eq!(json["nodes"][1]["accesskit_id"], "42");
+        assert_eq!(json["nodes"][1]["aria"]["role"], "Button");
+        assert_eq!(json["nodes"][1]["aria"]["label"], "Save");
+        assert_eq!(
+            json["nodes"][1]["aria"]["description"],
+            "Save the active document"
+        );
+        assert_eq!(json["nodes"][1]["aria"]["keyboard_shortcut"], "Ctrl+S");
     }
 }
