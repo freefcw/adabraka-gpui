@@ -128,6 +128,11 @@ impl Arena {
             .expect("Arena::end_scope called without a matching begin_scope");
     }
 
+    /// Whether a draw scope is currently active on this arena.
+    pub(crate) fn has_active_scope(&self) -> bool {
+        self.scope_depth > 0
+    }
+
     /// Clears arena allocations unless an enclosing draw can still reference them.
     pub fn clear(&mut self) {
         if self.scope_depth == 0 {

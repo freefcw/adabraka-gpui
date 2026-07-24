@@ -68,6 +68,8 @@ pub(crate) struct WindowsPlatformState {
     next_blocker_id: u32,
     context_menu_command_map: HashMap<u32, SharedString>,
     flashing_hwnd: Option<HWND>,
+    /// Shared with every window to serialize draws across the UI thread.
+    draw_coordinator: Rc<DrawCoordinator>,
 }
 
 #[derive(Default)]
@@ -107,6 +109,7 @@ impl WindowsPlatformState {
             next_blocker_id: 1,
             context_menu_command_map: HashMap::new(),
             flashing_hwnd: None,
+            draw_coordinator: Rc::new(DrawCoordinator::new()),
         }
     }
 }
@@ -223,6 +226,7 @@ impl WindowsPlatform {
             platform_window_handle: self.handle,
             disable_direct_composition: self.disable_direct_composition,
             directx_devices: (*self.inner.state.borrow().directx_devices).clone(),
+            draw_coordinator: self.inner.state.borrow().draw_coordinator.clone(),
         }
     }
 
@@ -1363,6 +1367,8 @@ pub(crate) struct WindowCreationInfo {
     pub(crate) platform_window_handle: HWND,
     pub(crate) disable_direct_composition: bool,
     pub(crate) directx_devices: DirectXDevices,
+    /// Shared with [`WindowsPlatformState::draw_coordinator`] and every window.
+    pub(crate) draw_coordinator: Rc<DrawCoordinator>,
 }
 
 struct PlatformWindowCreateContext {

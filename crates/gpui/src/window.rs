@@ -254,6 +254,23 @@ impl Drop for ElementArenaScope {
     }
 }
 
+/// Whether a window draw is currently in progress on this thread.
+///
+/// This holds exactly while an [`ElementArenaScope`] is active. The
+/// `on_request_frame` callback uses it to defer draw requests that arrive
+/// re-entrantly while a draw is already on the stack (e.g. via nested message
+/// pumping in the Windows window procedure), instead of running a nested draw
+/// or panicking on the already-borrowed `App`. If the arena cannot be borrowed
+/// the draw must be in progress, so this conservatively returns `true`.
+fn draw_in_progress() -> bool {
+    ELEMENT_ARENA.with(|arena| {
+        arena
+            .try_borrow()
+            .map(|arena| arena.has_active_scope())
+            .unwrap_or(true)
+    })
+}
+
 /// Returned when the element arena has been used and so must be cleared before the next draw.
 #[must_use]
 pub struct ArenaClearNeeded;
@@ -1334,7 +1351,34 @@ impl Window {
             let next_frame_callbacks = next_frame_callbacks.clone();
             let input_rate_tracker = input_rate_tracker.clone();
             let last_frame_time = last_frame_time.clone();
+            let mut deferred_force_render = false;
             move |request_frame_options| {
+                // This must be checked before anything else: if this request
+                // arrived re-entrantly while a draw is on this thread's stack
+                // (e.g. via a nested message pump in the Windows window
+                // procedure), drawing would nest draws, and even touching the
+                // App would panic on its already-mutable borrow. Skip instead;
+                // the platform leaves the window invalidated (or re-invalidates
+                // it), so a fresh request arrives once the in-progress draw
+                // unwinds. Remember force_render so the deferred frame still
+                // bypasses the view cache.
+                //
+                // Returning here skips `complete_frame`, which on Wayland would
+                // stall the window's frame callbacks (no `surface.commit()`) —
+                // but calling it would hit the App borrow panic above, and this
+                // branch is unreachable there in practice: only Windows pumps
+                // platform events (and thus requests frames) mid-draw.
+                if draw_in_progress() {
+                    log::debug!("deferring re-entrant window draw request");
+                    deferred_force_render |= request_frame_options.force_render;
+                    return;
+                }
+                // Take the deferred flag first: `||` short-circuits, and leaving
+                // the flag set when this request already forces a render would
+                // force a second, redundant render on the next frame.
+                let force_render =
+                    mem::take(&mut deferred_force_render) || request_frame_options.force_render;
+
                 let thermal_state = handle
                     .update(&mut cx, |_, _, cx| cx.thermal_state())
                     .log_err();
@@ -1342,7 +1386,7 @@ impl Window {
                 // Throttle frame rate based on conditions:
                 // - Thermal pressure (Serious/Critical): cap to ~60fps
                 // - Inactive window (not focused): cap to ~30fps to save energy
-                let min_frame_interval = if !request_frame_options.force_render
+                let min_frame_interval = if !force_render
                     && !request_frame_options.require_presentation
                     && next_frame_callbacks.borrow().is_empty()
                 {
@@ -1359,6 +1403,8 @@ impl Window {
                 if let Some(min_interval) = min_frame_interval {
                     if let Some(last_frame) = last_frame_time.get() {
                         if now.duration_since(last_frame) < min_interval {
+                            // Don't lose a pending forced render to throttling.
+                            deferred_force_render |= force_render;
                             // Must still complete the frame on platforms that require it.
                             // On Wayland, `surface.frame()` was already called to request the
                             // next frame callback, so we must call `surface.commit()` (via
@@ -1388,11 +1434,11 @@ impl Window {
                     || needs_present.get()
                     || (active.get() && input_rate_tracker.borrow_mut().is_high_rate());
 
-                if invalidator.is_dirty() || request_frame_options.force_render {
+                if invalidator.is_dirty() || force_render {
                     measure("frame duration", || {
                         handle
                             .update(&mut cx, |_, window, cx| {
-                                if request_frame_options.force_render {
+                                if force_render {
                                     window.refresh();
                                 }
                                 let arena_clear_needed = window.draw(cx);
@@ -5945,6 +5991,25 @@ mod tests {
     use super::*;
     use crate::{Context, Render, TestAppContext, WindowOptions, canvas, div, hsla, px, size};
     use std::{cell::Cell, rc::Rc};
+
+    /// A re-entrant frame request must be deferred while a draw is on the
+    /// stack. `draw_in_progress` is the guard the request-frame callback uses
+    /// before touching the already-borrowed App.
+    #[test]
+    fn draw_in_progress_tracks_element_arena_scope() {
+        assert!(!draw_in_progress());
+
+        let scope = ElementArenaScope::enter();
+        assert!(draw_in_progress());
+
+        let nested = ElementArenaScope::enter();
+        assert!(draw_in_progress());
+        drop(nested);
+        assert!(draw_in_progress(), "outer draw is still in progress");
+
+        drop(scope);
+        assert!(!draw_in_progress());
+    }
 
     struct EmptyView;
 

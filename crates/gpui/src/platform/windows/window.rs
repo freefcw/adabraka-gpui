@@ -1,7 +1,7 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     num::NonZeroIsize,
     path::PathBuf,
     rc::{Rc, Weak},
@@ -28,7 +28,9 @@ use windows::{
     core::*,
 };
 
-use crate::platform::windows::direct_manipulation::DirectManipulationHandler;
+use crate::platform::windows::{
+    direct_manipulation::DirectManipulationHandler, events::DrawCoordinator,
+};
 use crate::*;
 
 pub(crate) struct WindowsWindow(pub Rc<WindowsWindowInner>);
@@ -53,7 +55,6 @@ pub struct WindowsWindowState {
     pub direct_manipulation: DirectManipulationHandler,
 
     pub renderer: DirectXRenderer,
-    pub force_render_after_recovery: bool,
 
     pub click_state: ClickState,
     pub system_settings: WindowsSystemSettings,
@@ -73,6 +74,11 @@ pub(crate) struct WindowsWindowInner {
     pub(super) this: Weak<Self>,
     drop_target_helper: IDropTargetHelper,
     pub(crate) state: RefCell<WindowsWindowState>,
+    pub(crate) draw_coordinator: Rc<DrawCoordinator>,
+    /// Set when the next `draw_window` call must bypass the GPUI view cache.
+    /// Stored outside `state` so a re-entrant forced draw can record itself
+    /// without borrowing an already-borrowed `WindowsWindowState`.
+    pub(crate) force_render_pending: Cell<bool>,
     pub(crate) handle: AnyWindowHandle,
     pub(crate) hide_title_bar: bool,
     pub(crate) is_movable: bool,
@@ -155,7 +161,6 @@ impl WindowsWindowState {
             hovered,
             direct_manipulation,
             renderer,
-            force_render_after_recovery: false,
             click_state,
             system_settings,
             current_cursor,
@@ -245,6 +250,8 @@ impl WindowsWindowInner {
             this: this.clone(),
             drop_target_helper: context.drop_target_helper.clone(),
             state,
+            draw_coordinator: context.draw_coordinator.clone(),
+            force_render_pending: Cell::new(false),
             handle: context.handle,
             hide_title_bar: context.hide_title_bar,
             is_movable: context.is_movable,
@@ -375,6 +382,7 @@ struct WindowCreateContext {
     disable_direct_composition: bool,
     directx_devices: DirectXDevices,
     atlas_initial_size: crate::Size<DevicePixels>,
+    draw_coordinator: Rc<DrawCoordinator>,
 }
 
 impl WindowsWindow {
@@ -394,6 +402,7 @@ impl WindowsWindow {
             platform_window_handle,
             disable_direct_composition,
             directx_devices,
+            draw_coordinator,
         } = creation_info;
         register_window_class(icon);
         let hide_title_bar = params
@@ -461,6 +470,7 @@ impl WindowsWindow {
             disable_direct_composition,
             directx_devices,
             atlas_initial_size: params.atlas_initial_size,
+            draw_coordinator,
         };
         let creation_result = unsafe {
             CreateWindowExW(

@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{cell::Cell, rc::Rc};
 
 use ::util::ResultExt;
 use anyhow::Context as _;
@@ -34,6 +34,51 @@ pub(crate) const WM_WTSSESSION_CHANGE: u32 = 0x02B1;
 
 const SIZE_MOVE_LOOP_TIMER_ID: usize = 1;
 const AUTO_HIDE_TASKBAR_THICKNESS_PX: i32 = 1;
+
+/// Coordinates window draws on the UI thread. Owned by the platform and
+/// shared with every window, because the coordination is inherently
+/// cross-window: while window A is drawing, a re-entrant paint request for
+/// window B must be deferred.
+pub(crate) struct DrawCoordinator {
+    /// Whether some window is currently inside `draw_window`. Win32 can
+    /// re-enter the window procedure while a draw is in progress (e.g.
+    /// cross-thread `SendMessage` dispatch during message pumping, or modal
+    /// message loops entered by COM calls), and drawing re-entrantly would
+    /// nest GPUI draws. Nested draws are wasted work whose output is
+    /// immediately redrawn, so we defer them instead.
+    drawing: Cell<bool>,
+}
+
+impl DrawCoordinator {
+    pub(crate) fn new() -> Self {
+        Self {
+            drawing: Cell::new(false),
+        }
+    }
+
+    fn try_begin_draw(&self) -> Option<DrawWindowGuard<'_>> {
+        // This only covers the `draw_window` span (which extends past the GPUI
+        // draw, through presentation and input updates). Requests that arrive
+        // re-entrantly during GPUI-initiated draws (e.g. opening a window draws
+        // synchronously) are deferred by GPUI's `on_request_frame` callback.
+        if self.drawing.get() {
+            None
+        } else {
+            self.drawing.set(true);
+            Some(DrawWindowGuard { coordinator: self })
+        }
+    }
+}
+
+struct DrawWindowGuard<'a> {
+    coordinator: &'a DrawCoordinator,
+}
+
+impl Drop for DrawWindowGuard<'_> {
+    fn drop(&mut self) {
+        self.coordinator.drawing.set(false);
+    }
+}
 
 impl WindowsWindowInner {
     pub(crate) fn handle_msg(
@@ -1301,7 +1346,10 @@ impl WindowsWindowInner {
         let devices = lparam.0 as *const DirectXDevices;
         let devices = unsafe { &*devices };
         lock.renderer.handle_device_lost(&devices);
-        lock.force_render_after_recovery = true;
+        drop(lock);
+        // Whichever paint request arrives first after recovery must bypass the
+        // GPUI view cache so stale renderer resources are not replayed.
+        self.force_render_pending.set(true);
         Some(0)
     }
 
@@ -1315,13 +1363,21 @@ impl WindowsWindowInner {
 
     #[inline]
     fn draw_window(&self, handle: HWND, force_render: bool) -> Option<isize> {
-        let mut request_frame = self.state.borrow_mut().callbacks.request_frame.take()?;
-        let force_render = {
-            let mut lock = self.state.borrow_mut();
-            let force_render_after_recovery = lock.force_render_after_recovery;
-            lock.force_render_after_recovery = false;
-            force_render || force_render_after_recovery
+        let Some(_guard) = self.draw_coordinator.try_begin_draw() else {
+            log::debug!("deferring re-entrant draw of window {handle:?}");
+            if force_render {
+                self.force_render_pending.set(true);
+            }
+            // Validate the region so a nested message pump doesn't keep
+            // re-dispatching WM_PAINT for the still-invalid region in a busy
+            // loop until the in-progress draw unwinds. The vsync thread
+            // re-invalidates every window on each vsync (see
+            // `begin_vsync_thread`), so the deferred frame still gets drawn,
+            // at most one vsync late.
+            unsafe { ValidateRect(Some(handle), None).ok().log_err() };
+            return Some(0);
         };
+        let mut request_frame = self.state.borrow_mut().callbacks.request_frame.take()?;
         let events = {
             let lock = self.state.borrow();
             lock.direct_manipulation.update();
@@ -1337,6 +1393,7 @@ impl WindowsWindowInner {
                 self.state.borrow_mut().callbacks.input = Some(func);
             }
         }
+        let force_render = force_render || self.force_render_pending.take();
         request_frame(RequestFrameOptions {
             require_presentation: false,
             force_render,
@@ -1689,5 +1746,29 @@ fn notify_frame_changed(handle: HWND) {
                 | SWP_NOZORDER,
         )
         .log_err();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn draw_coordinator_defers_reentrant_draws() {
+        let coordinator = DrawCoordinator::new();
+        let guard = coordinator
+            .try_begin_draw()
+            .expect("first draw should proceed");
+
+        assert!(
+            coordinator.try_begin_draw().is_none(),
+            "a re-entrant draw must be deferred"
+        );
+
+        drop(guard);
+        assert!(
+            coordinator.try_begin_draw().is_some(),
+            "drawing must resume after the active guard is released"
+        );
     }
 }
