@@ -238,6 +238,22 @@ thread_local! {
     );
 }
 
+/// Balances an arena draw scope even when a draw unwinds with a panic.
+struct ElementArenaScope;
+
+impl ElementArenaScope {
+    fn enter() -> Self {
+        ELEMENT_ARENA.with_borrow_mut(Arena::begin_scope);
+        Self
+    }
+}
+
+impl Drop for ElementArenaScope {
+    fn drop(&mut self) {
+        ELEMENT_ARENA.with_borrow_mut(Arena::end_scope);
+    }
+}
+
 /// Returned when the element arena has been used and so must be cleared before the next draw.
 #[must_use]
 pub struct ArenaClearNeeded;
@@ -2367,6 +2383,7 @@ impl Window {
     /// the contents of the new `Scene`, use `present`.
     #[profiling::function]
     pub fn draw(&mut self, cx: &mut App) -> ArenaClearNeeded {
+        let arena_scope = ElementArenaScope::enter();
         self.invalidate_entities();
         cx.entities.clear_accessed();
         debug_assert!(self.rendered_entity_stack.is_empty());
@@ -2447,6 +2464,7 @@ impl Window {
         self.invalidator.set_phase(DrawPhase::None);
         self.needs_present.set(true);
 
+        drop(arena_scope);
         ArenaClearNeeded
     }
 
@@ -5925,8 +5943,57 @@ pub fn outline(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Context, Render, TestAppContext, canvas, div, hsla, px, size};
+    use crate::{Context, Render, TestAppContext, WindowOptions, canvas, div, hsla, px, size};
     use std::{cell::Cell, rc::Rc};
+
+    struct EmptyView;
+
+    impl Render for EmptyView {
+        fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+            div()
+        }
+    }
+
+    struct OpensWindowOnPaint {
+        opened: Rc<Cell<bool>>,
+    }
+
+    impl Render for OpensWindowOnPaint {
+        fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+            let opened = self.opened.clone();
+            div()
+                .size_full()
+                .child(canvas(
+                    |_, _, _| {},
+                    move |_, _, _window, cx| {
+                        if !opened.replace(true) {
+                            cx.open_window(WindowOptions::default(), |_, cx| cx.new(|_| EmptyView))
+                                .unwrap();
+                        }
+                    },
+                ))
+                .child(div().child("after"))
+        }
+    }
+
+    /// Opening a window synchronously draws it and requests an element-arena
+    /// clear. That request must not invalidate outer elements that remain to be
+    /// painted after the nested draw returns.
+    #[test]
+    fn opening_a_window_during_draw_keeps_outer_elements_alive() {
+        let mut cx = TestAppContext::single();
+        let opened = Rc::new(Cell::new(false));
+        let window = cx.add_window({
+            let opened = opened.clone();
+            move |_, _| OpensWindowOnPaint { opened }
+        });
+
+        assert!(opened.get());
+        assert_eq!(cx.windows().len(), 2);
+
+        cx.update_window(window.into(), |_, window, cx| window.draw(cx).clear())
+            .unwrap();
+    }
 
     struct RootView {
         explicit_size: bool,
