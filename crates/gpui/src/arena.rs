@@ -57,16 +57,23 @@ impl Chunk {
     }
 
     fn allocate(&mut self, layout: alloc::Layout) -> Option<NonNull<u8>> {
-        unsafe {
-            let aligned = self.offset.add(self.offset.align_offset(layout.align()));
-            let next = aligned.add(layout.size());
+        // Compute the allocation bounds in integer address space so the bounds
+        // check happens before any pointer offsetting. Offsetting a pointer
+        // past the end of its allocation is undefined behavior even when the
+        // result is never dereferenced (as happens on the chunk-spill path),
+        // so `ptr::add` cannot be used until the result is known to stay in
+        // bounds. `checked_add` also handles the documented case where
+        // `align_offset` returns `usize::MAX`.
+        let base = self.offset.addr();
+        let aligned_addr = base.checked_add(self.offset.align_offset(layout.align()))?;
+        let next_addr = aligned_addr.checked_add(layout.size())?;
 
-            if next <= self.end {
-                self.offset = next;
-                NonNull::new(aligned)
-            } else {
-                None
-            }
+        if next_addr <= self.end.addr() {
+            let aligned = self.offset.with_addr(aligned_addr);
+            self.offset = self.offset.with_addr(next_addr);
+            NonNull::new(aligned)
+        } else {
+            None
         }
     }
 
@@ -282,15 +289,33 @@ mod tests {
     #[test]
     fn test_arena_grow() {
         let mut arena = Arena::new(8);
-        arena.alloc(|| 1u64);
-        arena.alloc(|| 2u64);
+        for _ in 0..8 {
+            arena.alloc(|| 0u8);
+        }
+        assert_eq!(arena.capacity(), 8);
 
+        arena.alloc(|| 0u8);
         assert_eq!(arena.capacity(), 16);
 
-        arena.alloc(|| 3u32);
-        arena.alloc(|| 4u32);
+        for _ in 0..7 {
+            arena.alloc(|| 0u8);
+        }
+        assert_eq!(arena.capacity(), 16);
 
+        arena.alloc(|| 0u8);
         assert_eq!(arena.capacity(), 24);
+    }
+
+    #[test]
+    fn full_chunk_rejects_allocation_without_advancing_offset() {
+        let mut chunk = Chunk::new(NonZeroUsize::new(1).unwrap());
+        let layout = alloc::Layout::new::<u8>();
+
+        assert!(chunk.allocate(layout).is_some());
+        let offset_after_first_allocation = chunk.offset;
+
+        assert!(chunk.allocate(layout).is_none());
+        assert_eq!(chunk.offset, offset_after_first_allocation);
     }
 
     #[test]
