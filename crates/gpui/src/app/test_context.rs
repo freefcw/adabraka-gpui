@@ -913,10 +913,17 @@ pub struct VisualTestCapabilities {
 impl VisualTestCapabilities {
     /// Detects visual test capabilities for the current platform and environment.
     pub fn detect() -> Self {
+        let real_renderer = detect_real_visual_renderer();
         Self {
-            real_renderer: detect_real_visual_renderer(),
-            screenshot_capture: cfg!(target_os = "macos"),
-            offscreen_positioned_window: cfg!(target_os = "macos"),
+            real_renderer,
+            screenshot_capture: real_renderer
+                && cfg!(any(
+                    target_os = "macos",
+                    target_os = "linux",
+                    target_os = "freebsd",
+                    target_os = "windows"
+                )),
+            offscreen_positioned_window: detect_offscreen_positioned_window(),
             deterministic_clock: true,
         }
     }
@@ -947,12 +954,45 @@ fn detect_real_visual_renderer() -> bool {
     false
 }
 
-/// A macOS-only visual test context backed by the real platform renderer.
+#[cfg(target_os = "macos")]
+fn detect_offscreen_positioned_window() -> bool {
+    true
+}
+
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+fn detect_offscreen_positioned_window() -> bool {
+    std::env::var_os("WAYLAND_DISPLAY").is_none() && std::env::var_os("DISPLAY").is_some()
+}
+
+#[cfg(target_os = "windows")]
+fn detect_offscreen_positioned_window() -> bool {
+    true
+}
+
+#[cfg(not(any(
+    target_os = "macos",
+    target_os = "linux",
+    target_os = "freebsd",
+    target_os = "windows"
+)))]
+fn detect_offscreen_positioned_window() -> bool {
+    false
+}
+
+/// A real visual test context backed by the native platform renderer.
 ///
-/// Windows opened through this context use screen-outside coordinates so manual
-/// real renderer smoke tests can run without placing a visible window in the
-/// user's normal workspace.
-#[cfg(all(target_os = "macos", any(test, feature = "test-support")))]
+/// macOS, Windows, and X11 windows use screen-outside coordinates so manual
+/// renderer smoke tests do not occupy the user's normal workspace. Wayland uses
+/// the compositor-selected position because clients cannot choose absolute coordinates.
+#[cfg(all(
+    any(
+        target_os = "macos",
+        target_os = "linux",
+        target_os = "freebsd",
+        target_os = "windows"
+    ),
+    any(test, feature = "test-support")
+))]
 pub struct RealVisualTestContext {
     /// The underlying app cell.
     pub app: Rc<AppCell>,
@@ -963,13 +1003,20 @@ pub struct RealVisualTestContext {
     text_system: Arc<TextSystem>,
 }
 
-#[cfg(all(target_os = "macos", any(test, feature = "test-support")))]
+#[cfg(all(
+    any(
+        target_os = "macos",
+        target_os = "linux",
+        target_os = "freebsd",
+        target_os = "windows"
+    ),
+    any(test, feature = "test-support")
+))]
 impl RealVisualTestContext {
     /// Creates a real visual test context when the current platform reports support.
     pub fn new_if_supported() -> Option<Self> {
-        VisualTestCapabilities::detect()
-            .real_renderer
-            .then(Self::new)
+        let capabilities = VisualTestCapabilities::detect();
+        (capabilities.real_renderer && capabilities.screenshot_capture).then(Self::new)
     }
 
     /// Creates a real visual test context using the default empty asset source.
@@ -1022,13 +1069,20 @@ impl RealVisualTestContext {
         }
     }
 
-    /// Opens a real platform window at screen-outside coordinates.
+    /// Opens a real platform window. Platforms that support client-controlled
+    /// positioning place it outside the visible screen; Wayland uses the
+    /// compositor-selected position.
     pub fn open_offscreen_window<V: 'static + Render>(
         &mut self,
         size: Size<Pixels>,
         build_root_view: impl FnOnce(&mut Window, &mut App) -> Entity<V>,
     ) -> Result<WindowHandle<V>> {
-        let bounds = Bounds::new(crate::point(crate::px(-10000.0), crate::px(-10000.0)), size);
+        let origin = if VisualTestCapabilities::detect().offscreen_positioned_window {
+            crate::point(crate::px(-10000.0), crate::px(-10000.0))
+        } else {
+            Point::default()
+        };
+        let bounds = Bounds::new(origin, size);
         let mut app = self.app.borrow_mut();
         app.open_window(
             WindowOptions {
@@ -1715,5 +1769,16 @@ mod test_app_tests {
         assert!(capabilities.real_renderer);
         assert!(capabilities.screenshot_capture);
         assert!(capabilities.offscreen_positioned_window);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_visual_harness_exposes_directx_screenshot_support() {
+        let capabilities = VisualTestCapabilities::detect();
+        assert!(capabilities.real_renderer);
+        assert!(capabilities.screenshot_capture);
+        assert!(capabilities.offscreen_positioned_window);
+        let _constructor: fn() -> Option<RealVisualTestContext> =
+            RealVisualTestContext::new_if_supported;
     }
 }

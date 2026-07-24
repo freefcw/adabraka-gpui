@@ -16,7 +16,7 @@ use std::{
     sync::Arc,
 };
 
-/// Test platform that combines real macOS rendering with deterministic app tasks.
+/// Test platform that combines native rendering with deterministic app tasks.
 pub(crate) struct VisualTestPlatform {
     dispatcher: TestDispatcher,
     background_executor: BackgroundExecutor,
@@ -209,6 +209,16 @@ impl Platform for VisualTestPlatform {
     }
 
     fn write_to_clipboard(&self, item: ClipboardItem) {
+        *self.clipboard.lock() = Some(item);
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    fn read_from_primary(&self) -> Option<ClipboardItem> {
+        self.clipboard.lock().clone()
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    fn write_to_primary(&self, item: ClipboardItem) {
         *self.clipboard.lock() = Some(item);
     }
 

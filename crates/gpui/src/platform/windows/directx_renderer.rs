@@ -295,7 +295,7 @@ impl DirectXRenderer {
         Ok(())
     }
 
-    pub(crate) fn draw(&mut self, scene: &Scene) -> Result<()> {
+    fn render_scene(&mut self, scene: &Scene) -> Result<()> {
         self.pre_draw()?;
         for batch in scene.batches() {
             match batch {
@@ -324,7 +324,86 @@ impl DirectXRenderer {
                     scene.polychrome_sprites.len(),
                     scene.surfaces.len(),))?;
         }
+        Ok(())
+    }
+
+    pub(crate) fn draw(&mut self, scene: &Scene) -> Result<()> {
+        self.render_scene(scene)?;
         self.present()
+    }
+
+    #[cfg(any(test, feature = "test-support"))]
+    pub(crate) fn render_scene_to_image(&mut self, scene: &Scene) -> Result<image::RgbaImage> {
+        self.render_scene(scene)?;
+
+        let width = self.resources.width;
+        let height = self.resources.height;
+        if width == 0 || height == 0 {
+            anyhow::bail!("invalid DirectX render_to_image size: {width}x{height}");
+        }
+
+        let staging_texture = {
+            let descriptor = D3D11_TEXTURE2D_DESC {
+                Width: width,
+                Height: height,
+                MipLevels: 1,
+                ArraySize: 1,
+                Format: RENDER_TARGET_FORMAT,
+                SampleDesc: DXGI_SAMPLE_DESC {
+                    Count: 1,
+                    Quality: 0,
+                },
+                Usage: D3D11_USAGE_STAGING,
+                BindFlags: 0,
+                CPUAccessFlags: D3D11_CPU_ACCESS_READ.0 as u32,
+                MiscFlags: 0,
+            };
+            let mut texture = None;
+            unsafe {
+                self.devices
+                    .device
+                    .CreateTexture2D(&descriptor, None, Some(&mut texture))
+            }
+            .context("creating DirectX render readback texture")?;
+            texture.context("DirectX did not return a readback texture")?
+        };
+
+        unsafe {
+            self.devices
+                .device_context
+                .CopyResource(&staging_texture, &*self.resources.render_target);
+        }
+
+        let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
+        unsafe {
+            self.devices.device_context.Map(
+                &staging_texture,
+                0,
+                D3D11_MAP_READ,
+                0,
+                Some(&mut mapped),
+            )
+        }
+        .context("mapping DirectX render readback texture")?;
+
+        let Some(readback_len) = (mapped.RowPitch as usize).checked_mul(height as usize) else {
+            unsafe {
+                self.devices.device_context.Unmap(&staging_texture, 0);
+            }
+            anyhow::bail!("DirectX readback buffer size overflow");
+        };
+        let readback =
+            unsafe { std::slice::from_raw_parts(mapped.pData.cast::<u8>(), readback_len) };
+        let image = crate::platform::render_image::rgba_image_from_bgra_rows(
+            width,
+            height,
+            mapped.RowPitch as usize,
+            readback,
+        );
+        unsafe {
+            self.devices.device_context.Unmap(&staging_texture, 0);
+        }
+        image
     }
 
     pub(crate) fn resize(&mut self, new_size: Size<DevicePixels>) -> Result<()> {

@@ -62,6 +62,11 @@ jobs:
             cache-key: windows-no-default
             linux-native: false
             command: cargo check -p adabraka-gpui --lib --no-default-features --locked
+          - name: Windows / real visual smoke
+            os: windows-2022
+            cache-key: windows-real-visual
+            linux-native: false
+            command: cargo test -p adabraka-gpui --test real_visual_smoke --features test-support --locked -- --ignored
 
     steps:
       - name: Check out repository

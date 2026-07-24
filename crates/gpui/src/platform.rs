@@ -22,6 +22,9 @@ mod mac;
 mod wgpu;
 
 #[cfg(any(test, feature = "test-support"))]
+mod render_image;
+
+#[cfg(any(test, feature = "test-support"))]
 mod test;
 
 #[cfg(target_os = "windows")]

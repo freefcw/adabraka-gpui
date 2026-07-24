@@ -7,7 +7,7 @@ use ::util::ResultExt;
 use anyhow::Result;
 use windows::Win32::{
     Foundation::*,
-    Graphics::DirectManipulation::*,
+    Graphics::{DirectManipulation::*, Gdi::*},
     System::Com::*,
     UI::{Input::Pointer::*, WindowsAndMessaging::*},
 };
@@ -113,7 +113,7 @@ impl DirectManipulationHandler {
     }
 
     pub(crate) fn drain_events(&self) -> Vec<PlatformInput> {
-        std::mem::take(&mut *self.pending_events.borrow_mut())
+        std::mem::take(&mut *self.pending_events.as_ref().borrow_mut())
     }
 }
 
@@ -170,6 +170,7 @@ impl DirectManipulationEventHandler {
         match self.gesture_kind.get() {
             GestureKind::Scroll => {
                 self.pending_events
+                    .as_ref()
                     .borrow_mut()
                     .push(PlatformInput::ScrollWheel(ScrollWheelEvent {
                         position,
@@ -180,6 +181,7 @@ impl DirectManipulationEventHandler {
             }
             GestureKind::Pinch => {
                 self.pending_events
+                    .as_ref()
                     .borrow_mut()
                     .push(PlatformInput::Pinch(PinchEvent {
                         position,
@@ -302,6 +304,7 @@ impl IDirectManipulationViewportEventHandler_Impl for DirectManipulationEventHan
                 self.end_gesture();
                 self.gesture_kind.set(GestureKind::Pinch);
                 self.pending_events
+                    .as_ref()
                     .borrow_mut()
                     .push(PlatformInput::Pinch(PinchEvent {
                         position,
@@ -322,6 +325,7 @@ impl IDirectManipulationViewportEventHandler_Impl for DirectManipulationEventHan
                 let touch_phase = self.scroll_phase.get();
                 self.scroll_phase.set(TouchPhase::Moved);
                 self.pending_events
+                    .as_ref()
                     .borrow_mut()
                     .push(PlatformInput::ScrollWheel(ScrollWheelEvent {
                         position,
@@ -333,6 +337,7 @@ impl IDirectManipulationViewportEventHandler_Impl for DirectManipulationEventHan
             GestureKind::Pinch => {
                 let scale_delta = scale / last_scale;
                 self.pending_events
+                    .as_ref()
                     .borrow_mut()
                     .push(PlatformInput::Pinch(PinchEvent {
                         position,

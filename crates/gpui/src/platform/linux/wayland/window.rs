@@ -1408,6 +1408,11 @@ impl PlatformWindow for WaylandWindow {
         state.renderer_presented = false;
     }
 
+    #[cfg(any(test, feature = "test-support"))]
+    fn render_to_image(&self, scene: &Scene) -> anyhow::Result<image::RgbaImage> {
+        self.borrow_mut().renderer.render_scene_to_image(scene)
+    }
+
     fn sprite_atlas(&self) -> Arc<dyn PlatformAtlas> {
         let state = self.borrow();
         state.renderer.sprite_atlas().clone()
