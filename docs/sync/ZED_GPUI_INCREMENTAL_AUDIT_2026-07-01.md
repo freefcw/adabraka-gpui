@@ -56,6 +56,18 @@ AccessKit、benchmark/profiler 二期、web 平台和 scheduler 相关改动价�
 
 验证已覆盖可在本机执行的默认 macOS `cargo check -p adabraka-gpui --lib`，以及对应纯 Rust / test-support 单测。Linux Wayland 与 Windows 目标的完整交叉检查受本机缺少平台 C toolchain 限制，需在对应平台补跑。
 
+## Follow-up：Wayland serial 串号修复（2026-07-25）
+
+- 上游提交：`dc2a339d5d043da448a3f7ddc7c0a85c63864aad`，`gpui_linux: Fix Wayland serial token tracking (#61454)`
+- 本地提交：`1912e5d`，`Zed-Origin: dc2a339d5d043da448a3f7ddc7c0a85c63864aad`
+- 背景：上表中 `61e23fdb51` 引入的 `get_latest()` 取所有 serial kind 的最大值。`InputMethod`/`MouseEnter`/`DataDevice` 与 `KeyPress`/`MousePress` 不来自同一 serial 池，长时间 IME 使用后 `InputMethod` 值会超过 press serial，被 Mutter/kWin 当作 selection 授权，使 Zed 永久占有剪贴板/主选区，直到进程退出。
+- 落地范围：
+  - `serial.rs`：新增 `Serial(u32)` 与 `SelectionSerial(Serial)` 包装类型；`SerialTracker` 增加 `selection_serial` 字段，仅由 `KeyPress`/`MousePress` 更新；`get()` 返回 `Serial`，删除 `get_latest()`，新增 `selection_serial()` 与 5 个单测。
+  - `client.rs`：`write_to_primary`/`write_to_clipboard` 改用 `selection_serial()`，无合格 press serial 时 `log::warn!` 并跳过所有权请求；`KeyPress` 仅在 `Pressed` 时 `update`；其余 `set_cursor`/`set_shape`/`set_icon`/`set_serial`/`accept` 调用补 `.as_raw()`。
+  - `window.rs`：`set_serial`/`show_window_menu`/`_move`/`resize` 4 处补 `.as_raw()`。
+- 与上游的预期分歧（非遗漏）：上游 `popup_grab` 的 `MousePress.max(KeyPress)`、`cursor_hidden_window` 隐藏光标方法、`WlPointer` 分发里的 `default_style` 光标设置三处 hunk 在本仓库结构中不存在（parent-native popup 在 `codex/parent-native-popup` 分支，本地 `MouseEnter` 分支直接用事件自带 serial），不影响本修复。
+- 验证：新增 `serial` 模块 5 个单测在 Linux 下通过；本机 macOS 受 `#[cfg(target_os = "linux")]` 门控不编译 wayland 模块，建议在 `mp-dev` 上 `cargo test -p adabraka-gpui --lib --features test-support,wayland serial::` 与 `cargo check -p adabraka-gpui --features wayland` 闭环。
+
 ## 分析范围
 
 纳入上游路径：
@@ -78,7 +90,7 @@ AccessKit、benchmark/profiler 二期、web 平台和 scheduler 相关改动价�
 
 | 上游主题 | 当前状态 | 当前证据 | 处理建议 |
 | --- | --- | --- | --- |
-| Wayland clipboard serial 使用最近 serial（`61e23fdb51`） | 已有 | `crates/gpui/src/platform/linux/wayland/serial.rs:55`、`crates/gpui/src/platform/linux/wayland/client.rs:933` | 不重复引入 |
+| Wayland clipboard serial 使用最近 serial（`61e23fdb51`） | 已有，但已被上游回归修复覆盖 | `crates/gpui/src/platform/linux/wayland/serial.rs:58`、`crates/gpui/src/platform/linux/wayland/client.rs:1013` | `61e23fdb51` 的 `get_latest()` 取所有 kind 最大值的做法会在长时 IME 使用后被 `InputMethod` 串号毒化剪贴板；2026-07-25 已按上游 `dc2a339d5d` 改为 `selection_serial()`，详见下方 follow-up |
 | Wayland redundant surface commit flicker（`923f315f26`） | 已有 | `crates/gpui/src/platform/linux/wayland/window.rs:125`、`crates/gpui/src/platform/linux/wayland/window.rs:1573` | 不重复引入 |
 | Wayland Mailbox present mode（`980a294292`） | 已有 | `crates/gpui/src/platform/linux/wayland/window.rs:201` | 不重复引入 |
 | Linux wgpu recovery 拒绝软件 renderer（`008d54299b`） | 已有 | `crates/gpui/src/platform/wgpu/wgpu_context.rs:36`、`crates/gpui/src/platform/wgpu/wgpu_renderer.rs:1691` | 不重复引入 |

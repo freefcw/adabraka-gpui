@@ -174,6 +174,14 @@ This closes the missing validation-record problem. Linux X11 behavior is runtime
 - Local final evidence after the follow-up: GPUI 203 passed/2 ignored; workspace 265 passed/2 ignored; workspace check, rustfmt, and diff check passed.
 - External proof still pending: `mp-dev` became unreachable before the updated Windows cfg could be re-cross-compiled; the native DirectX result will come from the new Windows CI job.
 
+## Follow-up: Wayland serial token tracking (2026-07-25)
+
+- Backported upstream `dc2a339d5d043da448a3f7ddc7c0a85c63864aad` (`gpui_linux: Fix Wayland serial token tracking`, #61454) as local commit `1912e5d`.
+- Root cause: the earlier `get_latest()` took the max serial across all kinds, but `InputMethod`, `MouseEnter`, and `DataDevice` serials are not from the same pool as `KeyPress`/`MousePress`. After prolonged IME use the `InputMethod` serial overtakes press serials and is wrongly used for clipboard/primary-selection authorization on Mutter/kWin, poisoning selection ownership until exit.
+- Fix: dedicated `selection_serial()` updated only by `KeyPress`/`MousePress`, with ownership requests skipped (and warned) when no eligible press serial exists. Adds `Serial`/`SelectionSerial` wrappers, drops `get_latest()`, restricts `KeyPress` updates to press, and adds five focused unit tests.
+- Expected divergence (not a gap): three upstream hunks (`popup_grab` `MousePress.max(KeyPress)`, `cursor_hidden_window`, `WlPointer` `default_style`) are absent here because the local cursor/popup code paths diverge from upstream; none affect the selection-ownership fix.
+- Validation: serial unit tests compile-pass under the wayland feature on Linux; macOS host is gated out of the wayland module, so closure belongs on `mp-dev` (`cargo test -p adabraka-gpui --lib --features test-support,wayland serial::`).
+
 ## First Execution Step
 
 Add the upstream group-hover transition regression test and confirm it fails by observing redundant render/paint counts before changing the notification logic.

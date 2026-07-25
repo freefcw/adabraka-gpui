@@ -18,6 +18,9 @@
 
 - **macOS screen capture** — releases native setup, startup-failure, and frame-callback resources
   so repeated screen-sharing attempts do not accumulate them.
+- **Wayland clipboard/selection serial** — selection ownership now uses a dedicated press-derived
+  serial instead of the largest serial across all kinds, preventing IME serials from poisoning
+  clipboard ownership on Mutter/kWin after prolonged input-method use.
 
 ### Improvements
 
