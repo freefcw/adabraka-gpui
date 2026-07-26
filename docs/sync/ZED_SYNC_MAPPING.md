@@ -1,5 +1,7 @@
 # Zed to Adabraka GPUI Sync Mapping
 
+> **历史文档**：本文描述 crate 拆分前的目录结构，不能作为当前同步操作指南。当前基线、路径映射和验证命令见 [`CURRENT.md`](./CURRENT.md)。
+
 本文档记录了 Adabraka GPUI 仓库与 Zed 源仓库之间的映射关系，用于将 Zed 仓库的更新同步到本仓库。
 
 ## 仓库信息

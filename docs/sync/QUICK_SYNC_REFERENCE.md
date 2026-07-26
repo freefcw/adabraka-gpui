@@ -1,5 +1,7 @@
 # Zed → Adabraka GPUI 快速同步参考
 
+> **历史文档**：本文命令和平台路径基于 crate 拆分前结构。当前同步只使用 [`CURRENT.md`](./CURRENT.md)。
+
 ## 快速映射表
 
 ### Crate 名称映射
