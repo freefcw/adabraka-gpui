@@ -17,35 +17,36 @@ pub fn derive_app_context(input: TokenStream) -> TokenStream {
     let type_name = &ast.ident;
     let (impl_generics, type_generics, where_clause) = ast.generics.split_for_impl();
 
+    let gpui = crate::gpui_crate_path();
     let r#gen = quote! {
-        impl #impl_generics adabraka_gpui::AppContext for #type_name #type_generics
+        impl #impl_generics #gpui::AppContext for #type_name #type_generics
         #where_clause
         {
             type Result<T> = T;
 
             fn new<T: 'static>(
                 &mut self,
-                build_entity: impl FnOnce(&mut adabraka_gpui::Context<'_, T>) -> T,
-            ) -> Self::Result<adabraka_gpui::Entity<T>> {
+                build_entity: impl FnOnce(&mut #gpui::Context<'_, T>) -> T,
+            ) -> Self::Result<#gpui::Entity<T>> {
                 self.#app_variable.new(build_entity)
             }
 
-            fn reserve_entity<T: 'static>(&mut self) -> Self::Result<adabraka_gpui::Reservation<T>> {
+            fn reserve_entity<T: 'static>(&mut self) -> Self::Result<#gpui::Reservation<T>> {
                 self.#app_variable.reserve_entity()
             }
 
             fn insert_entity<T: 'static>(
                 &mut self,
-                reservation: adabraka_gpui::Reservation<T>,
-                build_entity: impl FnOnce(&mut adabraka_gpui::Context<'_, T>) -> T,
-            ) -> Self::Result<adabraka_gpui::Entity<T>> {
+                reservation: #gpui::Reservation<T>,
+                build_entity: impl FnOnce(&mut #gpui::Context<'_, T>) -> T,
+            ) -> Self::Result<#gpui::Entity<T>> {
                 self.#app_variable.insert_entity(reservation, build_entity)
             }
 
             fn update_entity<T, R>(
                 &mut self,
-                handle: &adabraka_gpui::Entity<T>,
-                update: impl FnOnce(&mut T, &mut adabraka_gpui::Context<'_, T>) -> R,
+                handle: &#gpui::Entity<T>,
+                update: impl FnOnce(&mut T, &mut #gpui::Context<'_, T>) -> R,
             ) -> Self::Result<R>
             where
                 T: 'static,
@@ -55,8 +56,8 @@ pub fn derive_app_context(input: TokenStream) -> TokenStream {
 
             fn as_mut<'y, 'z, T>(
                 &'y mut self,
-                handle: &'z adabraka_gpui::Entity<T>,
-            ) -> Self::Result<adabraka_gpui::GpuiBorrow<'y, T>>
+                handle: &'z #gpui::Entity<T>,
+            ) -> Self::Result<#gpui::GpuiBorrow<'y, T>>
             where
                 T: 'static,
             {
@@ -65,8 +66,8 @@ pub fn derive_app_context(input: TokenStream) -> TokenStream {
 
             fn read_entity<T, R>(
                 &self,
-                handle: &adabraka_gpui::Entity<T>,
-                read: impl FnOnce(&T, &adabraka_gpui::App) -> R,
+                handle: &#gpui::Entity<T>,
+                read: impl FnOnce(&T, &#gpui::App) -> R,
             ) -> Self::Result<R>
             where
                 T: 'static,
@@ -74,34 +75,34 @@ pub fn derive_app_context(input: TokenStream) -> TokenStream {
                 self.#app_variable.read_entity(handle, read)
             }
 
-            fn update_window<T, F>(&mut self, window: adabraka_gpui::AnyWindowHandle, f: F) -> adabraka_gpui::Result<T>
+            fn update_window<T, F>(&mut self, window: #gpui::AnyWindowHandle, f: F) -> #gpui::Result<T>
             where
-                F: FnOnce(adabraka_gpui::AnyView, &mut adabraka_gpui::Window, &mut adabraka_gpui::App) -> T,
+                F: FnOnce(#gpui::AnyView, &mut #gpui::Window, &mut #gpui::App) -> T,
             {
                 self.#app_variable.update_window(window, f)
             }
 
             fn read_window<T, R>(
                 &self,
-                window: &adabraka_gpui::WindowHandle<T>,
-                read: impl FnOnce(adabraka_gpui::Entity<T>, &adabraka_gpui::App) -> R,
-            ) -> adabraka_gpui::Result<R>
+                window: &#gpui::WindowHandle<T>,
+                read: impl FnOnce(#gpui::Entity<T>, &#gpui::App) -> R,
+            ) -> #gpui::Result<R>
             where
                 T: 'static,
             {
                 self.#app_variable.read_window(window, read)
             }
 
-            fn background_spawn<R>(&self, future: impl std::future::Future<Output = R> + Send + 'static) -> adabraka_gpui::Task<R>
+            fn background_spawn<R>(&self, future: impl std::future::Future<Output = R> + Send + 'static) -> #gpui::Task<R>
             where
                 R: Send + 'static,
             {
                 self.#app_variable.background_spawn(future)
             }
 
-            fn read_global<G, R>(&self, callback: impl FnOnce(&G, &adabraka_gpui::App) -> R) -> Self::Result<R>
+            fn read_global<G, R>(&self, callback: impl FnOnce(&G, &#gpui::App) -> R) -> Self::Result<R>
             where
-                G: adabraka_gpui::Global,
+                G: #gpui::Global,
             {
                 self.#app_variable.read_global(callback)
             }

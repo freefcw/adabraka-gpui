@@ -3,7 +3,7 @@
 
 use heck::ToSnakeCase as _;
 use proc_macro::TokenStream;
-use proc_macro2::{Span, TokenStream as TokenStream2};
+use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{
     Attribute, Expr, FnArg, Ident, Item, ItemTrait, Lit, Meta, Path, ReturnType, TraitItem, Type,
@@ -41,13 +41,8 @@ fn generate_reflected_trait(trait_item: ItemTrait) -> TokenStream {
     let trait_name = &trait_item.ident;
     let vis = &trait_item.vis;
 
-    // Determine if we're being called from within the adabraka_gpui crate
-    let call_site = Span::call_site();
-    let inspector_reflection_path = if is_called_from_gpui_crate(call_site) {
-        quote! { crate::inspector_reflection }
-    } else {
-        quote! { ::adabraka_gpui::inspector_reflection }
-    };
+    let gpui = crate::gpui_crate_path();
+    let inspector_reflection_path = quote! { #gpui::inspector_reflection };
 
     // Collect method information for methods of form fn name(self) -> Self or fn name(mut self) -> Self
     let mut method_infos = Vec::new();
@@ -184,11 +179,6 @@ fn extract_cfg_attributes(attrs: &[Attribute]) -> Vec<Attribute> {
         .filter(|attr| attr.path().is_ident("cfg"))
         .cloned()
         .collect()
-}
-
-fn is_called_from_gpui_crate(_span: Span) -> bool {
-    // Cargo package names use hyphens; generated Rust paths use underscores.
-    std::env::var("CARGO_PKG_NAME").is_ok_and(|name| name == "adabraka-gpui")
 }
 
 struct MacroExpander;

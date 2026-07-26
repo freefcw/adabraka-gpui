@@ -33,6 +33,9 @@ path = "tests/render_test.rs"
 [dependencies.heck]
 version = "0.5"
 
+[dependencies.proc-macro-crate]
+version = "3.4"
+
 [dependencies.proc-macro2]
 version = "1.0.93"
 
@@ -49,7 +52,7 @@ features = [
 
 
 [dev-dependencies]
-adabraka_gpui = { package = "adabraka-gpui", path = "../gpui", default-features = false }
+gpui = { package = "adabraka-gpui", path = "../gpui", default-features = false }
 
 [lints.clippy]
 dbg_macro = "deny"

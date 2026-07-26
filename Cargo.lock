@@ -203,14 +203,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "adabraka-gpui-downstream-compat"
+version = "0.0.0"
+dependencies = [
+ "adabraka-gpui",
+]
+
+[[package]]
 name = "adabraka-gpui-macros"
 version = "0.5.1"
 dependencies = [
  "adabraka-gpui",
  "heck 0.5.0",
+ "proc-macro-crate",
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "adabraka-gpui-renamed-dependency-compat"
+version = "0.0.0"
+dependencies = [
+ "adabraka-gpui",
+ "rand 0.9.4",
 ]
 
 [[package]]

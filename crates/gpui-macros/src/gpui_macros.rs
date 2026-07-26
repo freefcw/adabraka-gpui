@@ -13,6 +13,8 @@ mod test;
 mod derive_inspector_reflection;
 
 use proc_macro::TokenStream;
+use proc_macro_crate::{FoundCrate, crate_name};
+use quote::quote;
 use syn::{DeriveInput, Ident};
 
 /// `Action` derive macro - see the trait documentation for details.
@@ -101,48 +103,56 @@ pub fn style_helpers(input: TokenStream) -> TokenStream {
 }
 
 /// Generates methods for visibility styles.
+#[doc(hidden)]
 #[proc_macro]
 pub fn visibility_style_methods(input: TokenStream) -> TokenStream {
     styles::visibility_style_methods(input)
 }
 
 /// Generates methods for margin styles.
+#[doc(hidden)]
 #[proc_macro]
 pub fn margin_style_methods(input: TokenStream) -> TokenStream {
     styles::margin_style_methods(input)
 }
 
 /// Generates methods for padding styles.
+#[doc(hidden)]
 #[proc_macro]
 pub fn padding_style_methods(input: TokenStream) -> TokenStream {
     styles::padding_style_methods(input)
 }
 
 /// Generates methods for position styles.
+#[doc(hidden)]
 #[proc_macro]
 pub fn position_style_methods(input: TokenStream) -> TokenStream {
     styles::position_style_methods(input)
 }
 
 /// Generates methods for overflow styles.
+#[doc(hidden)]
 #[proc_macro]
 pub fn overflow_style_methods(input: TokenStream) -> TokenStream {
     styles::overflow_style_methods(input)
 }
 
 /// Generates methods for cursor styles.
+#[doc(hidden)]
 #[proc_macro]
 pub fn cursor_style_methods(input: TokenStream) -> TokenStream {
     styles::cursor_style_methods(input)
 }
 
 /// Generates methods for border styles.
+#[doc(hidden)]
 #[proc_macro]
 pub fn border_style_methods(input: TokenStream) -> TokenStream {
     styles::border_style_methods(input)
 }
 
 /// Generates methods for box shadow styles.
+#[doc(hidden)]
 #[proc_macro]
 pub fn box_shadow_style_methods(input: TokenStream) -> TokenStream {
     styles::box_shadow_style_methods(input)
@@ -210,6 +220,28 @@ pub fn test(args: TokenStream, function: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn derive_inspector_reflection(_args: TokenStream, input: TokenStream) -> TokenStream {
     derive_inspector_reflection::derive_inspector_reflection(_args, input)
+}
+
+pub(crate) fn gpui_crate_path() -> proc_macro2::TokenStream {
+    for package in ["adabraka-gpui", "adabraka-gpui-core"] {
+        match crate_name(package) {
+            Ok(FoundCrate::Itself) => return quote!(::gpui),
+            Ok(FoundCrate::Name(name)) => {
+                let name = match name.as_str() {
+                    // Cargo reports the package key, but the library target is
+                    // `gpui` / `gpui_core` respectively.
+                    "adabraka_gpui" => "gpui",
+                    "adabraka_gpui_core" => "gpui_core",
+                    _ => &name,
+                };
+                let ident = Ident::new(&name.replace('-', "_"), proc_macro2::Span::call_site());
+                return quote!(::#ident);
+            }
+            Err(_) => {}
+        }
+    }
+
+    quote!(::gpui)
 }
 
 pub(crate) fn get_simple_attribute_field(ast: &DeriveInput, name: &'static str) -> Option<Ident> {

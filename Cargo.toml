@@ -13,6 +13,8 @@ members = [
     "crates/util",
     "crates/util_macros",
     "crates/semantic_version",
+    "tests/downstream-compat",
+    "tests/downstream-renamed-compat",
 ]
 
 [workspace.package]
