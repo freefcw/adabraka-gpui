@@ -1,25 +1,26 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=verify-common.sh
+source "$SCRIPT_DIR/verify-common.sh"
 
 echo "=== 001 - Profiler / Observability ==="
 
 echo "[1/5] Compile checks..."
-cargo check -p adabraka-gpui
-cargo check -p adabraka-gpui --no-default-features
-cargo check -p adabraka-gpui --no-default-features --features wgpu
+check_compile_baseline
 
 echo "[2/5] Profiler tests..."
-cargo test -p adabraka-gpui profiler
-cargo test -p adabraka-gpui --lib --features test-support -- profiler
+test_core profiler
 
 echo "[3/5] Executor regression tests..."
-cargo test -p adabraka-gpui --lib --features test-support -- executor
+test_core executor
 
 echo "[4/5] Frozen tests (regression guard)..."
-cargo test -p adabraka-gpui --lib --features test-support -- app::test
-cargo test -p adabraka-gpui --lib --features test-support -- elements::list
+test_core app::test
+test_core elements::list
 
-echo "[5/5] Full lib test..."
-cargo test -p adabraka-gpui --lib --features test-support
+echo "[5/5] Full core lib test..."
+test_core --test-threads=1
 
 echo "=== 001 ALL PASSED ==="

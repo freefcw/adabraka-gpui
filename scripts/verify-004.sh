@@ -1,30 +1,32 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
 
-echo "=== 004 - Scheduler / Queue ==="
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=verify-common.sh
+source "$SCRIPT_DIR/verify-common.sh"
+
+echo "=== 004 - Scheduler / Queue Test Prototype ==="
 
 echo "[1/6] Compile checks..."
-cargo check -p adabraka-gpui
-cargo check -p adabraka-gpui --no-default-features
-cargo check -p adabraka-gpui --no-default-features --features wgpu
+check_compile_baseline
 
 echo "[2/6] Baseline tests..."
-cargo test -p adabraka-gpui --lib --features test-support -- baseline_
+test_core baseline_
 
 echo "[3/6] Priority tests..."
-cargo test -p adabraka-gpui --lib --features test-support -- spawn_with_priority
-cargo test -p adabraka-gpui --lib --features test-support -- priority
+test_core spawn_with_priority
+test_core priority
 
 echo "[4/6] Dispatcher tests..."
-cargo test -p adabraka-gpui --lib --features test-support -- dispatcher
-cargo test -p adabraka-gpui --lib --features test-support -- executor
+test_core dispatcher
+test_core executor
 
 echo "[5/6] Frozen tests (regression guard)..."
-cargo test -p adabraka-gpui --lib --features test-support -- app::test
-cargo test -p adabraka-gpui --lib --features test-support -- elements::list
-cargo test -p adabraka-gpui --lib --features test-support -- keymap
+test_core app::test
+test_core elements::list
+test_core keymap
 
-echo "[6/6] Full lib test..."
-cargo test -p adabraka-gpui --lib --features test-support -- --test-threads=1
+echo "[6/6] Full core lib test..."
+test_core --test-threads=1
 
-echo "=== 004 ALL PASSED ==="
+echo "=== 004 TEST PROTOTYPE PASSED ==="

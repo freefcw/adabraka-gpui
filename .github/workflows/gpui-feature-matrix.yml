@@ -22,11 +22,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Linux / default
+          - name: Linux / workspace tests
             os: ubuntu-24.04
-            cache-key: linux-default
+            cache-key: linux-workspace-tests
             linux-native: true
-            command: cargo check -p adabraka-gpui --lib --locked
+            command: cargo test --workspace --lib --tests --locked -- --test-threads=1
           - name: Linux / no default features
             os: ubuntu-24.04
             cache-key: linux-no-default
@@ -42,21 +42,21 @@ jobs:
             cache-key: linux-accessibility-wayland
             linux-native: true
             command: cargo check -p adabraka-gpui --lib --no-default-features --features accessibility,font-kit,wayland --locked
-          - name: macOS / default
+          - name: macOS / workspace tests
             os: macos-14
-            cache-key: macos-default
+            cache-key: macos-workspace-tests
             linux-native: false
-            command: cargo check -p adabraka-gpui --lib --locked
+            command: cargo test --workspace --lib --tests --locked -- --test-threads=1
           - name: macOS / no default features
             os: macos-14
             cache-key: macos-no-default
             linux-native: false
             command: cargo check -p adabraka-gpui --lib --no-default-features --locked
-          - name: Windows / default
+          - name: Windows / workspace tests
             os: windows-2022
-            cache-key: windows-default
+            cache-key: windows-workspace-tests
             linux-native: false
-            command: cargo check -p adabraka-gpui --lib --locked
+            command: cargo test --workspace --lib --tests --locked -- --test-threads=1
           - name: Windows / no default features
             os: windows-2022
             cache-key: windows-no-default

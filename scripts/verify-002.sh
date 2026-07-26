@@ -1,25 +1,27 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=verify-common.sh
+source "$SCRIPT_DIR/verify-common.sh"
 
 echo "=== 002 - TestApp / Headless ==="
 
 echo "[1/5] Compile checks..."
-cargo check -p adabraka-gpui
-cargo check -p adabraka-gpui --no-default-features
-cargo check -p adabraka-gpui --no-default-features --features wgpu
+check_compile_baseline
 
 echo "[2/5] TestApp tests..."
-cargo test -p adabraka-gpui --lib --features test-support -- test_app
+test_core test_app
 
 echo "[3/5] Headless tests..."
-cargo test -p adabraka-gpui --lib --features test-support -- headless
+test_core headless
 
 echo "[4/5] Frozen tests (regression guard)..."
-cargo test -p adabraka-gpui --lib --features test-support -- app::test
-cargo test -p adabraka-gpui --lib --features test-support -- executor
-cargo test -p adabraka-gpui --lib --features test-support -- text_system
+test_core app::test
+test_core executor
+test_core text_system
 
-echo "[5/5] Full lib test..."
-cargo test -p adabraka-gpui --lib --features test-support -- --test-threads=1
+echo "[5/5] Full core lib test..."
+test_core --test-threads=1
 
 echo "=== 002 ALL PASSED ==="

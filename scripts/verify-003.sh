@@ -1,28 +1,30 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=verify-common.sh
+source "$SCRIPT_DIR/verify-common.sh"
 
 echo "=== 003 - Visual Test Platform ==="
 
 echo "[1/5] Compile checks..."
-cargo check -p adabraka-gpui
-cargo check -p adabraka-gpui --no-default-features
-cargo check -p adabraka-gpui --no-default-features --features wgpu
+check_compile_baseline
 
 echo "[2/5] Capability detection tests..."
-cargo test -p adabraka-gpui --lib --features test-support -- visual_test_capabilities
+test_core visual_test_capabilities
 
 echo "[3/5] Mock visual tests..."
-cargo test -p adabraka-gpui --lib --features test-support -- visual_test
+test_core visual_test
 
 echo "[4/5] Frozen tests (regression guard)..."
-cargo test -p adabraka-gpui --lib --features test-support -- app::test
-cargo test -p adabraka-gpui --lib --features test-support -- executor
+test_core app::test
+test_core executor
 
-echo "[5/5] Full lib test..."
-cargo test -p adabraka-gpui --lib --features test-support
+echo "[5/5] Full core lib test..."
+test_core --test-threads=1
 
-echo ""
-echo "(Optional) Real renderer smoke:"
+echo
+echo "Optional real renderer smoke:"
 echo "  cargo test -p adabraka-gpui --test real_visual_smoke --features test-support -- --ignored"
 
 echo "=== 003 ALL PASSED ==="
