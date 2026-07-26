@@ -215,10 +215,10 @@ cargo test -p adabraka-gpui --test real_visual_smoke --features test-support -- 
 已完成首版（2026-05-17）：
 
 - 已新增 `VisualTestCapabilities::detect()`，用于报告 `real_renderer`、`screenshot_capture`、`offscreen_positioned_window`、`deterministic_clock`。
-- macOS 和 Windows 当前报告真实 renderer、截图及屏外坐标窗口可用；Linux/FreeBSD 根据 `DISPLAY` / `WAYLAND_DISPLAY` 探测真实 renderer，并在 X11 下支持屏外坐标及 WGPU 截图。
+- macOS 当前报告真实 renderer、截图及屏外坐标窗口可用；Windows 报告真实 renderer 和截图可用，但窗口位置会回退到平台默认值；Linux/FreeBSD 根据 `DISPLAY` / `WAYLAND_DISPLAY` 探测真实 renderer，并在 X11 下支持屏外坐标及 WGPU 截图。
 - 已新增 capability detection 自动测试，不创建真实窗口、不触发 GPU smoke。
 - 已新增 mock visual render artifact：`TestWindow::draw(scene)` 会记录场景结构，`TestAppWindow::visual_render_artifact()` 可读取最近一次 mock draw 的 primitive 统计。
-- 已新增 `RealVisualTestContext` / `VisualTestPlatform`：macOS、Windows 与 Linux X11 可在主线程打开屏外坐标窗口；Wayland 使用 compositor-selected 位置。`harness = false` 的 `real_visual_smoke` 会绘制 simple div、调用真实 renderer present 并执行截图读回。
+- 已新增 `RealVisualTestContext` / `VisualTestPlatform`：macOS 与 Linux X11 可在主线程打开屏外坐标窗口；Wayland 使用 compositor-selected 位置；Windows 使用平台默认窗口位置。`harness = false` 的 `real_visual_smoke` 会绘制 simple div、调用真实 renderer present 并执行截图读回。
 - 已新增上游同名 `Window::render_to_image()` / `PlatformWindow::render_to_image(scene)` 接口；macOS Metal、Linux WGPU 和 Windows DirectX 均已实现 scene-to-image readback，其他平台默认返回 unsupported。
 - 验证脚本：`scripts/verify-003.sh`。
 

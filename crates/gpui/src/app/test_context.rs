@@ -966,7 +966,10 @@ fn detect_offscreen_positioned_window() -> bool {
 
 #[cfg(target_os = "windows")]
 fn detect_offscreen_positioned_window() -> bool {
-    true
+    // The Windows backend (`retrieve_window_placement`) rejects bounds whose
+    // center is not inside a monitor and falls back to a centered default, so
+    // it does not guarantee the requested offscreen origin. macOS and X11 do.
+    false
 }
 
 #[cfg(not(any(
@@ -981,9 +984,12 @@ fn detect_offscreen_positioned_window() -> bool {
 
 /// A real visual test context backed by the native platform renderer.
 ///
-/// macOS, Windows, and X11 windows use screen-outside coordinates so manual
-/// renderer smoke tests do not occupy the user's normal workspace. Wayland uses
-/// the compositor-selected position because clients cannot choose absolute coordinates.
+/// macOS and X11 windows use screen-outside coordinates so manual
+/// renderer smoke tests do not occupy the user's normal workspace. Windows
+/// places windows via the platform default (the backend rejects centers that
+/// fall outside any monitor and falls back to a centered default), so tests
+/// there do not assert an offscreen origin. Wayland uses the compositor-selected
+/// position because clients cannot choose absolute coordinates.
 #[cfg(all(
     any(
         target_os = "macos",
