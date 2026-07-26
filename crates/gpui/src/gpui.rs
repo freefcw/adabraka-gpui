@@ -6,6 +6,10 @@
 
 extern crate self as gpui;
 
+/// Absolute manifest directory used by backend build scripts for generated bindings.
+#[doc(hidden)]
+pub const GPUI_MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
+
 #[macro_use]
 mod action;
 mod app;

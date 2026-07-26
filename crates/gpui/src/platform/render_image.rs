@@ -1,7 +1,7 @@
 use anyhow::Result;
 
 #[allow(dead_code)]
-pub(crate) fn rgba_image_from_bgra_rows(
+pub fn rgba_image_from_bgra_rows(
     width: u32,
     height: u32,
     row_pitch: usize,
@@ -11,7 +11,7 @@ pub(crate) fn rgba_image_from_bgra_rows(
 }
 
 #[allow(dead_code)]
-pub(crate) fn rgba_image_from_rgba_rows(
+pub fn rgba_image_from_rgba_rows(
     width: u32,
     height: u32,
     row_pitch: usize,

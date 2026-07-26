@@ -22,5 +22,6 @@ pub use platform::{TestScreenCaptureSource, TestScreenCaptureStream};
     target_os = "freebsd",
     target_os = "windows"
 ))]
-pub(crate) use visual::VisualTestPlatform;
+#[doc(hidden)]
+pub use visual::VisualTestPlatform;
 pub use window::VisualRenderArtifact;

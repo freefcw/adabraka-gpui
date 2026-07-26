@@ -11,9 +11,9 @@
 //! # Quick Start
 //!
 //! ```rust,ignore
-//! use gpui::{Application, AppProfile};
+//! use gpui::AppProfile;
 //!
-//! Application::new()
+//! gpui::Application::new()
 //!     .with_resource_profile(AppProfile::Minimal)
 //!     .run(|cx| {
 //!         // open your tiny window...
@@ -248,11 +248,8 @@ impl GpuResourceBudget {
     ///
     /// Renderers require at least 16 bytes for a dynamic buffer binding, while
     /// a device may impose a smaller upper bound than the requested profile.
-    #[cfg_attr(
-        not(any(target_os = "linux", target_os = "freebsd", test)),
-        allow(dead_code)
-    )]
-    pub(crate) fn normalize_instance_buffer_capacity(
+    #[doc(hidden)]
+    pub fn normalize_instance_buffer_capacity(
         instance_buffer_initial_size: usize,
         max_buffer_size: u64,
     ) -> u64 {

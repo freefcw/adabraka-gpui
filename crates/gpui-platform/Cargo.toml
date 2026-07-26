@@ -1,0 +1,100 @@
+[package]
+name = "adabraka-gpui-platform"
+version = "0.7.0"
+edition = "2024"
+authors = ["Adabraka Team"]
+publish = true
+license = "Apache-2.0"
+homepage = "https://github.com/freefcw/adabraka-gpui"
+repository = "https://github.com/freefcw/adabraka-gpui"
+description = "Internal platform composition facade for Adabraka GPUI"
+
+[lib]
+name = "gpui_platform"
+path = "src/gpui_platform.rs"
+doctest = false
+
+[features]
+default = [
+    "accessibility",
+    "font-kit",
+    "wayland",
+    "x11",
+    "windows-manifest",
+    "image-default-formats",
+    "image-rayon",
+]
+accessibility = [
+    "gpui/accessibility",
+    "gpui_linux/accessibility",
+    "gpui_macos/accessibility",
+    "gpui_windows/accessibility",
+]
+as-raw-xcb-connection = ["gpui_linux/as-raw-xcb-connection"]
+ashpd = ["gpui_linux/ashpd"]
+bytemuck = ["gpui_linux/bytemuck"]
+calloop-wayland-source = ["gpui_linux/calloop-wayland-source"]
+cosmic-text = ["gpui_linux/cosmic-text"]
+filedescriptor = ["gpui_linux/filedescriptor"]
+font-kit = ["gpui/font-kit", "gpui_linux/font-kit", "gpui_macos/font-kit"]
+image-default-formats = ["gpui/image-default-formats"]
+image-format-avif = ["gpui/image-format-avif"]
+image-format-bmp = ["gpui/image-format-bmp"]
+image-format-dds = ["gpui/image-format-dds"]
+image-format-exr = ["gpui/image-format-exr"]
+image-format-farbfeld = ["gpui/image-format-farbfeld"]
+image-format-gif = ["gpui/image-format-gif"]
+image-format-hdr = ["gpui/image-format-hdr"]
+image-format-ico = ["gpui/image-format-ico"]
+image-format-jpeg = ["gpui/image-format-jpeg"]
+image-format-png = ["gpui/image-format-png"]
+image-format-pnm = ["gpui/image-format-pnm"]
+image-format-qoi = ["gpui/image-format-qoi"]
+image-format-tga = ["gpui/image-format-tga"]
+image-format-tiff = ["gpui/image-format-tiff"]
+image-format-webp = ["gpui/image-format-webp"]
+image-rayon = ["gpui/image-rayon"]
+input-latency-histogram = ["gpui/input-latency-histogram"]
+inspector = ["gpui/inspector"]
+leak-detection = ["gpui/leak-detection"]
+open = ["gpui_linux/open"]
+runtime_shaders = ["gpui/runtime_shaders", "gpui_macos/runtime_shaders"]
+screen-capture = [
+    "gpui/screen-capture",
+    "gpui_linux/screen-capture",
+    "gpui_macos/screen-capture",
+    "gpui_windows/screen-capture",
+]
+test-support = [
+    "gpui/test-support",
+    "gpui_linux/test-support",
+    "gpui_macos/test-support",
+    "gpui_windows/test-support",
+]
+wayland = ["gpui/wayland", "gpui_linux/wayland"]
+wayland-backend = ["gpui_linux/wayland-backend"]
+wayland-client = ["gpui_linux/wayland-client"]
+wayland-cursor = ["gpui_linux/wayland-cursor"]
+wayland-protocols = ["gpui_linux/wayland-protocols"]
+wayland-protocols-plasma = ["gpui_linux/wayland-protocols-plasma"]
+wayland-protocols-wlr = ["gpui_linux/wayland-protocols-wlr"]
+wayland-scanner = ["gpui_linux/wayland-scanner"]
+windows-manifest = ["gpui/windows-manifest", "gpui_windows/windows-manifest"]
+wgpu = ["gpui_linux/wgpu"]
+x11 = ["gpui/x11", "gpui_linux/x11"]
+x11-clipboard = ["gpui_linux/x11-clipboard"]
+x11rb = ["gpui_linux/x11rb"]
+xim = ["gpui_linux/xim"]
+xkbcommon = ["gpui_linux/xkbcommon"]
+
+[dependencies]
+gpui = { package = "adabraka-gpui-core", path = "../gpui", version = "0.7.0", default-features = false }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+gpui_windows = { package = "adabraka-gpui-windows", path = "../gpui-windows", version = "0.7.0", default-features = false }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+gpui_macos = { package = "adabraka-gpui-macos", path = "../gpui-macos", version = "0.7.0", default-features = false }
+
+[target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies]
+gpui_linux = { package = "adabraka-gpui-linux", path = "../gpui-linux", version = "0.7.0", default-features = false }

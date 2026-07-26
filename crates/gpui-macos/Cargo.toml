@@ -1,0 +1,94 @@
+[package]
+name = "adabraka-gpui-macos"
+version = "0.7.0"
+edition = "2024"
+authors = ["Adabraka Team"]
+build = "build.rs"
+publish = true
+license = "Apache-2.0"
+homepage = "https://github.com/freefcw/adabraka-gpui"
+repository = "https://github.com/freefcw/adabraka-gpui"
+readme = "README.md"
+description = "macOS platform and Metal renderer backend for Adabraka GPUI"
+
+[lib]
+name = "gpui_macos"
+path = "src/gpui_macos.rs"
+doctest = false
+
+[features]
+default = ["accessibility", "font-kit"]
+accessibility = ["dep:accesskit", "dep:accesskit_macos", "gpui/accessibility"]
+font-kit = ["dep:font-kit", "gpui/font-kit"]
+runtime_shaders = []
+screen-capture = ["gpui/screen-capture"]
+test-support = ["gpui/test-support"]
+
+[target.'cfg(target_os = "macos")'.dependencies]
+accesskit = { version = "0.24.0", optional = true }
+accesskit_macos = { version = "0.26.0", optional = true }
+anyhow = "1.0.86"
+async-task = "4.7"
+block = "0.1"
+collections = { package = "adabraka_collections", path = "../collections", version = "0.5.1" }
+core-foundation = "0.10.1"
+core-foundation-sys = "0.8.7"
+core-graphics = "0.24"
+core-text = "=21.0.0"
+core-video = { version = "0.5.2", features = ["metal"] }
+ctor = "0.3.0"
+derive_more = "0.99.17"
+dispatch2 = { version = "0.3.1", features = ["std"], default-features = false }
+etagere = "0.2"
+font-kit = { package = "zed-font-kit", version = "0.14.1-zed", optional = true }
+foreign-types = "0.5"
+futures = "0.3"
+gpui = { package = "adabraka-gpui-core", path = "../gpui", version = "0.7.0", default-features = false }
+image = { version = "0.25.1", default-features = false }
+itertools = "0.14.0"
+libc = "0.2"
+log = { version = "0.4.16", features = ["kv_unstable_serde", "serde"] }
+media = { package = "adabraka_media", path = "../media", version = "0.5.1" }
+metal = "0.33"
+objc = "0.2"
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", features = ["NSAlert", "NSApplication", "NSAppearance", "NSButton", "NSCell", "NSControl", "NSDockTile", "NSEvent", "NSGraphics", "NSImage", "NSMenu", "NSMenuItem", "NSOpenPanel", "NSPanel", "NSPasteboard", "NSResponder", "NSRunningApplication", "NSSavePanel", "NSScreen", "NSStatusBar", "NSStatusBarButton", "NSStatusItem", "NSView", "NSWindow", "objc2-core-graphics"] }
+objc2-foundation = { version = "0.3", features = ["NSArray", "NSAutoreleasePool", "NSBundle", "NSData", "NSDictionary", "NSObjCRuntime", "NSProcessInfo", "NSString", "NSURL", "objc2-core-foundation"] }
+parking = "2.0.0"
+parking_lot = "0.12.1"
+pathfinder_geometry = "0.5"
+raw-window-handle = "0.6"
+smallvec = "1.6"
+smol = "2.0"
+strum = { version = "0.27.2", features = ["derive"] }
+util = { package = "adabraka_util", path = "../util", version = "0.5.1" }
+uuid = { version = "1.1.2", features = ["v4", "v5", "v7", "serde"] }
+
+[build-dependencies]
+bindgen = "0.71"
+cbindgen = { version = "0.28.0", default-features = false }
+gpui = { package = "adabraka-gpui-core", path = "../gpui", version = "0.7.0", default-features = false }
+
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+gpui = { package = "adabraka-gpui-core", path = "../gpui", version = "0.7.0", default-features = false, features = ["test-support"] }
+
+[lints.clippy]
+dbg_macro = "deny"
+declare_interior_mutable_const = "deny"
+disallowed_methods = "deny"
+large_enum_variant = "allow"
+let_underscore_future = "allow"
+nonminimal_bool = "allow"
+redundant_clone = "deny"
+single_range_in_vec_init = "allow"
+todo = "deny"
+too_many_arguments = "allow"
+type_complexity = "allow"
+
+[lints.rust.unexpected_cfgs]
+level = "allow"
+priority = 0
+
+[lints.clippy.style]
+level = "allow"
+priority = -1

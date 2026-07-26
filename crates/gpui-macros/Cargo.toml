@@ -52,7 +52,7 @@ features = [
 
 
 [dev-dependencies]
-gpui = { package = "adabraka-gpui", path = "../gpui", default-features = false }
+gpui = { package = "adabraka-gpui-core", path = "../gpui", default-features = false }
 
 [lints.clippy]
 dbg_macro = "deny"

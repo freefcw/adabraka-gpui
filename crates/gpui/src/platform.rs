@@ -9,26 +9,32 @@ pub mod single_instance;
 /// Pure Rust utility for computing window bounds from a semantic [`WindowPosition`].
 pub mod window_positioner;
 
-#[cfg(any(target_os = "linux", target_os = "freebsd"))]
-mod linux;
-
-#[cfg(target_os = "macos")]
-mod mac;
-
+#[cfg(all(
+    feature = "screen-capture",
+    any(target_os = "linux", target_os = "freebsd")
+))]
+type PlatformScreenCaptureFrame = scap::frame::Frame;
 #[cfg(all(
     any(target_os = "linux", target_os = "freebsd"),
-    any(feature = "x11", feature = "wayland")
+    not(feature = "screen-capture")
 ))]
-mod wgpu;
+type PlatformScreenCaptureFrame = ();
+
+#[cfg(target_os = "macos")]
+type PlatformScreenCaptureFrame = core_video::image_buffer::CVImageBuffer;
+
+#[cfg(all(target_os = "windows", feature = "screen-capture"))]
+type PlatformScreenCaptureFrame = scap::frame::Frame;
+#[cfg(all(target_os = "windows", not(feature = "screen-capture")))]
+type PlatformScreenCaptureFrame = ();
 
 #[cfg(any(test, feature = "test-support"))]
-mod render_image;
+#[doc(hidden)]
+#[allow(missing_docs)]
+pub mod render_image;
 
 #[cfg(any(test, feature = "test-support"))]
 mod test;
-
-#[cfg(target_os = "windows")]
-mod windows;
 
 #[cfg(all(
     feature = "screen-capture",
@@ -40,7 +46,9 @@ mod windows;
         )
     )
 ))]
-pub(crate) mod scap_screen_capture;
+/// Shared screen-capture implementation used by desktop backends.
+#[doc(hidden)]
+pub mod scap_screen_capture;
 
 use crate::{
     Action, AnyWindowHandle, App, AsyncWindowContext, BackgroundExecutor, Bounds,
@@ -83,58 +91,28 @@ pub use app_menu::*;
 pub use keyboard::*;
 pub use keystroke::*;
 
-#[cfg(any(target_os = "linux", target_os = "freebsd"))]
-pub(crate) use linux::*;
-#[cfg(target_os = "macos")]
-pub(crate) use mac::*;
 pub use semantic_version::SemanticVersion;
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use test::*;
-#[cfg(target_os = "windows")]
-pub(crate) use windows::*;
 
 #[cfg(any(test, feature = "test-support"))]
 pub use test::{
     TestDispatcher, TestScreenCaptureSource, TestScreenCaptureStream, VisualRenderArtifact,
 };
 
-/// Returns a background executor for the current platform.
-pub fn background_executor() -> BackgroundExecutor {
-    current_platform(true).background_executor()
-}
+#[cfg(all(
+    any(test, feature = "test-support"),
+    any(
+        target_os = "macos",
+        target_os = "linux",
+        target_os = "freebsd",
+        target_os = "windows"
+    )
+))]
+#[doc(hidden)]
+pub use test::VisualTestPlatform;
 
-#[cfg(target_os = "macos")]
-pub(crate) fn current_platform(headless: bool) -> Rc<dyn Platform> {
-    Rc::new(MacPlatform::new(headless))
-}
-
-#[cfg(any(target_os = "linux", target_os = "freebsd"))]
-pub(crate) fn current_platform(headless: bool) -> Rc<dyn Platform> {
-    #[cfg(feature = "x11")]
-    use anyhow::Context as _;
-
-    if headless {
-        return Rc::new(HeadlessClient::new());
-    }
-
-    match guess_compositor() {
-        #[cfg(feature = "wayland")]
-        "Wayland" => Rc::new(WaylandClient::new()),
-
-        #[cfg(feature = "x11")]
-        "X11" => Rc::new(
-            X11Client::new()
-                .context("Failed to initialize X11 client.")
-                .unwrap(),
-        ),
-
-        "Headless" => Rc::new(HeadlessClient::new()),
-        _ => unreachable!(),
-    }
-}
-
-/// Return which compositor we're guessing we'll use.
-/// Does not attempt to connect to the given compositor
+/// Returns which Linux compositor the environment indicates without connecting to it.
 #[cfg(any(target_os = "linux", target_os = "freebsd"))]
 #[inline]
 pub fn guess_compositor() -> &'static str {
@@ -164,15 +142,6 @@ pub fn guess_compositor() -> &'static str {
     }
 }
 
-#[cfg(target_os = "windows")]
-pub(crate) fn current_platform(_headless: bool) -> Rc<dyn Platform> {
-    Rc::new(
-        WindowsPlatform::new()
-            .inspect_err(|err| show_error("Failed to launch", err.to_string()))
-            .unwrap(),
-    )
-}
-
 /// Snapshot of the renderer's pooled GPU resource usage.
 ///
 /// Returned by [`App::renderer_cache_stats`]. Use together with
@@ -188,7 +157,20 @@ pub struct RendererCacheStats {
     pub gpu_buffer_size_bytes: usize,
 }
 
-pub(crate) trait Platform: 'static {
+impl RendererCacheStats {
+    /// Creates a renderer cache snapshot from backend pool counters.
+    #[doc(hidden)]
+    pub fn new(idle_gpu_buffers: usize, gpu_buffer_size_bytes: usize) -> Self {
+        Self {
+            idle_gpu_buffers,
+            gpu_buffer_size_bytes,
+        }
+    }
+}
+
+/// Low-level operating-system integration contract implemented by GPUI backends.
+#[allow(missing_docs)]
+pub trait Platform: 'static {
     fn background_executor(&self) -> BackgroundExecutor;
     fn foreground_executor(&self) -> ForegroundExecutor;
     fn text_system(&self) -> Arc<dyn PlatformTextSystem>;
@@ -550,8 +532,16 @@ pub struct ScreenCaptureFrame(pub PlatformScreenCaptureFrame);
 pub struct DisplayId(pub(crate) u64);
 
 impl DisplayId {
-    pub(crate) fn new(id: u64) -> Self {
+    /// Creates a display identifier from a raw platform display value.
+    #[doc(hidden)]
+    pub fn new(id: u64) -> Self {
         Self(id)
+    }
+
+    /// Returns this identifier as a zero-based platform display index.
+    #[doc(hidden)]
+    pub fn index(self) -> usize {
+        self.0 as usize
     }
 }
 
@@ -681,10 +671,11 @@ impl Tiling {
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Default)]
-pub(crate) struct RequestFrameOptions {
-    pub(crate) require_presentation: bool,
+#[allow(missing_docs)]
+pub struct RequestFrameOptions {
+    pub require_presentation: bool,
     /// Force refresh of all rendering states when true
-    pub(crate) force_render: bool,
+    pub force_render: bool,
 }
 
 /// Callbacks for the accessibility adapter.
@@ -697,7 +688,8 @@ pub struct A11yCallbacks {
     pub deactivation: Box<dyn Fn() + Send + 'static>,
 }
 
-pub(crate) trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
+#[allow(missing_docs)]
+pub trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
     fn bounds(&self) -> Bounds<Pixels>;
     fn is_maximized(&self) -> bool;
     fn window_bounds(&self) -> WindowBounds;
@@ -771,7 +763,7 @@ pub(crate) trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
     fn set_tabbing_identifier(&self, _identifier: Option<String>) {}
 
     #[cfg(target_os = "windows")]
-    fn get_raw_handle(&self) -> windows::HWND;
+    fn get_raw_handle(&self) -> windows::Win32::Foundation::HWND;
 
     // Linux specific methods
     fn inner_window_bounds(&self) -> WindowBounds {
@@ -849,7 +841,8 @@ pub trait PlatformDispatcher: Send + Sync {
     }
 }
 
-pub(crate) trait PlatformTextSystem: Send + Sync {
+#[allow(missing_docs)]
+pub trait PlatformTextSystem: Send + Sync {
     fn add_fonts(&self, fonts: Vec<Cow<'static, [u8]>>) -> Result<()>;
     fn all_font_names(&self) -> Vec<String>;
     fn font_id(&self, descriptor: &Font) -> Result<FontId>;
@@ -870,8 +863,10 @@ pub(crate) trait PlatformTextSystem: Send + Sync {
     }
 }
 
-pub(crate) struct NoopTextSystem;
+#[allow(missing_docs)]
+pub struct NoopTextSystem;
 
+#[allow(missing_docs)]
 impl NoopTextSystem {
     #[allow(dead_code)]
     pub fn new() -> Self {
@@ -991,12 +986,14 @@ impl PlatformTextSystem for NoopTextSystem {
 }
 
 #[derive(PartialEq, Eq, Hash, Clone)]
-pub(crate) enum AtlasKey {
+#[allow(missing_docs)]
+pub enum AtlasKey {
     Glyph(RenderGlyphParams),
     Svg(RenderSvgParams),
     Image(RenderImageParams),
 }
 
+#[allow(missing_docs)]
 impl AtlasKey {
     #[cfg_attr(
         all(
@@ -1005,7 +1002,7 @@ impl AtlasKey {
         ),
         allow(dead_code)
     )]
-    pub(crate) fn texture_kind(&self) -> AtlasTextureKind {
+    pub fn texture_kind(&self) -> AtlasTextureKind {
         match self {
             AtlasKey::Glyph(params) => {
                 if params.is_emoji {
@@ -1038,7 +1035,8 @@ impl From<RenderImageParams> for AtlasKey {
     }
 }
 
-pub(crate) trait PlatformAtlas: Send + Sync {
+#[allow(missing_docs)]
+pub trait PlatformAtlas: Send + Sync {
     fn get_or_insert_with<'a>(
         &self,
         key: &AtlasKey,
@@ -1047,9 +1045,10 @@ pub(crate) trait PlatformAtlas: Send + Sync {
     fn remove(&self, key: &AtlasKey);
 }
 
-pub(crate) struct AtlasTextureList<T> {
-    textures: Vec<Option<T>>,
-    free_list: Vec<usize>,
+#[doc(hidden)]
+pub struct AtlasTextureList<T> {
+    pub textures: Vec<Option<T>>,
+    pub free_list: Vec<usize>,
 }
 
 impl<T> Default for AtlasTextureList<T> {
@@ -1069,34 +1068,37 @@ impl<T> ops::Index<usize> for AtlasTextureList<T> {
     }
 }
 
+#[allow(missing_docs)]
 impl<T> AtlasTextureList<T> {
     #[allow(unused)]
-    pub(crate) fn drain(&mut self) -> std::vec::Drain<'_, Option<T>> {
+    pub fn drain(&mut self) -> std::vec::Drain<'_, Option<T>> {
         self.free_list.clear();
         self.textures.drain(..)
     }
 
     #[allow(dead_code)]
-    fn iter_mut(&mut self) -> impl DoubleEndedIterator<Item = &mut T> {
+    pub fn iter_mut(&mut self) -> impl DoubleEndedIterator<Item = &mut T> {
         self.textures.iter_mut().flatten()
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(C)]
-pub(crate) struct AtlasTile {
-    pub(crate) texture_id: AtlasTextureId,
-    pub(crate) tile_id: TileId,
-    pub(crate) padding: u32,
-    pub(crate) bounds: Bounds<DevicePixels>,
+#[allow(missing_docs)]
+pub struct AtlasTile {
+    pub texture_id: AtlasTextureId,
+    pub tile_id: TileId,
+    pub padding: u32,
+    pub bounds: Bounds<DevicePixels>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(C)]
-pub(crate) struct AtlasTextureId {
+#[allow(missing_docs)]
+pub struct AtlasTextureId {
     // We use u32 instead of usize for Metal Shader Language compatibility
-    pub(crate) index: u32,
-    pub(crate) kind: AtlasTextureKind,
+    pub index: u32,
+    pub kind: AtlasTextureKind,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -1108,14 +1110,16 @@ pub(crate) struct AtlasTextureId {
     ),
     allow(dead_code)
 )]
-pub(crate) enum AtlasTextureKind {
+#[allow(missing_docs)]
+pub enum AtlasTextureKind {
     Monochrome = 0,
     Polychrome = 1,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(C)]
-pub(crate) struct TileId(pub(crate) u32);
+#[allow(missing_docs)]
+pub struct TileId(pub u32);
 
 impl From<etagere::AllocId> for TileId {
     fn from(id: etagere::AllocId) -> Self {
@@ -1129,7 +1133,8 @@ impl From<TileId> for etagere::AllocId {
     }
 }
 
-pub(crate) struct PlatformInputHandler {
+#[allow(missing_docs)]
+pub struct PlatformInputHandler {
     cx: AsyncWindowContext,
     handler: Box<dyn InputHandler>,
 }
@@ -1141,6 +1146,7 @@ pub(crate) struct PlatformInputHandler {
     ),
     allow(dead_code)
 )]
+#[allow(missing_docs)]
 impl PlatformInputHandler {
     pub fn new(cx: AsyncWindowContext, handler: Box<dyn InputHandler>) -> Self {
         Self { cx, handler }
@@ -1151,7 +1157,7 @@ impl PlatformInputHandler {
         window.last_input_was_keyboard.set(true);
     }
 
-    fn selected_text_range(&mut self, ignore_disabled_input: bool) -> Option<UTF16Selection> {
+    pub fn selected_text_range(&mut self, ignore_disabled_input: bool) -> Option<UTF16Selection> {
         self.cx
             .update(|window, cx| {
                 self.handler
@@ -1162,7 +1168,7 @@ impl PlatformInputHandler {
     }
 
     #[cfg_attr(target_os = "windows", allow(dead_code))]
-    fn marked_text_range(&mut self) -> Option<Range<usize>> {
+    pub fn marked_text_range(&mut self) -> Option<Range<usize>> {
         self.cx
             .update(|window, cx| self.handler.marked_text_range(window, cx))
             .ok()
@@ -1173,7 +1179,7 @@ impl PlatformInputHandler {
         any(target_os = "linux", target_os = "freebsd", target_os = "windows"),
         allow(dead_code)
     )]
-    fn text_for_range(
+    pub fn text_for_range(
         &mut self,
         range_utf16: Range<usize>,
         adjusted: &mut Option<Range<usize>>,
@@ -1187,7 +1193,7 @@ impl PlatformInputHandler {
             .flatten()
     }
 
-    fn replace_text_in_range(&mut self, replacement_range: Option<Range<usize>>, text: &str) {
+    pub fn replace_text_in_range(&mut self, replacement_range: Option<Range<usize>>, text: &str) {
         self.cx
             .update(|window, cx| {
                 Self::mark_keyboard_input(window);
@@ -1218,7 +1224,7 @@ impl PlatformInputHandler {
     }
 
     #[cfg_attr(target_os = "windows", allow(dead_code))]
-    fn unmark_text(&mut self) {
+    pub fn unmark_text(&mut self) {
         self.cx
             .update(|window, cx| {
                 Self::mark_keyboard_input(window);
@@ -1227,7 +1233,7 @@ impl PlatformInputHandler {
             .ok();
     }
 
-    fn bounds_for_range(&mut self, range_utf16: Range<usize>) -> Option<Bounds<Pixels>> {
+    pub fn bounds_for_range(&mut self, range_utf16: Range<usize>) -> Option<Bounds<Pixels>> {
         self.cx
             .update(|window, cx| self.handler.bounds_for_range(range_utf16, window, cx))
             .ok()
@@ -1235,7 +1241,7 @@ impl PlatformInputHandler {
     }
 
     #[allow(dead_code)]
-    fn apple_press_and_hold_enabled(&mut self) -> bool {
+    pub fn apple_press_and_hold_enabled(&mut self) -> bool {
         self.handler.apple_press_and_hold_enabled()
     }
 
@@ -1492,7 +1498,8 @@ pub struct WindowOptions {
     ),
     allow(dead_code)
 )]
-pub(crate) struct WindowParams {
+#[allow(missing_docs)]
+pub struct WindowParams {
     pub bounds: Bounds<Pixels>,
 
     /// Atlas initial texture size (width = height, in device pixels).
@@ -2268,7 +2275,8 @@ impl PromptButton {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn is_cancel(&self) -> bool {
+    #[doc(hidden)]
+    pub fn is_cancel(&self) -> bool {
         matches!(self, PromptButton::Cancel(_))
     }
 
@@ -2570,6 +2578,14 @@ pub struct Image {
     id: u64,
 }
 
+impl Image {
+    /// Creates an image from encoded bytes and derives its stable clipboard identifier.
+    pub fn new(format: ImageFormat, bytes: Vec<u8>) -> Self {
+        let id = crate::hash(&bytes);
+        Self { format, bytes, id }
+    }
+}
+
 impl Hash for Image {
     fn hash<H: Hasher>(&self, state: &mut H) {
         state.write_u64(self.id);
@@ -2703,7 +2719,7 @@ mod image_tests {
     fn image_to_image_data_applies_exif_orientation() {
         let image = Image::from_bytes(
             ImageFormat::Jpeg,
-            include_bytes!("../examples/image/exif-orientation-rotate-180.jpg").to_vec(),
+            include_bytes!("../test_data/exif-orientation-rotate-180.jpg").to_vec(),
         );
 
         let render_image = image.to_image_data(SvgRenderer::new(Arc::new(()))).unwrap();
@@ -2729,6 +2745,13 @@ impl ClipboardString {
             text,
             metadata: None,
         }
+    }
+
+    /// Replace the associated metadata with an opaque string.
+    #[doc(hidden)]
+    pub fn with_metadata(mut self, metadata: String) -> Self {
+        self.metadata = Some(metadata);
+        self
     }
 
     /// Return a new clipboard item with the metadata replaced by the given metadata,
@@ -2758,8 +2781,14 @@ impl ClipboardString {
             .and_then(|m| serde_json::from_str(m).ok())
     }
 
-    #[cfg_attr(any(target_os = "linux", target_os = "freebsd"), allow(dead_code))]
-    pub(crate) fn text_hash(text: &str) -> u64 {
+    /// Returns the raw metadata string associated with this clipboard entry.
+    #[doc(hidden)]
+    pub fn metadata(&self) -> Option<&str> {
+        self.metadata.as_deref()
+    }
+
+    #[doc(hidden)]
+    pub fn text_hash(text: &str) -> u64 {
         let mut hasher = SeaHasher::new();
         text.hash(&mut hasher);
         hasher.finish()
@@ -2772,5 +2801,19 @@ impl From<String> for ClipboardString {
             text: value,
             metadata: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod clipboard_string_tests {
+    use super::ClipboardString;
+
+    #[test]
+    fn raw_metadata_preserves_the_clipboard_text() {
+        let clipboard_string = ClipboardString::new("copied text".to_owned())
+            .with_metadata("application/x-adabraka".to_owned());
+
+        assert_eq!(clipboard_string.text(), "copied text");
+        assert_eq!(clipboard_string.metadata(), Some("application/x-adabraka"));
     }
 }

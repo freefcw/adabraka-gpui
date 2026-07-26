@@ -262,7 +262,8 @@ impl KeyBindingContextPredicate {
 
     /// Eval a predicate against a set of contexts, arranged from lowest to highest.
     #[allow(unused)]
-    pub(crate) fn eval(&self, contexts: &[KeyContext]) -> bool {
+    #[doc(hidden)]
+    pub fn eval(&self, contexts: &[KeyContext]) -> bool {
         self.eval_inner(contexts, contexts)
     }
 

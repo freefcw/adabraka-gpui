@@ -845,9 +845,10 @@ fn apply_letter_spacing_to_layout(
 
 /// A run of text with a single font.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[allow(missing_docs)]
 pub struct FontRun {
-    pub(crate) len: usize,
-    pub(crate) font_id: FontId,
+    pub len: usize,
+    pub font_id: FontId,
 }
 
 trait AsCacheKeyRef {

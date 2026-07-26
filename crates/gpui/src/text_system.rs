@@ -41,9 +41,11 @@ pub struct FontId(pub usize);
 #[derive(Hash, PartialEq, Eq, Clone, Copy, Debug)]
 pub struct FontFamilyId(pub usize);
 
-pub(crate) const SUBPIXEL_VARIANTS_X: u8 = 4;
+/// Number of subpixel glyph variants along the X axis.
+pub const SUBPIXEL_VARIANTS_X: u8 = 4;
 
-pub(crate) const SUBPIXEL_VARIANTS_Y: u8 = 1;
+/// Number of subpixel glyph variants along the Y axis.
+pub const SUBPIXEL_VARIANTS_Y: u8 = 1;
 
 /// Snapshot of the long-lived text-system cache sizes returned by
 /// [`TextSystem::layout_cache_stats`].
@@ -406,7 +408,8 @@ pub struct WindowTextSystem {
 }
 
 impl WindowTextSystem {
-    pub(crate) fn new(text_system: Arc<TextSystem>) -> Self {
+    #[doc(hidden)]
+    pub fn new(text_system: Arc<TextSystem>) -> Self {
         Self {
             line_layout_cache: LineLayoutCache::new(
                 text_system.platform_text_system.clone(),
@@ -855,17 +858,18 @@ impl TextRun {
 /// An identifier for a specific glyph, as returned by [`WindowTextSystem::layout_line`].
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 #[repr(C)]
-pub struct GlyphId(pub(crate) u32);
+pub struct GlyphId(pub u32);
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct RenderGlyphParams {
-    pub(crate) font_id: FontId,
-    pub(crate) glyph_id: GlyphId,
-    pub(crate) font_size: Pixels,
-    pub(crate) subpixel_variant: Point<u8>,
-    pub(crate) scale_factor: f32,
-    pub(crate) is_emoji: bool,
-    pub(crate) dilation: u8,
+#[allow(missing_docs)]
+pub struct RenderGlyphParams {
+    pub font_id: FontId,
+    pub glyph_id: GlyphId,
+    pub font_size: Pixels,
+    pub subpixel_variant: Point<u8>,
+    pub scale_factor: f32,
+    pub is_emoji: bool,
+    pub dilation: u8,
 }
 
 impl Eq for RenderGlyphParams {}
@@ -934,32 +938,32 @@ impl Font {
 pub struct FontMetrics {
     /// The number of font units that make up the "em square",
     /// a scalable grid for determining the size of a typeface.
-    pub(crate) units_per_em: u32,
+    pub units_per_em: u32,
 
     /// The vertical distance from the baseline of the font to the top of the glyph covers.
-    pub(crate) ascent: f32,
+    pub ascent: f32,
 
     /// The vertical distance from the baseline of the font to the bottom of the glyph covers.
-    pub(crate) descent: f32,
+    pub descent: f32,
 
     /// The recommended additional space to add between lines of type.
-    pub(crate) line_gap: f32,
+    pub line_gap: f32,
 
     /// The suggested position of the underline.
-    pub(crate) underline_position: f32,
+    pub underline_position: f32,
 
     /// The suggested thickness of the underline.
-    pub(crate) underline_thickness: f32,
+    pub underline_thickness: f32,
 
     /// The height of a capital letter measured from the baseline of the font.
-    pub(crate) cap_height: f32,
+    pub cap_height: f32,
 
     /// The height of a lowercase x.
-    pub(crate) x_height: f32,
+    pub x_height: f32,
 
     /// The outer limits of the area that the font covers.
     /// Corresponds to the xMin / xMax / yMin / yMax values in the OpenType `head` table
-    pub(crate) bounding_box: Bounds<f32>,
+    pub bounding_box: Bounds<f32>,
 }
 
 impl FontMetrics {
@@ -1005,7 +1009,8 @@ impl FontMetrics {
 }
 
 #[allow(unused)]
-pub(crate) fn font_name_with_fallbacks<'a>(name: &'a str, system: &'a str) -> &'a str {
+#[doc(hidden)]
+pub fn font_name_with_fallbacks<'a>(name: &'a str, system: &'a str) -> &'a str {
     // Note: the "Zed Plex" fonts were deprecated as we are not allowed to use "Plex"
     // in a derived font name. They are essentially indistinguishable from IBM Plex/Lilex,
     // and so retained here for backward compatibility.

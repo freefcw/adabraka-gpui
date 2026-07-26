@@ -597,10 +597,8 @@ impl TestApp {
         }
     }
 
-    #[allow(dead_code)]
-    pub(crate) fn with_platform_text_system(
-        platform_text_system: Arc<dyn PlatformTextSystem>,
-    ) -> Self {
+    #[doc(hidden)]
+    pub fn with_platform_text_system(platform_text_system: Arc<dyn PlatformTextSystem>) -> Self {
         let dispatcher = TestDispatcher::new(StdRng::seed_from_u64(0));
         Self {
             cx: TestAppContext::build_with_text_system(
@@ -1019,41 +1017,21 @@ pub struct RealVisualTestContext {
     any(test, feature = "test-support")
 ))]
 impl RealVisualTestContext {
-    /// Creates a real visual test context when the current platform reports support.
-    pub fn new_if_supported() -> Option<Self> {
-        let capabilities = VisualTestCapabilities::detect();
-        (capabilities.real_renderer && capabilities.screenshot_capture).then(Self::new)
+    /// Creates a real visual test context with an injected platform and the default empty assets.
+    pub fn with_platform(platform: Rc<dyn crate::Platform>) -> Self {
+        Self::with_platform_and_asset_source(platform, Arc::new(()))
     }
 
-    /// Creates a real visual test context using the default empty asset source.
-    pub fn new() -> Self {
-        Self::with_asset_source(Arc::new(()))
-    }
-
-    /// Starts the real platform run loop and invokes the callback after launch.
-    pub fn run<F>(self, on_finish_launching: F)
-    where
-        F: 'static + FnOnce(&mut Self),
-    {
-        let platform = self.platform.clone();
-        let mut cx = Some(self);
-        platform.run(Box::new(move || {
-            if let Some(mut cx) = cx.take() {
-                on_finish_launching(&mut cx);
-            }
-        }));
-    }
-
-    /// Creates a real visual test context with a custom asset source.
-    pub fn with_asset_source(asset_source: Arc<dyn crate::AssetSource>) -> Self {
+    /// Creates a real visual test context with an injected platform and custom assets.
+    pub fn with_platform_and_asset_source(
+        platform: Rc<dyn crate::Platform>,
+        asset_source: Arc<dyn crate::AssetSource>,
+    ) -> Self {
         let seed = std::env::var("SEED")
             .ok()
             .and_then(|seed| seed.parse().ok())
             .unwrap_or(0);
-        let platform = Rc::new(crate::VisualTestPlatform::new(
-            crate::current_platform(false),
-            seed,
-        ));
+        let platform = Rc::new(crate::VisualTestPlatform::new(platform, seed));
         let dispatcher = platform.dispatcher().clone();
         let background_executor = platform.background_executor();
         let foreground_executor = platform.foreground_executor();
@@ -1073,6 +1051,26 @@ impl RealVisualTestContext {
             platform,
             text_system,
         }
+    }
+
+    /// Returns the wrapped visual platform for compatibility composition roots.
+    #[doc(hidden)]
+    pub fn visual_test_platform(&self) -> Rc<crate::VisualTestPlatform> {
+        self.platform.clone()
+    }
+
+    /// Starts the real platform run loop and invokes the callback after launch.
+    pub fn run<F>(self, on_finish_launching: F)
+    where
+        F: 'static + FnOnce(&mut Self),
+    {
+        let platform = self.platform.clone();
+        let mut cx = Some(self);
+        platform.run(Box::new(move || {
+            if let Some(mut cx) = cx.take() {
+                on_finish_launching(&mut cx);
+            }
+        }));
     }
 
     /// Opens a real platform window. Platforms that support client-controlled
@@ -1675,87 +1673,10 @@ mod test_app_tests {
         );
     }
 
-    #[cfg(target_os = "macos")]
-    #[test]
-    #[ignore]
-    fn real_visual_context_advance_clock_works() {
-        let Some(cx) = RealVisualTestContext::new_if_supported() else {
-            eprintln!("skipping: real visual renderer is not available");
-            return;
-        };
-        let completed = Arc::new(AtomicBool::new(false));
-        let timer = cx.executor().timer(Duration::from_secs(1));
-        let completed_task = completed.clone();
-        cx.spawn(async move {
-            timer.await;
-            completed_task.store(true, Ordering::SeqCst);
-        })
-        .detach();
-
-        cx.run_until_parked();
-        assert!(!completed.load(Ordering::SeqCst));
-
-        cx.advance_clock(Duration::from_secs(1));
-        cx.run_until_parked();
-        assert!(completed.load(Ordering::SeqCst));
-    }
-
     #[test]
     fn test_app_flush_with_no_windows_succeeds() {
         let mut app = TestApp::new();
         app.flush();
-    }
-
-    #[cfg(any(
-        all(target_os = "macos", feature = "font-kit"),
-        all(
-            any(target_os = "linux", target_os = "freebsd"),
-            any(feature = "wayland", feature = "x11")
-        )
-    ))]
-    fn assert_headless_text_layout_has_real_metrics(app: &TestApp) {
-        let text_system = app.text_system();
-        let family = text_system
-            .all_font_names()
-            .into_iter()
-            .find(|name| !name.starts_with('.'))
-            .unwrap_or_else(|| ".SystemUIFont".to_string());
-        let window_text_system = crate::WindowTextSystem::new(text_system.clone());
-        let text = "Headless text";
-        let layout = window_text_system.layout_line(
-            text,
-            px(16.),
-            &[TextRun {
-                len: text.len(),
-                font: font(family),
-                color: crate::black(),
-                background_color: None,
-                underline: None,
-                strikethrough: None,
-            }],
-            None,
-        );
-
-        assert!(layout.width > px(0.));
-        assert!(layout.ascent > px(0.));
-        assert!(layout.runs.iter().any(|run| !run.glyphs.is_empty()));
-    }
-
-    #[cfg(all(target_os = "macos", feature = "font-kit"))]
-    #[test]
-    fn headless_mac_text_layout_produces_nonzero_metrics() {
-        let app = TestApp::with_platform_text_system(Arc::new(crate::MacTextSystem::new()));
-        assert_headless_text_layout_has_real_metrics(&app);
-    }
-
-    #[cfg(all(
-        any(target_os = "linux", target_os = "freebsd"),
-        any(feature = "wayland", feature = "x11")
-    ))]
-    #[test]
-    fn headless_cosmic_text_layout_produces_nonzero_metrics() {
-        let app = TestApp::with_platform_text_system(Arc::new(crate::CosmicTextSystem::new()));
-        assert_headless_text_layout_has_real_metrics(&app);
     }
 
     #[test]
@@ -1783,8 +1704,8 @@ mod test_app_tests {
         let capabilities = VisualTestCapabilities::detect();
         assert!(capabilities.real_renderer);
         assert!(capabilities.screenshot_capture);
-        assert!(capabilities.offscreen_positioned_window);
-        let _constructor: fn() -> Option<RealVisualTestContext> =
-            RealVisualTestContext::new_if_supported;
+        assert!(!capabilities.offscreen_positioned_window);
+        let _constructor: fn(Rc<dyn crate::Platform>) -> RealVisualTestContext =
+            RealVisualTestContext::with_platform;
     }
 }

@@ -47,7 +47,7 @@ use crate::{
     TrayIconClickEvent, TrayIconEvent, TrayIconRenderingMode, TrayMenuItem, Window,
     WindowAppearance, WindowHandle, WindowId, WindowInvalidator, WindowPosition,
     colors::{Colors, GlobalColors},
-    current_platform, hash, init_app_menus, point, px, size,
+    hash, init_app_menus, point, px, size,
 };
 
 mod async_context;
@@ -156,26 +156,12 @@ impl ApplicationHandle {
 /// Represents an application before it is fully launched. Once your app is
 /// configured, you'll start the app with `App::run`.
 impl Application {
-    /// Builds an app with the given asset source.
-    #[allow(clippy::new_without_default)]
-    pub fn new() -> Self {
-        #[cfg(any(test, feature = "test-support"))]
-        log::info!("GPUI was compiled in test mode");
-
+    /// Builds an application with a caller-provided platform implementation.
+    ///
+    /// This is a low-level construction seam for platform facade and backend crates.
+    pub fn with_platform(platform: Rc<dyn Platform>) -> Self {
         Self(App::new_app(
-            current_platform(false),
-            Arc::new(()),
-            Arc::new(NullHttpClient),
-            AppResourceProfile::default(),
-        ))
-    }
-
-    /// Build an app in headless mode. This prevents opening windows,
-    /// but makes it possible to run an application in an context like
-    /// SSH, where GUI applications are not allowed.
-    pub fn headless() -> Self {
-        Self(App::new_app(
-            current_platform(true),
+            platform,
             Arc::new(()),
             Arc::new(NullHttpClient),
             AppResourceProfile::default(),
@@ -220,10 +206,11 @@ impl Application {
     /// caches with the configured budget. Atlas configuration takes effect for
     /// subsequently opened windows.
     ///
-    /// # Example
+    /// The core crate does not select a desktop backend. Applications using the
+    /// published `gpui` facade should call `gpui::Application::new()` instead.
     ///
     /// ```rust,ignore
-    /// Application::new()
+    /// gpui::Application::new()
     ///     .with_resource_profile(AppProfile::Minimal)
     ///     .run(|cx| { /* ... */ });
     /// ```
@@ -2941,10 +2928,23 @@ mod test {
 
     use super::{Application, ApplicationHandle, NullHttpClient};
     use crate::{
-        AppContext, AppResourceProfile, BackgroundExecutor, ForegroundExecutor, TestAppContext,
-        TestDispatcher, TestPlatform, TrayIconClickEvent, TrayIconEvent, TrayIconRenderingMode,
-        point, px,
+        AppContext, AppResourceProfile, BackgroundExecutor, ForegroundExecutor, Platform,
+        TestAppContext, TestDispatcher, TestPlatform, TrayIconClickEvent, TrayIconEvent,
+        TrayIconRenderingMode, point, px,
     };
+
+    #[test]
+    fn test_with_platform_uses_injected_platform() {
+        let dispatcher = Arc::new(TestDispatcher::new(StdRng::seed_from_u64(0)));
+        let platform: Rc<dyn Platform> = TestPlatform::new(
+            BackgroundExecutor::new(dispatcher.clone()),
+            ForegroundExecutor::new(dispatcher),
+        );
+
+        let application = Application::with_platform(platform.clone());
+
+        assert!(Rc::ptr_eq(&application.0.borrow().platform, &platform));
+    }
 
     #[test]
     fn test_inaccessible_sets_force_disabled() {

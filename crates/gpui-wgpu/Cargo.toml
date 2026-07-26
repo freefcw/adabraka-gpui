@@ -1,0 +1,56 @@
+[package]
+name = "adabraka-gpui-wgpu"
+version = "0.7.0"
+edition = "2024"
+authors = ["Adabraka Team"]
+publish = true
+license = "Apache-2.0"
+homepage = "https://github.com/freefcw/adabraka-gpui"
+repository = "https://github.com/freefcw/adabraka-gpui"
+readme = "README.md"
+description = "WGPU renderer backend for Adabraka GPUI"
+
+[lib]
+name = "gpui_wgpu"
+path = "src/gpui_wgpu.rs"
+doctest = false
+
+[features]
+default = []
+test-support = ["gpui/test-support", "dep:image"]
+
+[dependencies]
+anyhow = "1.0.86"
+bytemuck = { version = "1", features = ["derive"] }
+collections = { package = "adabraka_collections", path = "../collections", version = "0.5.1" }
+etagere = "0.2.10"
+gpui = { package = "adabraka-gpui-core", path = "../gpui", version = "0.7.0", default-features = false }
+image = { version = "0.25.1", default-features = false, optional = true }
+log = "0.4.16"
+parking_lot = "0.12.1"
+profiling = "1"
+raw-window-handle = "0.6"
+smol = "2.0"
+util = { package = "adabraka_util", path = "../util", version = "0.5.1" }
+wgpu = { version = "29.0.0", git = "https://github.com/zed-industries/wgpu.git", branch = "v29" }
+
+[dev-dependencies]
+gpui = { package = "adabraka-gpui-core", path = "../gpui", version = "0.7.0", default-features = false, features = ["test-support"] }
+image = { version = "0.25.1", default-features = false }
+
+[lints.clippy]
+dbg_macro = "deny"
+declare_interior_mutable_const = "deny"
+disallowed_methods = "deny"
+large_enum_variant = "allow"
+let_underscore_future = "allow"
+nonminimal_bool = "allow"
+redundant_clone = "deny"
+single_range_in_vec_init = "allow"
+todo = "deny"
+too_many_arguments = "allow"
+type_complexity = "allow"
+
+[lints.clippy.style]
+level = "allow"
+priority = -1

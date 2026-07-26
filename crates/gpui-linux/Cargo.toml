@@ -1,0 +1,147 @@
+[package]
+name = "adabraka-gpui-linux"
+version = "0.7.0"
+edition = "2024"
+authors = ["Adabraka Team"]
+publish = true
+license = "Apache-2.0"
+homepage = "https://github.com/freefcw/adabraka-gpui"
+repository = "https://github.com/freefcw/adabraka-gpui"
+readme = "README.md"
+description = "Linux and FreeBSD platform backend for Adabraka GPUI"
+
+[lib]
+name = "gpui_linux"
+path = "src/gpui_linux.rs"
+doctest = false
+
+[features]
+default = ["accessibility", "font-kit", "wayland", "x11"]
+accessibility = ["dep:accesskit", "dep:accesskit_unix", "gpui/accessibility"]
+as-raw-xcb-connection = ["dep:as-raw-xcb-connection"]
+ashpd = ["dep:ashpd"]
+bytemuck = ["dep:bytemuck"]
+calloop-wayland-source = ["dep:calloop-wayland-source"]
+cosmic-text = ["dep:cosmic-text"]
+filedescriptor = ["dep:filedescriptor"]
+font-kit = ["dep:font-kit"]
+open = ["dep:open"]
+screen-capture = ["gpui/screen-capture"]
+test-support = ["gpui/test-support", "gpui_wgpu/test-support", "wayland", "x11"]
+wayland-backend = ["dep:wayland-backend"]
+wayland-client = ["dep:wayland-client"]
+wayland-cursor = ["dep:wayland-cursor"]
+wayland-protocols = ["dep:wayland-protocols"]
+wayland-protocols-plasma = ["dep:wayland-protocols-plasma"]
+wayland-protocols-wlr = ["dep:wayland-protocols-wlr"]
+wayland-scanner = ["dep:wayland-scanner"]
+wgpu = ["dep:gpui_wgpu"]
+x11-clipboard = ["dep:x11-clipboard"]
+x11rb = ["dep:x11rb"]
+xim = ["dep:xim"]
+xkbcommon = ["dep:xkbcommon"]
+wayland = [
+    "dep:ashpd",
+    "ashpd/wayland",
+    "dep:calloop-wayland-source",
+    "dep:cosmic-text",
+    "dep:filedescriptor",
+    "font-kit",
+    "gpui/wayland",
+    "dep:open",
+    "dep:wayland-backend",
+    "dep:wayland-client",
+    "dep:wayland-cursor",
+    "dep:wayland-protocols",
+    "dep:wayland-protocols-plasma",
+    "dep:wayland-protocols-wlr",
+    "dep:wayland-scanner",
+    "dep:gpui_wgpu",
+    "dep:xkbcommon",
+]
+x11 = [
+    "dep:as-raw-xcb-connection",
+    "dep:ashpd",
+    "dep:bytemuck",
+    "dep:cosmic-text",
+    "dep:filedescriptor",
+    "font-kit",
+    "gpui/x11",
+    "dep:open",
+    "dep:gpui_wgpu",
+    "dep:x11-clipboard",
+    "dep:x11rb",
+    "dep:xim",
+    "dep:xkbcommon",
+]
+
+[target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies]
+accesskit = { version = "0.24.0", optional = true }
+accesskit_unix = { version = "0.21.0", optional = true }
+anyhow = "1.0.86"
+as-raw-xcb-connection = { version = "1", optional = true }
+ashpd = { version = "0.11", features = ["async-std"], optional = true, default-features = false }
+async-task = "4.7"
+bytemuck = { version = "1", optional = true }
+calloop = "0.14"
+calloop-wayland-source = { version = "0.4", optional = true }
+collections = { package = "adabraka_collections", path = "../collections", version = "0.5.1" }
+cosmic-text = { version = "0.19", optional = true }
+filedescriptor = { version = "0.8.2", optional = true }
+flume = "0.11"
+font-kit = { package = "zed-font-kit", version = "0.14.1-zed", features = ["source-fontconfig-dlopen"], optional = true }
+futures = "0.3"
+gpui = { package = "adabraka-gpui-core", path = "../gpui", version = "0.7.0", default-features = false }
+gpui_wgpu = { package = "adabraka-gpui-wgpu", path = "../gpui-wgpu", version = "0.7.0", optional = true, default-features = false }
+http_client = { package = "adabraka_http_client", path = "../http_client", version = "0.5.1" }
+image = { version = "0.25.1", default-features = false }
+itertools = "0.14.0"
+ksni = { version = "0.3", default-features = false, features = ["blocking", "async-io"] }
+libc = "0.2"
+log = { version = "0.4.16", features = ["kv_unstable_serde", "serde"] }
+notify-rust = "4"
+oo7 = { version = "0.5.0", default-features = false, features = ["async-std", "native_crypto"] }
+open = { version = "5.2.0", optional = true }
+parking = "2.0.0"
+parking_lot = "0.12.1"
+pathfinder_geometry = "0.5"
+profiling = "1"
+raw-window-handle = "0.6"
+smallvec = "1.6"
+smol = "2.0"
+strum = { version = "0.27.2", features = ["derive"] }
+unicode-segmentation = "1.10"
+util = { package = "adabraka_util", path = "../util", version = "0.5.1" }
+uuid = { version = "1.1.2", features = ["v4", "v5", "v7", "serde"] }
+wayland-backend = { version = "0.3.15", features = ["client_system", "dlopen"], optional = true }
+wayland-client = { version = "0.31.14", optional = true }
+wayland-cursor = { version = "0.31.14", optional = true }
+wayland-protocols = { version = "0.32.12", features = ["client", "staging", "unstable"], optional = true }
+wayland-protocols-plasma = { version = "0.3.12", features = ["client"], optional = true }
+wayland-protocols-wlr = { version = "0.3.9", features = ["client"], optional = true }
+wayland-scanner = { version = "0.31.10", optional = true }
+x11-clipboard = { version = "0.9.3", optional = true }
+x11rb = { version = "0.13.1", features = ["allow-unsafe-code", "xkb", "randr", "xinput", "cursor", "resource_manager", "screensaver", "shape", "sync"], optional = true }
+xim = { package = "zed-xim", version = "0.4.0-zed", features = ["x11rb-xcb", "x11rb-client"], optional = true }
+xkbcommon = { version = "0.8.0", features = ["wayland", "x11"], optional = true }
+
+[lints.clippy]
+dbg_macro = "deny"
+declare_interior_mutable_const = "deny"
+disallowed_methods = "deny"
+large_enum_variant = "allow"
+let_underscore_future = "allow"
+nonminimal_bool = "allow"
+redundant_clone = "deny"
+single_range_in_vec_init = "allow"
+todo = "deny"
+too_many_arguments = "allow"
+type_complexity = "allow"
+
+[lints.clippy.style]
+level = "allow"
+priority = -1
+
+[lints.rust.unexpected_cfgs]
+level = "allow"
+priority = 0

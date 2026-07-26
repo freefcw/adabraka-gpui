@@ -2,7 +2,13 @@
 resolver = "2"
 members = [
     "crates/gpui",
+    "crates/gpui-compat",
+    "crates/gpui-linux",
+    "crates/gpui-macos",
     "crates/gpui-macros",
+    "crates/gpui-platform",
+    "crates/gpui-wgpu",
+    "crates/gpui-windows",
     "crates/collections",
     "crates/derive_refineable",
     "crates/http_client",
@@ -20,3 +26,8 @@ members = [
 [workspace.package]
 edition = "2024"
 license = "Apache-2.0"
+
+# zed-scap 0.0.8-zed calls the pre-1.5 Windows Capture settings API.
+# Keep its transitive dependency on the compatible upstream revision.
+[patch.crates-io]
+windows-capture = { git = "https://github.com/zed-industries/windows-capture.git", rev = "f0d6c1b6691db75461b732f6d5ff56eed002eeb9" }

@@ -5,4 +5,4 @@ edition = "2024"
 publish = false
 
 [dependencies]
-adabraka-gpui = { path = "../../crates/gpui", default-features = false }
+adabraka-gpui = { path = "../../crates/gpui-compat", default-features = false }

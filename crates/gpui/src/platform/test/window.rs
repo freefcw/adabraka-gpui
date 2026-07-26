@@ -35,7 +35,9 @@ pub(crate) struct TestWindowState {
 }
 
 #[derive(Clone)]
-pub(crate) struct TestWindow(pub(crate) Rc<Mutex<TestWindowState>>);
+#[doc(hidden)]
+/// Opaque test window handle used by the internal test platform.
+pub struct TestWindow(pub(crate) Rc<Mutex<TestWindowState>>);
 
 /// A structural summary of the most recent mock visual render.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -102,7 +104,7 @@ impl HasDisplayHandle for TestWindow {
 }
 
 impl TestWindow {
-    pub fn new(
+    pub(crate) fn new(
         handle: AnyWindowHandle,
         params: WindowParams,
         platform: Weak<TestPlatform>,

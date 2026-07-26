@@ -524,7 +524,8 @@ impl Deref for MouseExitEvent {
 
 /// A collection of paths from the platform, such as from a file drop.
 #[derive(Debug, Clone, Default)]
-pub struct ExternalPaths(pub(crate) SmallVec<[PathBuf; 2]>);
+#[allow(missing_docs)]
+pub struct ExternalPaths(pub SmallVec<[PathBuf; 2]>);
 
 impl ExternalPaths {
     /// Convert this collection of paths into a slice.

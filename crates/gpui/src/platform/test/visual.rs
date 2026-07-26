@@ -17,7 +17,8 @@ use std::{
 };
 
 /// Test platform that combines native rendering with deterministic app tasks.
-pub(crate) struct VisualTestPlatform {
+#[doc(hidden)]
+pub struct VisualTestPlatform {
     dispatcher: TestDispatcher,
     background_executor: BackgroundExecutor,
     foreground_executor: ForegroundExecutor,
