@@ -50,8 +50,8 @@ re-enables parallel decoding. SVG support is handled separately through `resvg`.
 Linux X11 and Wayland use the internal wgpu renderer ported from Zed's current GPUI backend. Blade is
 no longer part of the crate. The default macOS renderer is Metal and Windows uses DirectX.
 
-This does not introduce a public `gpui_wgpu` crate or change the `Application::new()` entry point.
-The renderer protocol stays crate-internal so downstream application APIs remain stable. See
+Downstream applications continue to use only `adabraka-gpui`; the renderer package is an internal
+implementation dependency and does not change the `Application::new()` entry point. See
 [the WGPU migration notes](https://github.com/freefcw/adabraka-gpui/blob/main/docs/wgpu-migration.md) for details.
 
 ### Accessibility
@@ -106,7 +106,7 @@ The layer-shell regression tests avoid requiring a real compositor. They cover c
 and protocol enum mapping:
 
 ```sh
-cargo test -p adabraka-gpui --lib --features test-support layer_shell
+cargo test -p adabraka-gpui-core --lib --features test-support layer_shell
 cargo check -p adabraka-gpui --example layer_shell --features wayland
 ```
 

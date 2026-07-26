@@ -93,7 +93,7 @@ Automated coverage for this path focuses on protocol-independent behavior such a
 sizing and protocol enum mapping. Run:
 
 ```sh
-cargo test -p adabraka-gpui --lib --features test-support layer_shell
+cargo test -p adabraka-gpui-core --lib --features test-support layer_shell
 cargo check -p adabraka-gpui --example layer_shell --features wayland
 ```
 
@@ -155,7 +155,7 @@ fn main() {
 }
 ```
 
-See [`crates/gpui/examples/daemon_app.rs`](crates/gpui/examples/daemon_app.rs) for a full example with overlay windows, settings window, global hotkeys, and notifications.
+See [`crates/gpui-compat/examples/daemon_app.rs`](crates/gpui-compat/examples/daemon_app.rs) for a full example with overlay windows, settings window, global hotkeys, and notifications.
 
 ### Resource Profiles
 

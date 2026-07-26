@@ -6,10 +6,11 @@ application API stable.
 
 ## What Changed
 
-- Linux `x11` and `wayland` features enable the optional `wgpu` dependency.
+- Linux `x11` and `wayland` features select the WGPU renderer through the platform packages.
 - Linux and FreeBSD no longer enable `blade-graphics`, `blade-macros`, or `blade-util`.
 - Linux and FreeBSD no longer use the `naga` build dependency for shader validation.
-- The wgpu backend lives inside `crates/gpui/src/platform/wgpu/`.
+- The renderer backend lives in `crates/gpui-wgpu/src/`, with Linux and FreeBSD integration in
+  `crates/gpui-linux/src/linux/`.
 - X11 and Wayland windows create `WgpuRenderer` instances and share a `GpuContext`.
 - Device-lost recovery recreates the wgpu context and forces a fresh render on the next frame.
 - The old Blade module and `macos-blade` compatibility feature have been removed.
@@ -26,17 +27,17 @@ Application::new().run(|cx| {
 });
 ```
 
-The migration deliberately does not expose a public `gpui_wgpu` crate yet. A standalone backend
-crate would require the broader upstream-style split into platform crates and would make renderer
-protocol types such as `Scene`, `PlatformAtlas`, and atlas keys part of the public surface. In this
-repository those types remain crate-internal to avoid expanding the downstream API.
+The crate split publishes `adabraka-gpui-wgpu` because the published Linux backend depends on it.
+Its Rust library name is `gpui_wgpu`, and it exposes the renderer integration types required by the
+platform packages. It remains an implementation package rather than the supported application entry
+point; downstream applications should normally depend only on `adabraka-gpui`.
 
 ## Shader Layout
 
 The Linux wgpu shader is stored at:
 
 ```text
-crates/gpui/src/platform/wgpu/shaders.wgsl
+crates/gpui-wgpu/src/shaders.wgsl
 ```
 
 The wgpu shader is consumed by wgpu at runtime through the renderer module.
@@ -48,19 +49,23 @@ The wgpu shader is consumed by wgpu at runtime through the renderer module.
 - Linux runtime GPU selection now follows wgpu adapter selection. The renderer supports Vulkan and
   OpenGL backends through Zed's wgpu fork.
 - The removed `macos-blade` feature is no longer accepted by Cargo.
-- A future full upstream-style crate split should be treated as a separate public API change.
+- The platform crate split does not change the recommended downstream application API.
 
 ## Verification
 
-The migration has been checked with:
+Run the canonical migration and release verification with:
 
 ```sh
-cargo fmt
-cargo check -p adabraka-gpui --features wayland,x11
-cargo check -p adabraka-gpui --lib --tests --features test-support
-cargo doc -p adabraka-gpui --no-deps --features wayland,x11
+scripts/verify-migration.sh
 ```
 
-Linux cross-compilation from the current macOS machine is blocked before GPUI code is compiled
-because the host does not have `x86_64-linux-gnu-gcc` and `x86_64-linux-gnu-g++`. The failure occurs
-in C/C++ build scripts for dependencies such as `ring` and `freetype-sys`.
+The script checks the facade and renderer compile baselines, core and compatibility tests, workspace
+tests, package inventories for the seven split runtime packages, formatting, and diff hygiene. Before
+a release, install `cargo-semver-checks` and check those seven migration packages for semantic API
+compatibility:
+
+```sh
+scripts/verify-migration.sh --semver
+```
+
+Platform-specific runtime behavior remains covered by native CI jobs and targeted smoke tests.
