@@ -125,6 +125,9 @@ x11rb = { version = "0.13.1", features = ["allow-unsafe-code", "xkb", "randr", "
 xim = { package = "zed-xim", version = "0.4.0-zed", features = ["x11rb-xcb", "x11rb-client"], optional = true }
 xkbcommon = { version = "0.8.0", features = ["wayland", "x11"], optional = true }
 
+[target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dev-dependencies]
+ttf-parser = "0.25"
+
 [lints.clippy]
 dbg_macro = "deny"
 declare_interior_mutable_const = "deny"

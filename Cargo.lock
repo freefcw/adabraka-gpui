@@ -230,6 +230,7 @@ dependencies = [
  "smallvec",
  "smol",
  "strum",
+ "ttf-parser",
  "unicode-segmentation",
  "uuid",
  "wayland-backend",

@@ -688,8 +688,8 @@ mod tests {
     use std::borrow::Cow;
 
     const IBM_PLEX_SANS: &[u8] =
-        include_bytes!("../../../assets/fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf");
-    const LILEX: &[u8] = include_bytes!("../../../assets/fonts/lilex/Lilex-Regular.ttf");
+        include_bytes!("../../test_data/fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf");
+    const LILEX: &[u8] = include_bytes!("../../test_data/fonts/lilex/Lilex-Regular.ttf");
 
     #[test]
     fn layout_line_uses_configured_font_fallbacks_for_missing_glyphs() {
