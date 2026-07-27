@@ -67,6 +67,18 @@ fn aria_to_json(node: &Node) -> Map<String, Value> {
     insert_string(&mut aria, "tooltip", node.tooltip());
     insert_string(&mut aria, "role_description", node.role_description());
 
+    if node.is_disabled() {
+        aria.insert("disabled".into(), json!(true));
+    }
+    if node.is_required() {
+        aria.insert("required".into(), json!(true));
+    }
+    if let Some(value) = node.invalid() {
+        aria.insert("invalid".into(), json!(format!("{value:?}")));
+    }
+    if node.is_modal() {
+        aria.insert("modal".into(), json!(true));
+    }
     if let Some(value) = node.is_selected() {
         aria.insert("selected".into(), json!(value));
     }

@@ -350,6 +350,41 @@ mod tests {
     }
 
     #[test]
+    fn debug_tree_json_includes_form_control_state() {
+        let active_flag = Arc::new(AtomicBool::new(true));
+        let mut a11y = A11y::new(active_flag, false);
+        let input_id = NodeId(7);
+        let mut input = accesskit::Node::new(accesskit::Role::TextInput);
+        input.set_value("alice@example.com");
+        input.set_placeholder("name@example.com");
+        input.set_disabled();
+        input.set_required();
+        input.set_invalid(accesskit::Invalid::True);
+        input.set_modal();
+
+        a11y.sync_active_flag();
+        a11y.begin_frame();
+        assert!(a11y.nodes.push(input_id, input));
+        a11y.nodes.pop();
+        let _ = a11y.end_frame();
+
+        let json: serde_json::Value = serde_json::from_str(
+            &a11y
+                .debug_tree_json()
+                .expect("form control state should be debuggable"),
+        )
+        .unwrap();
+        let aria = &json["nodes"][1]["aria"];
+
+        assert_eq!(aria["value"], "alice@example.com");
+        assert_eq!(aria["placeholder"], "name@example.com");
+        assert_eq!(aria["disabled"], true);
+        assert_eq!(aria["required"], true);
+        assert_eq!(aria["invalid"], "True");
+        assert_eq!(aria["modal"], true);
+    }
+
+    #[test]
     fn debug_tree_json_contains_focus_hierarchy_and_aria_metadata() {
         let active_flag = Arc::new(AtomicBool::new(true));
         let mut a11y = A11y::new(active_flag, false);

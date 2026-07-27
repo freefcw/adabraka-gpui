@@ -1170,6 +1170,42 @@ pub trait StatefulInteractiveElement: InteractiveElement {
         self
     }
 
+    /// Set the current textual value for this element.
+    fn aria_value(mut self, value: impl Into<SharedString>) -> Self {
+        self.interactivity().aria_value = Some(value.into());
+        self
+    }
+
+    /// Set the placeholder announced when this element has no value.
+    fn aria_placeholder(mut self, placeholder: impl Into<SharedString>) -> Self {
+        self.interactivity().aria_placeholder = Some(placeholder.into());
+        self
+    }
+
+    /// Report whether this control is disabled.
+    fn aria_disabled(mut self, disabled: bool) -> Self {
+        self.interactivity().aria_disabled = disabled;
+        self
+    }
+
+    /// Report whether this form control requires a value.
+    fn aria_required(mut self, required: bool) -> Self {
+        self.interactivity().aria_required = required;
+        self
+    }
+
+    /// Report why this form control's value is invalid.
+    fn aria_invalid(mut self, invalid: accesskit::Invalid) -> Self {
+        self.interactivity().aria_invalid = Some(invalid);
+        self
+    }
+
+    /// Report whether this dialog is modal.
+    fn aria_modal(mut self, modal: bool) -> Self {
+        self.interactivity().aria_modal = modal;
+        self
+    }
+
     /// Report the keyboard shortcut that activates this element to assistive technology.
     ///
     /// This is metadata only and does not register a key binding.
@@ -1799,6 +1835,12 @@ pub struct Interactivity {
     pub(crate) override_role: Option<accesskit::Role>,
     pub(crate) aria_label: Option<SharedString>,
     pub(crate) aria_description: Option<SharedString>,
+    pub(crate) aria_value: Option<SharedString>,
+    pub(crate) aria_placeholder: Option<SharedString>,
+    pub(crate) aria_disabled: bool,
+    pub(crate) aria_required: bool,
+    pub(crate) aria_invalid: Option<accesskit::Invalid>,
+    pub(crate) aria_modal: bool,
     pub(crate) aria_keyshortcuts: Option<SharedString>,
     pub(crate) aria_selected: Option<bool>,
     pub(crate) aria_expanded: Option<bool>,
@@ -2929,6 +2971,24 @@ impl Interactivity {
         if let Some(description) = &self.aria_description {
             node.set_description(description.to_string());
         }
+        if let Some(value) = &self.aria_value {
+            node.set_value(value.to_string());
+        }
+        if let Some(placeholder) = &self.aria_placeholder {
+            node.set_placeholder(placeholder.to_string());
+        }
+        if self.aria_disabled {
+            node.set_disabled();
+        }
+        if self.aria_required {
+            node.set_required();
+        }
+        if let Some(invalid) = self.aria_invalid {
+            node.set_invalid(invalid);
+        }
+        if self.aria_modal {
+            node.set_modal();
+        }
         if let Some(keyshortcuts) = &self.aria_keyshortcuts {
             node.set_keyboard_shortcut(keyshortcuts.to_string());
         }
@@ -3808,6 +3868,29 @@ mod tests {
 
         assert_eq!(node.description(), Some("Save the active document"));
         assert_eq!(node.keyboard_shortcut(), Some("Ctrl+S"));
+    }
+
+    #[test]
+    fn form_control_properties_are_written_to_accesskit() {
+        let element = div()
+            .id("email")
+            .role(accesskit::Role::TextInput)
+            .aria_value("alice@example.com")
+            .aria_placeholder("name@example.com")
+            .aria_disabled(true)
+            .aria_required(true)
+            .aria_invalid(accesskit::Invalid::True)
+            .aria_modal(true);
+        let mut node = accesskit::Node::new(accesskit::Role::TextInput);
+
+        element.element.interactivity.write_a11y_info(&mut node);
+
+        assert_eq!(node.value(), Some("alice@example.com"));
+        assert_eq!(node.placeholder(), Some("name@example.com"));
+        assert!(node.is_disabled());
+        assert!(node.is_required());
+        assert_eq!(node.invalid(), Some(accesskit::Invalid::True));
+        assert!(node.is_modal());
     }
 
     #[test]
