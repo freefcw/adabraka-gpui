@@ -60,9 +60,9 @@ scripts/verify-migration.sh
 ```
 
 The script checks the facade and renderer compile baselines, core and compatibility tests, workspace
-tests, package inventories for the seven split runtime packages, formatting, and diff hygiene. Before
-a release, install `cargo-semver-checks` and check those seven migration packages for semantic API
-compatibility:
+tests, a normalized macro archive, package inventories for the eight migration packages, formatting,
+and diff hygiene. Before a release, install `cargo-semver-checks` and check those eight migration
+packages for semantic API compatibility:
 
 ```sh
 scripts/verify-migration.sh --semver

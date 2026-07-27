@@ -26,6 +26,7 @@ jobs:
             os: ubuntu-24.04
             cache-key: linux-workspace-tests
             linux-native: true
+            examples: true
             command: cargo test --workspace --lib --tests --locked -- --test-threads=1
           - name: Linux / no default features
             os: ubuntu-24.04
@@ -46,6 +47,7 @@ jobs:
             os: macos-14
             cache-key: macos-workspace-tests
             linux-native: false
+            examples: true
             command: cargo test --workspace --lib --tests --locked -- --test-threads=1
           - name: macOS / no default features
             os: macos-14
@@ -56,6 +58,7 @@ jobs:
             os: windows-2022
             cache-key: windows-workspace-tests
             linux-native: false
+            examples: true
             command: cargo test --workspace --lib --tests --locked -- --test-threads=1
           - name: Windows / no default features
             os: windows-2022
@@ -88,3 +91,7 @@ jobs:
 
       - name: Check GPUI feature combination
         run: ${{ matrix.command }}
+
+      - name: Check public examples
+        if: matrix.examples
+        run: cargo check -p adabraka-gpui --examples --locked

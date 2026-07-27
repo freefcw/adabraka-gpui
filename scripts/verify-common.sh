@@ -8,6 +8,7 @@ readonly WGPU_PACKAGE="adabraka-gpui-wgpu"
 check_compile_baseline() {
     cargo check --locked -p "$PUBLIC_PACKAGE"
     cargo check --locked -p "$PUBLIC_PACKAGE" --no-default-features
+    cargo check --locked -p "$PUBLIC_PACKAGE" --examples
     cargo check --locked -p "$WGPU_PACKAGE"
 }
 

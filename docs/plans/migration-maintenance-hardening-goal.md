@@ -150,7 +150,7 @@ Upstream GPUI changes can be synchronized and released without silently skipping
 
 - The previous facade-owned profiler command ran zero tests; `test_core` now rejects filters that match no core tests, while `test_core profiler` runs 12 tests.
 - `scripts/verify-001.sh` through `scripts/verify-004.sh` all pass and every focused filter matches at least one core test.
-- `scripts/verify-migration.sh` passes 195 core tests, public compatibility tests, 277 workspace tests with 2 ignored, and package inventory checks for all seven split packages.
+- `scripts/verify-migration.sh` passes the core, public compatibility, and workspace tests, verifies the normalized macro archive, and checks package inventories for all eight migration packages.
 - Workflow YAML parsing, formatting, workspace checking, shell syntax, and `git diff --check` pass locally.
 - The optional semantic API check is intentionally not executed because `cargo-semver-checks` is not installed; `--semver` now fails before running other work and prints the installation command.
 
