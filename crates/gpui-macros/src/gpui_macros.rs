@@ -15,7 +15,9 @@ mod derive_inspector_reflection;
 use proc_macro::TokenStream;
 use proc_macro_crate::{FoundCrate, crate_name};
 use quote::quote;
+use std::{env, fs, path::PathBuf, sync::OnceLock};
 use syn::{DeriveInput, Ident};
+use toml_edit::DocumentMut;
 
 /// `Action` derive macro - see the trait documentation for details.
 #[proc_macro_derive(Action, attributes(action))]
@@ -223,25 +225,74 @@ pub fn derive_inspector_reflection(_args: TokenStream, input: TokenStream) -> To
 }
 
 pub(crate) fn gpui_crate_path() -> proc_macro2::TokenStream {
-    for package in ["adabraka-gpui", "adabraka-gpui-core"] {
-        match crate_name(package) {
-            Ok(FoundCrate::Itself) => return quote!(::gpui),
-            Ok(FoundCrate::Name(name)) => {
-                let name = match name.as_str() {
-                    // Cargo reports the package key, but the library target is
-                    // `gpui` / `gpui_core` respectively.
-                    "adabraka_gpui" => "gpui",
-                    "adabraka_gpui_core" => "gpui_core",
-                    _ => &name,
-                };
-                let ident = Ident::new(&name.replace('-', "_"), proc_macro2::Span::call_site());
-                return quote!(::#ident);
-            }
-            Err(_) => {}
-        }
+    if let Some(path) = configured_gpui_crate_path() {
+        return path;
     }
 
-    quote!(::gpui)
+    let facade = crate_name("adabraka-gpui").ok();
+    let core = crate_name("adabraka-gpui-core").ok();
+
+    select_gpui_crate_path(facade, core)
+}
+
+fn select_gpui_crate_path(
+    facade: Option<FoundCrate>,
+    core: Option<FoundCrate>,
+) -> proc_macro2::TokenStream {
+    match (facade, core) {
+        (Some(_), Some(_)) => panic!(
+            "both adabraka-gpui and adabraka-gpui-core are direct dependencies; \
+             set [package.metadata.gpui-macros] crate = \"<dependency identifier>\" \
+             in Cargo.toml to select the crate used by GPUI macros"
+        ),
+        (Some(found), None) => crate_path(found, "adabraka_gpui", "gpui"),
+        (None, Some(found)) => crate_path(found, "adabraka_gpui_core", "gpui_core"),
+        (None, None) => quote!(::gpui),
+    }
+}
+
+fn crate_path(
+    found: FoundCrate,
+    package_identifier: &str,
+    library_identifier: &str,
+) -> proc_macro2::TokenStream {
+    match found {
+        FoundCrate::Itself => quote!(::gpui),
+        FoundCrate::Name(name) => {
+            // Cargo reports the dependency key, but the default library target can differ.
+            let name = if name == package_identifier {
+                library_identifier
+            } else {
+                &name
+            };
+            let ident = Ident::new(&name.replace('-', "_"), proc_macro2::Span::call_site());
+            quote!(::#ident)
+        }
+    }
+}
+
+fn configured_gpui_crate_path() -> Option<proc_macro2::TokenStream> {
+    static CONFIGURED_CRATE: OnceLock<Option<String>> = OnceLock::new();
+
+    let crate_name = CONFIGURED_CRATE.get_or_init(|| {
+        let manifest_path = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR")?).join("Cargo.toml");
+        let manifest = fs::read_to_string(manifest_path).ok()?;
+        let document = manifest.parse::<DocumentMut>().ok()?;
+        document
+            .get("package")?
+            .get("metadata")?
+            .get("gpui-macros")?
+            .get("crate")?
+            .as_str()
+            .map(str::to_owned)
+    });
+    let ident = syn::parse_str::<Ident>(crate_name.as_deref()?).unwrap_or_else(|_| {
+        panic!(
+            "package.metadata.gpui-macros.crate must be a Rust crate identifier, got {crate_name:?}"
+        )
+    });
+
+    Some(quote!(::#ident))
 }
 
 pub(crate) fn get_simple_attribute_field(ast: &DeriveInput, name: &'static str) -> Option<Ident> {
@@ -253,5 +304,19 @@ pub(crate) fn get_simple_attribute_field(ast: &DeriveInput, name: &'static str) 
             .map(|field| field.ident.clone().unwrap()),
         syn::Data::Enum(_) => None,
         syn::Data::Union(_) => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{FoundCrate, select_gpui_crate_path};
+
+    #[test]
+    #[should_panic(expected = "both adabraka-gpui and adabraka-gpui-core are direct dependencies")]
+    fn ambiguous_direct_dependencies_require_an_explicit_crate() {
+        select_gpui_crate_path(
+            Some(FoundCrate::Name("facade_ui".into())),
+            Some(FoundCrate::Name("core_ui".into())),
+        );
     }
 }

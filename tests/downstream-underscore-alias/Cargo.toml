@@ -1,0 +1,12 @@
+[package]
+name = "adabraka-gpui-underscore-alias-compat"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata.gpui-macros]
+crate = "adabraka_gpui"
+
+[dependencies]
+adabraka_gpui = { package = "adabraka-gpui", path = "../../crates/gpui-compat", default-features = false, features = ["test-support"] }
+rand = "=0.9.4"

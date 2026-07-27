@@ -27,6 +27,22 @@ adabraka-gpui = { version = "0.7.0", default-features = false, features = [
 `image-format-*` features map to the underlying `image` crate decoder features. `image-rayon`
 re-enables parallel decoding. SVG support is handled separately through `resvg`.
 
+### Macro Dependency Override
+
+Macro paths are resolved automatically for normal `adabraka-gpui` dependencies and ordinary
+Cargo aliases. If one package directly lists both `adabraka-gpui` and `adabraka-gpui-core`, or
+uses an alias that is indistinguishable from the normalized package name, select the intended
+crate once in the consuming package's `Cargo.toml`:
+
+```toml
+[package.metadata.gpui-macros]
+crate = "core_ui"
+```
+
+The value must be the Rust dependency identifier visible to that package. It applies consistently
+to derive macros, `register_action!`, and `#[gpui::test]`. An ambiguous direct dependency graph
+without this override fails with an actionable macro error instead of guessing a crate.
+
 ### Platform Support
 
 | Feature | macOS | Linux (X11) | Linux (Wayland) | Windows |

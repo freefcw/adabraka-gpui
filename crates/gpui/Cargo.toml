@@ -126,7 +126,7 @@ optional = true
 [dependencies.gpui_macros]
 path = "../gpui-macros"
 package = "adabraka-gpui-macros"
-version = "0.5.1"
+version = "0.7.0"
 
 [dependencies.http_client]
 path = "../http_client"

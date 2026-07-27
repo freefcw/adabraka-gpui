@@ -18,6 +18,9 @@ categories = ["gui"]
 license = "Apache-2.0"
 repository = "https://github.com/freefcw/adabraka-gpui"
 
+[package.metadata.gpui-macros]
+crate = "gpui"
+
 [features]
 accessibility = ["gpui_core/accessibility", "gpui_platform/accessibility"]
 as-raw-xcb-connection = ["gpui_platform/as-raw-xcb-connection"]
@@ -131,7 +134,7 @@ version = "0.3"
 [dev-dependencies.gpui_macros]
 path = "../gpui-macros"
 package = "adabraka-gpui-macros"
-version = "0.5.1"
+version = "0.7.0"
 
 [dev-dependencies.http_client]
 path = "../http_client"

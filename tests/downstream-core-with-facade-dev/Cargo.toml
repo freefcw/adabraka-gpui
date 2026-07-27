@@ -1,0 +1,14 @@
+[package]
+name = "adabraka-gpui-core-with-facade-dev-compat"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata.gpui-macros]
+crate = "core_ui"
+
+[dependencies]
+core_ui = { package = "adabraka-gpui-core", path = "../../crates/gpui", default-features = false }
+
+[dev-dependencies]
+facade_ui = { package = "adabraka-gpui", path = "../../crates/gpui-compat", default-features = false }

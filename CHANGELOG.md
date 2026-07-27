@@ -16,6 +16,9 @@
 
 ### Fixes
 
+- **GPUI macro dependency resolution** — aligns `adabraka-gpui-macros` with the `0.7` release line,
+  resolves renamed facade/core dependencies, and lets mixed direct dependency graphs select the
+  intended crate through `[package.metadata.gpui-macros]`.
 - **macOS screen capture** — releases native setup, startup-failure, and frame-callback resources
   so repeated screen-sharing attempts do not accumulate them.
 - **Wayland clipboard/selection serial** — selection ownership now uses a dedicated press-derived

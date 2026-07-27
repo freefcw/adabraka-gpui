@@ -20,7 +20,9 @@ members = [
     "crates/util_macros",
     "crates/semantic_version",
     "tests/downstream-compat",
+    "tests/downstream-core-with-facade-dev",
     "tests/downstream-renamed-compat",
+    "tests/downstream-underscore-alias",
 ]
 
 [workspace.package]
