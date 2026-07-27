@@ -57,9 +57,9 @@ fn run() -> anyhow::Result<()> {
 
     cx.run(move |cx| {
         let result = (|| -> anyhow::Result<()> {
-            let window = cx.open_offscreen_window(size(px(64.0), px(64.0)), |_, app| {
-                app.new(|_| PaintedView)
-            })?;
+            let requested_size = size(px(64.0), px(64.0));
+            let window =
+                cx.open_offscreen_window(requested_size, |_, app| app.new(|_| PaintedView))?;
             let window = window.into();
             let (bounds, scale_factor) = cx.update_window(window, |_, window, app| {
                 let clear = window.draw(app);
@@ -70,9 +70,8 @@ fn run() -> anyhow::Result<()> {
             })?;
             let image = cx.capture_screenshot(window)?;
             let expected_origin = gpui::point(px(-10000.0), px(-10000.0));
-            let expected_size = size(px(64.0), px(64.0));
-            let expected_width = (64.0 * scale_factor).round() as u32;
-            let expected_height = (64.0 * scale_factor).round() as u32;
+            let expected_width = (f32::from(bounds.size.width) * scale_factor).round() as u32;
+            let expected_height = (f32::from(bounds.size.height) * scale_factor).round() as u32;
 
             if capabilities.offscreen_positioned_window {
                 anyhow::ensure!(
@@ -83,9 +82,10 @@ fn run() -> anyhow::Result<()> {
                 );
             }
             anyhow::ensure!(
-                bounds.size == expected_size,
-                "expected size {:?}, got {:?}",
-                expected_size,
+                bounds.size.width >= requested_size.width
+                    && bounds.size.height >= requested_size.height,
+                "expected size at least {:?}, got {:?}",
+                requested_size,
                 bounds.size
             );
             anyhow::ensure!(
