@@ -61,13 +61,19 @@ fn run() -> anyhow::Result<()> {
             let window =
                 cx.open_offscreen_window(requested_size, |_, app| app.new(|_| PaintedView))?;
             let window = window.into();
-            let (bounds, scale_factor) = cx.update_window(window, |_, window, app| {
+            let (bounds, scale_factor, artifact) = cx.update_window(window, |_, window, app| {
                 let clear = window.draw(app);
+                let artifact = window.visual_render_artifact();
                 window.request_attention();
                 window.present_for_visual_test();
                 clear.clear();
-                (window.bounds(), window.scale_factor())
+                (window.bounds(), window.scale_factor(), artifact)
             })?;
+            anyhow::ensure!(
+                artifact.quads > 0,
+                "expected rendered scene to contain a quad, got {:?}",
+                artifact
+            );
             let image = cx.capture_screenshot(window)?;
             let expected_origin = gpui::point(px(-10000.0), px(-10000.0));
             let expected_width = (f32::from(bounds.size.width) * scale_factor).round() as u32;
@@ -100,16 +106,58 @@ fn run() -> anyhow::Result<()> {
                 expected_height,
                 image.height()
             );
-            anyhow::ensure!(
-                image.pixels().any(|pixel| pixel[3] > 0),
-                "screenshot is fully transparent"
-            );
             let Some(first_pixel) = image.pixels().next().copied() else {
                 anyhow::bail!("screenshot is empty");
             };
+            let mut channel_min = [u8::MAX; 4];
+            let mut channel_max = [u8::MIN; 4];
+            let mut nonzero_rgb_pixels = 0usize;
+            let mut nonzero_alpha_pixels = 0usize;
+            let mut opaque_red_pixels = 0usize;
+            let mut transparent_pixels = 0usize;
+            let mut different_pixels = 0usize;
+            for pixel in image.pixels() {
+                for channel in 0..4 {
+                    channel_min[channel] = channel_min[channel].min(pixel[channel]);
+                    channel_max[channel] = channel_max[channel].max(pixel[channel]);
+                }
+                nonzero_rgb_pixels +=
+                    (pixel[0] > 0 || pixel[1] > 0 || pixel[2] > 0) as usize;
+                nonzero_alpha_pixels += (pixel[3] > 0) as usize;
+                opaque_red_pixels += (pixel[3] == u8::MAX
+                    && pixel[0] > pixel[1]
+                    && pixel[0] > pixel[2]) as usize;
+                transparent_pixels += (pixel[3] == 0) as usize;
+                different_pixels += (*pixel != first_pixel) as usize;
+            }
             anyhow::ensure!(
-                image.pixels().any(|pixel| *pixel != first_pixel),
-                "screenshot is a solid color"
+                nonzero_alpha_pixels > 0,
+                "screenshot is fully transparent: channel_min={:?}, channel_max={:?}, nonzero_rgb_pixels={}",
+                channel_min,
+                channel_max,
+                nonzero_rgb_pixels
+            );
+            anyhow::ensure!(
+                opaque_red_pixels > 0,
+                "screenshot does not contain the expected opaque red content: channel_min={:?}, channel_max={:?}, nonzero_alpha_pixels={}",
+                channel_min,
+                channel_max,
+                nonzero_alpha_pixels
+            );
+            anyhow::ensure!(
+                transparent_pixels > 0,
+                "screenshot does not contain the expected transparent background: channel_min={:?}, channel_max={:?}, opaque_red_pixels={}",
+                channel_min,
+                channel_max,
+                opaque_red_pixels
+            );
+            anyhow::ensure!(
+                different_pixels > 0,
+                "screenshot is a solid color: pixel={:?}, channel_min={:?}, channel_max={:?}, nonzero_alpha_pixels={}",
+                first_pixel,
+                channel_min,
+                channel_max,
+                nonzero_alpha_pixels
             );
             run_layer_shell_smoke(cx)?;
             Ok(())

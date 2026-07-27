@@ -76,6 +76,11 @@ struct DirectXResources {
     viewport: [D3D11_VIEWPORT; 1],
 }
 
+struct DirectXRenderTarget {
+    texture: ID3D11Texture2D,
+    view: [Option<ID3D11RenderTargetView>; 1],
+}
+
 struct DirectXRenderPipelines {
     shadow_pipeline: PipelineState<Shadow>,
     quad_pipeline: PipelineState<Quad>,
@@ -178,7 +183,7 @@ impl DirectXRenderer {
         self.atlas.clone()
     }
 
-    fn pre_draw(&mut self) -> Result<()> {
+    fn pre_draw(&mut self, render_target: &DirectXRenderTarget) -> Result<()> {
         self.last_pipeline = None;
         update_buffer(
             &self.devices.device_context,
@@ -194,13 +199,12 @@ impl DirectXRenderer {
             }],
         )?;
         unsafe {
-            self.devices.device_context.ClearRenderTargetView(
-                self.resources.render_target_view[0].as_ref().unwrap(),
-                &[0.0; 4],
-            );
             self.devices
                 .device_context
-                .OMSetRenderTargets(Some(&self.resources.render_target_view), None);
+                .ClearRenderTargetView(render_target.view[0].as_ref().unwrap(), &[0.0; 4]);
+            self.devices
+                .device_context
+                .OMSetRenderTargets(Some(&render_target.view), None);
             self.devices
                 .device_context
                 .RSSetViewports(Some(&self.resources.viewport));
@@ -291,14 +295,14 @@ impl DirectXRenderer {
         Ok(())
     }
 
-    fn render_scene(&mut self, scene: &Scene) -> Result<()> {
-        self.pre_draw()?;
+    fn render_scene(&mut self, scene: &Scene, render_target: &DirectXRenderTarget) -> Result<()> {
+        self.pre_draw(render_target)?;
         for batch in scene.batches() {
             match batch {
                 PrimitiveBatch::Shadows(shadows) => self.draw_shadows(shadows),
-                PrimitiveBatch::Quads(quads) => self.draw_quads(quads),
+                PrimitiveBatch::Quads(quads) => self.draw_quads(quads, render_target),
                 PrimitiveBatch::Paths(paths) => {
-                    self.draw_paths_to_intermediate(paths)?;
+                    self.draw_paths_to_intermediate(paths, render_target)?;
                     self.draw_paths_from_intermediate(paths)
                 }
                 PrimitiveBatch::Underlines(underlines) => self.draw_underlines(underlines),
@@ -324,19 +328,30 @@ impl DirectXRenderer {
     }
 
     pub(crate) fn draw(&mut self, scene: &Scene) -> Result<()> {
-        self.render_scene(scene)?;
+        let render_target = DirectXRenderTarget {
+            texture: (&*self.resources.render_target).clone(),
+            view: self.resources.render_target_view.clone(),
+        };
+        self.render_scene(scene, &render_target)?;
         self.present()
     }
 
     #[cfg(any(test, feature = "test-support"))]
     pub(crate) fn render_scene_to_image(&mut self, scene: &Scene) -> Result<image::RgbaImage> {
-        self.render_scene(scene)?;
-
         let width = self.resources.width;
         let height = self.resources.height;
         if width == 0 || height == 0 {
             anyhow::bail!("invalid DirectX render_to_image size: {width}x{height}");
         }
+
+        let render_target = create_offscreen_render_target(&self.devices.device, width, height)?;
+        let render_result = self.render_scene(scene, &render_target);
+        unsafe {
+            self.devices
+                .device_context
+                .OMSetRenderTargets(Some(&self.resources.render_target_view), None);
+        }
+        render_result?;
 
         let staging_texture = {
             let descriptor = D3D11_TEXTURE2D_DESC {
@@ -367,7 +382,7 @@ impl DirectXRenderer {
         unsafe {
             self.devices
                 .device_context
-                .CopyResource(&staging_texture, &*self.resources.render_target);
+                .CopyResource(&staging_texture, &render_target.texture);
         }
 
         let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
@@ -467,12 +482,12 @@ impl DirectXRenderer {
         )
     }
 
-    fn draw_quads(&mut self, quads: &[Quad]) -> Result<()> {
+    fn draw_quads(&mut self, quads: &[Quad], render_target: &DirectXRenderTarget) -> Result<()> {
         if quads.is_empty() {
             return Ok(());
         }
         if quads.len() == 1 && quads[0].blend_mode != 0 {
-            self.copy_framebuffer_to_texture()?;
+            self.copy_framebuffer_to_texture(&render_target.texture)?;
         }
         self.pipelines.quad_pipeline.update_buffer(
             &self.devices.device,
@@ -493,21 +508,24 @@ impl DirectXRenderer {
         )
     }
 
-    fn copy_framebuffer_to_texture(&mut self) -> Result<()> {
+    fn copy_framebuffer_to_texture(&mut self, render_target: &ID3D11Texture2D) -> Result<()> {
         self.last_pipeline = None;
         unsafe {
             self.devices
                 .device_context
                 .PSSetShaderResources(2, Some(&[None::<ID3D11ShaderResourceView>]));
-            self.devices.device_context.CopyResource(
-                &self.resources.framebuffer_copy_texture,
-                &*self.resources.render_target,
-            );
+            self.devices
+                .device_context
+                .CopyResource(&self.resources.framebuffer_copy_texture, render_target);
         }
         Ok(())
     }
 
-    fn draw_paths_to_intermediate(&mut self, paths: &[Path<ScaledPixels>]) -> Result<()> {
+    fn draw_paths_to_intermediate(
+        &mut self,
+        paths: &[Path<ScaledPixels>],
+        render_target: &DirectXRenderTarget,
+    ) -> Result<()> {
         if paths.is_empty() {
             return Ok(());
         }
@@ -568,11 +586,11 @@ impl DirectXRenderer {
                 0,
                 RENDER_TARGET_FORMAT,
             );
-            // Restore main render target — invalidates pipeline state cache
+            // Restore the active render target — invalidates pipeline state cache
             self.last_pipeline = None;
             self.devices
                 .device_context
-                .OMSetRenderTargets(Some(&self.resources.render_target_view), None);
+                .OMSetRenderTargets(Some(&render_target.view), None);
         }
 
         Ok(())
@@ -1271,6 +1289,47 @@ fn create_resources(
     ))
 }
 
+#[cfg(any(test, feature = "test-support"))]
+fn create_offscreen_render_target(
+    device: &ID3D11Device,
+    width: u32,
+    height: u32,
+) -> Result<DirectXRenderTarget> {
+    let descriptor = D3D11_TEXTURE2D_DESC {
+        Width: width,
+        Height: height,
+        MipLevels: 1,
+        ArraySize: 1,
+        Format: RENDER_TARGET_FORMAT,
+        SampleDesc: DXGI_SAMPLE_DESC {
+            Count: 1,
+            Quality: 0,
+        },
+        Usage: D3D11_USAGE_DEFAULT,
+        BindFlags: D3D11_BIND_RENDER_TARGET.0 as u32,
+        CPUAccessFlags: 0,
+        MiscFlags: 0,
+    };
+    let mut texture = None;
+    unsafe { device.CreateTexture2D(&descriptor, None, Some(&mut texture)) }
+        .context("creating DirectX offscreen render target")?;
+    let texture = texture.context("DirectX did not return an offscreen render target")?;
+    let view = create_render_target_view(device, &texture)?;
+    Ok(DirectXRenderTarget { texture, view })
+}
+
+#[inline]
+fn create_render_target_view(
+    device: &ID3D11Device,
+    render_target: &ID3D11Texture2D,
+) -> Result<[Option<ID3D11RenderTargetView>; 1]> {
+    let mut render_target_view = None;
+    unsafe { device.CreateRenderTargetView(render_target, None, Some(&mut render_target_view))? };
+    Ok([Some(
+        render_target_view.context("DirectX did not return a render target view")?,
+    )])
+}
+
 #[inline]
 fn create_render_target_and_its_view(
     swap_chain: &IDXGISwapChain1,
@@ -1280,12 +1339,8 @@ fn create_render_target_and_its_view(
     [Option<ID3D11RenderTargetView>; 1],
 )> {
     let render_target: ID3D11Texture2D = unsafe { swap_chain.GetBuffer(0) }?;
-    let mut render_target_view = None;
-    unsafe { device.CreateRenderTargetView(&render_target, None, Some(&mut render_target_view))? };
-    Ok((
-        ManuallyDrop::new(render_target),
-        [Some(render_target_view.unwrap())],
-    ))
+    let render_target_view = create_render_target_view(device, &render_target)?;
+    Ok((ManuallyDrop::new(render_target), render_target_view))
 }
 
 #[inline]
