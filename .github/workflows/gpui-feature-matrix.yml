@@ -79,7 +79,13 @@ jobs:
         if: runner.os == 'Linux' && matrix.linux-native
         run: |
           sudo apt-get update
-          sudo apt-get install --yes libwayland-dev libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev pkg-config
+          sudo apt-get install --yes \
+            libwayland-dev \
+            libxcb1-dev \
+            libxkbcommon-dev \
+            libxkbcommon-x11-dev \
+            mesa-vulkan-drivers \
+            pkg-config
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
