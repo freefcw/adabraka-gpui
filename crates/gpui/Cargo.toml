@@ -349,6 +349,7 @@ features = ["metal"]
 version = "0.62"
 features = [
     "Win32_Foundation",
+    "Win32_Security",
     "Win32_System_Threading",
     # Used by the test platform (test-support) for bitmap rendering.
     "Win32_Graphics_Imaging",
