@@ -1,8 +1,9 @@
 use crate::{
-    AnyWindowHandle, AtlasKey, AtlasTextureId, AtlasTile, Bounds, DispatchEventResult, GpuSpecs,
-    Pixels, PlatformAtlas, PlatformDisplay, PlatformInput, PlatformInputHandler, PlatformWindow,
-    Point, PromptButton, RequestFrameOptions, Size, TestPlatform, TileId, WindowAppearance,
-    WindowBackgroundAppearance, WindowBounds, WindowControlArea, WindowParams,
+    A11yCallbacks, AnyWindowHandle, AtlasKey, AtlasTextureId, AtlasTile, Bounds,
+    DispatchEventResult, GpuSpecs, Pixels, PlatformAtlas, PlatformDisplay, PlatformInput,
+    PlatformInputHandler, PlatformWindow, Point, PromptButton, RequestFrameOptions, Size,
+    TestPlatform, TileId, WindowAppearance, WindowBackgroundAppearance, WindowBounds,
+    WindowControlArea, WindowParams,
 };
 use collections::HashMap;
 use parking_lot::Mutex;
@@ -31,6 +32,7 @@ pub(crate) struct TestWindowState {
     input_handler: Option<PlatformInputHandler>,
     is_fullscreen: bool,
     pub(crate) attention_requests: usize,
+    a11y_callbacks: Option<A11yCallbacks>,
     render_artifact: Option<VisualRenderArtifact>,
 }
 
@@ -129,6 +131,7 @@ impl TestWindow {
             input_handler: None,
             is_fullscreen: false,
             attention_requests: 0,
+            a11y_callbacks: None,
             render_artifact: None,
         })))
     }
@@ -164,6 +167,15 @@ impl TestWindow {
         let result = callback(event);
         self.0.lock().input_callback = Some(callback);
         !result.propagate
+    }
+
+    pub(crate) fn simulate_accessibility_activation(&self) -> bool {
+        let lock = self.0.lock();
+        let Some(callbacks) = lock.a11y_callbacks.as_ref() else {
+            return false;
+        };
+        (callbacks.activation)();
+        true
     }
 
     pub(crate) fn render_artifact(&self) -> Option<VisualRenderArtifact> {
@@ -356,6 +368,10 @@ impl PlatformWindow for TestWindow {
     }
 
     fn update_ime_position(&self, _bounds: Bounds<Pixels>) {}
+
+    fn a11y_init(&self, callbacks: A11yCallbacks) {
+        self.0.lock().a11y_callbacks = Some(callbacks);
+    }
 
     fn gpu_specs(&self) -> Option<GpuSpecs> {
         None

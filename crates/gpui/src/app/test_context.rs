@@ -1291,6 +1291,20 @@ impl VisualTestContext {
         })
     }
 
+    /// Simulates the system accessibility adapter activating for this window.
+    ///
+    /// Panics when GPUI was built without the `accessibility` feature.
+    pub fn simulate_accessibility_activation(&mut self) {
+        let activated = self
+            .test_window(self.window)
+            .simulate_accessibility_activation();
+        assert!(
+            activated,
+            "accessibility activation requires the `accessibility` feature"
+        );
+        self.background_executor.run_until_parked();
+    }
+
     /// Simulates the user resizing the window to the new size.
     pub fn simulate_resize(&self, size: Size<Pixels>) {
         self.simulate_window_resize(self.window, size)
@@ -1538,7 +1552,7 @@ impl AnyWindowHandle {
 #[cfg(test)]
 mod test_app_tests {
     use super::*;
-    use crate::{Styled as _, px};
+    use crate::{InteractiveElement as _, Role, StatefulInteractiveElement as _, Styled as _, px};
     #[cfg(any(
         all(target_os = "macos", feature = "font-kit"),
         all(
@@ -1562,6 +1576,8 @@ mod test_app_tests {
 
     struct PaintedView;
 
+    struct AccessibleView;
+
     impl Render for TestView {
         fn render(
             &mut self,
@@ -1579,6 +1595,19 @@ mod test_app_tests {
             _cx: &mut Context<Self>,
         ) -> impl crate::IntoElement {
             crate::div().w(px(20.)).h(px(20.)).bg(crate::black())
+        }
+    }
+
+    impl Render for AccessibleView {
+        fn render(
+            &mut self,
+            _window: &mut Window,
+            _cx: &mut Context<Self>,
+        ) -> impl crate::IntoElement {
+            crate::div()
+                .id("save-settings")
+                .role(Role::Button)
+                .aria_label("Save settings")
         }
     }
 
@@ -1652,6 +1681,26 @@ mod test_app_tests {
             .expect("draw should produce a render artifact");
         assert!(artifact.is_nonblank());
         assert!(artifact.quads > 0);
+    }
+
+    #[test]
+    fn test_platform_accessibility_activation_builds_a_debug_tree() {
+        let mut cx = TestAppContext::single();
+        let (_, cx) = cx.add_window_view(|_, _| AccessibleView);
+
+        assert_eq!(cx.update(|window, _| window.debug_a11y_tree_json()), None);
+
+        cx.simulate_accessibility_activation();
+        cx.update(|window, cx| window.draw(cx).clear());
+
+        let tree = cx
+            .update(|window, _| window.debug_a11y_tree_json())
+            .expect("activation should build an accessibility tree");
+        let tree: serde_json::Value = serde_json::from_str(&tree).unwrap();
+        let nodes = tree["nodes"].as_array().unwrap();
+        assert!(nodes.iter().any(|node| {
+            node["aria"]["role"] == "Button" && node["aria"]["label"] == "Save settings"
+        }));
     }
 
     #[test]
