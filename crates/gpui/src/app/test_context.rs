@@ -1305,6 +1305,20 @@ impl VisualTestContext {
         self.background_executor.run_until_parked();
     }
 
+    /// Simulates an action requested by assistive technology for this window.
+    ///
+    /// Panics when GPUI was built without the `accessibility` feature.
+    pub fn simulate_accessibility_action(&mut self, request: accesskit::ActionRequest) {
+        let dispatched = self
+            .test_window(self.window)
+            .simulate_accessibility_action(request);
+        assert!(
+            dispatched,
+            "accessibility actions require the `accessibility` feature"
+        );
+        self.background_executor.run_until_parked();
+    }
+
     /// Simulates the user resizing the window to the new size.
     pub fn simulate_resize(&self, size: Size<Pixels>) {
         self.simulate_window_resize(self.window, size)
@@ -1561,6 +1575,7 @@ mod test_app_tests {
         )
     ))]
     use crate::{TextRun, font};
+    use std::cell::Cell;
     #[cfg(target_os = "macos")]
     use std::sync::atomic::AtomicBool;
     use std::sync::{
@@ -1577,6 +1592,10 @@ mod test_app_tests {
     struct PaintedView;
 
     struct AccessibleView;
+
+    struct AccessibleActionView {
+        invocations: Rc<Cell<usize>>,
+    }
 
     impl Render for TestView {
         fn render(
@@ -1608,6 +1627,23 @@ mod test_app_tests {
                 .id("save-settings")
                 .role(Role::Button)
                 .aria_label("Save settings")
+        }
+    }
+
+    impl Render for AccessibleActionView {
+        fn render(
+            &mut self,
+            _window: &mut Window,
+            _cx: &mut Context<Self>,
+        ) -> impl crate::IntoElement {
+            let invocations = self.invocations.clone();
+            crate::div()
+                .id("action-button")
+                .role(Role::Button)
+                .aria_label("Run action")
+                .on_a11y_action(accesskit::Action::Click, move |_, _, _| {
+                    invocations.set(invocations.get() + 1);
+                })
         }
     }
 
@@ -1701,6 +1737,41 @@ mod test_app_tests {
         assert!(nodes.iter().any(|node| {
             node["aria"]["role"] == "Button" && node["aria"]["label"] == "Save settings"
         }));
+    }
+
+    #[test]
+    fn test_platform_dispatches_accessibility_actions_to_window_listeners() {
+        let mut cx = TestAppContext::single();
+        let invocations = Rc::new(Cell::new(0));
+        let (_, cx) = cx.add_window_view({
+            let invocations = invocations.clone();
+            move |_, _| AccessibleActionView { invocations }
+        });
+
+        cx.simulate_accessibility_activation();
+        cx.update(|window, cx| window.draw(cx).clear());
+        let tree = cx
+            .update(|window, _| window.debug_a11y_tree_json())
+            .expect("activation should build an accessibility tree");
+        let tree: serde_json::Value = serde_json::from_str(&tree).unwrap();
+        let node_id = tree["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|node| node["aria"]["label"] == "Run action")
+            .and_then(|node| node["accesskit_id"].as_str())
+            .unwrap()
+            .parse()
+            .unwrap();
+
+        cx.simulate_accessibility_action(accesskit::ActionRequest {
+            action: accesskit::Action::Click,
+            target_tree: accesskit::TreeId::ROOT,
+            target_node: accesskit::NodeId(node_id),
+            data: None,
+        });
+
+        assert_eq!(invocations.get(), 1);
     }
 
     #[test]

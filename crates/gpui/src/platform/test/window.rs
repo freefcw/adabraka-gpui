@@ -178,6 +178,15 @@ impl TestWindow {
         true
     }
 
+    pub(crate) fn simulate_accessibility_action(&self, request: accesskit::ActionRequest) -> bool {
+        let lock = self.0.lock();
+        let Some(callbacks) = lock.a11y_callbacks.as_ref() else {
+            return false;
+        };
+        (callbacks.action)(request);
+        true
+    }
+
     pub(crate) fn render_artifact(&self) -> Option<VisualRenderArtifact> {
         self.0.lock().render_artifact
     }
