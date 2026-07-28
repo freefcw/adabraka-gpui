@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.8.1 (2026-07-28)
+
 ### Fixes
 
 - **Windows test compilation** — avoids importing the crate-wide `test` name into the draw
