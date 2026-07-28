@@ -29,21 +29,13 @@ default = [
     "image-default-formats",
     "image-rayon",
 ]
+# Common formats enabled by default. Less common formats (avif, bmp, dds, exr,
+# farbfeld, hdr, ico, pnm, qoi, tga, tiff) are still available as opt-in via the
+# individual `image-format-*` features.
 image-default-formats = [
-    "image-format-avif",
-    "image-format-bmp",
-    "image-format-dds",
-    "image-format-exr",
-    "image-format-farbfeld",
     "image-format-gif",
-    "image-format-hdr",
-    "image-format-ico",
     "image-format-jpeg",
     "image-format-png",
-    "image-format-pnm",
-    "image-format-qoi",
-    "image-format-tga",
-    "image-format-tiff",
     "image-format-webp",
 ]
 image-format-avif = ["image/avif"]
