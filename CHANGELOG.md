@@ -2,21 +2,35 @@
 
 ## Unreleased
 
+## 0.8.0 (2026-07-28)
+
 ### Breaking changes
 
 - **Permission capability reporting** — `PermissionStatus` now includes `Unavailable`, and
   accessibility and microphone permission requests return `PermissionRequestStatus`. Unsupported
   platforms no longer report permissions as granted.
+- **Default image decoder set** — default builds now enable GIF, JPEG, PNG, and WebP. AVIF, BMP,
+  DDS, EXR, farbfeld, HDR, ICO, PNM, QOI, TGA, and TIFF remain available through their individual
+  `image-format-*` features but must be enabled explicitly.
 
 ### Features
 
 - **Screen-capture lifecycle** — callers can opt into exactly-once `Ended`, `Cancelled`, or `Failed`
   notifications for streams that start successfully. Existing `ScreenCaptureSource::stream`
   implementations remain source-compatible.
+- **Accessibility contracts and testing** — elements can expose form-control properties, ARIA
+  descriptions, and keyboard shortcuts; test platforms can activate accessibility, dispatch
+  assistive actions, and inspect a stable debug tree.
+- **Cross-platform visual artifacts** — Linux WGPU and Windows DirectX backends can render scenes to
+  images for visual tests, with native window sizing and offscreen Windows rendering handled by the
+  test platform.
+- **Window and image behavior** — applications can request attention for a specific window, update
+  layer-shell exclusive zones at runtime, honor EXIF orientation for static images, and size
+  auto-dimensioned window roots from the platform-provided viewport.
 
 ### Fixes
 
-- **GPUI macro dependency resolution** — aligns `adabraka-gpui-macros` with the `0.7` release line,
+- **GPUI macro dependency resolution** — aligns `adabraka-gpui-macros` with the `0.8` release line,
   resolves renamed facade/core dependencies, and lets mixed direct dependency graphs select the
   intended crate through `[package.metadata.gpui-macros]`.
 - **macOS screen capture** — releases native setup, startup-failure, and frame-callback resources
@@ -24,12 +38,24 @@
 - **Wayland clipboard/selection serial** — selection ownership now uses a dedicated press-derived
   serial instead of the largest serial across all kinds, preventing IME serials from poisoning
   clipboard ownership on Mutter/kWin after prolonged input-method use.
+- **Rendering and event safety** — fixes truncated-text measurement reuse, nested deferred draws,
+  reentrant Windows draws, arena clearing during draws, prompt click-through, and Windows text and
+  atlas edge cases.
+- **Platform lifecycle hardening** — retains delayed Linux tasks during shutdown, enables the
+  Windows security APIs required by single-instance support, and deduplicates Wayland IME cursor
+  commits.
 
 ### Improvements
 
+- **Internal crate split** — separates core, platform selection, Linux, macOS, Windows, and WGPU
+  implementations while preserving `adabraka-gpui` as the downstream compatibility facade.
 - **Linux/WGPU resource profiles** — new windows now apply
   `GpuResourceBudget::instance_buffer_initial_size`, including after GPU device recovery, while
   clamping the allocation to renderer and device limits.
+- **Rendering and scheduling efficiency** — reduces border-only quad overdraw, shares macOS display
+  links per display, uses the Win32 thread pool for Windows tasks, and upgrades Taffy to `0.12.2`.
+- **Release verification** — the canonical migration script verifies all eight package archives and
+  runs semantic API comparison for the published public facade with a registry library baseline.
 
 ## 0.7.0 (2026-07-11)
 

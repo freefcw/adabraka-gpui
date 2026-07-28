@@ -93,7 +93,7 @@ dependencies = [
 
 [[package]]
 name = "adabraka-gpui"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "adabraka-gpui-core",
  "adabraka-gpui-macros",
@@ -116,7 +116,7 @@ dependencies = [
 
 [[package]]
 name = "adabraka-gpui-core"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "accesskit",
  "adabraka-gpui-macros",
@@ -194,7 +194,7 @@ dependencies = [
 
 [[package]]
 name = "adabraka-gpui-linux"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "accesskit",
  "accesskit_unix",
@@ -249,7 +249,7 @@ dependencies = [
 
 [[package]]
 name = "adabraka-gpui-macos"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "accesskit",
  "accesskit_macos",
@@ -295,7 +295,7 @@ dependencies = [
 
 [[package]]
 name = "adabraka-gpui-macros"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "adabraka-gpui-core",
  "heck 0.5.0",
@@ -308,7 +308,7 @@ dependencies = [
 
 [[package]]
 name = "adabraka-gpui-platform"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "adabraka-gpui-core",
  "adabraka-gpui-linux",
@@ -334,7 +334,7 @@ dependencies = [
 
 [[package]]
 name = "adabraka-gpui-wgpu"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "adabraka-gpui-core",
  "adabraka_collections",
@@ -353,7 +353,7 @@ dependencies = [
 
 [[package]]
 name = "adabraka-gpui-windows"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "accesskit",
  "accesskit_windows",

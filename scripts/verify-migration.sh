@@ -16,6 +16,13 @@ readonly MIGRATION_PACKAGES=(
     adabraka-gpui
 )
 
+# Only the facade currently has a published library baseline. The macro package is
+# proc-macro-only, which cargo-semver-checks does not support, and the extracted
+# internal packages have not been published yet.
+readonly SEMVER_PACKAGES=(
+    adabraka-gpui
+)
+
 case "${1:-}" in
     "") ;;
     --semver)
@@ -56,7 +63,7 @@ cargo fmt --all -- --check
 git diff --check
 
 if [[ "${1:-}" == "--semver" ]]; then
-    for package in "${MIGRATION_PACKAGES[@]}"; do
+    for package in "${SEMVER_PACKAGES[@]}"; do
         cargo semver-checks check-release -p "$package"
         echo "  semver checked: $package"
     done

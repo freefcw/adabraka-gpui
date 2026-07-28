@@ -61,11 +61,15 @@ scripts/verify-migration.sh
 
 The script checks the facade and renderer compile baselines, core and compatibility tests, workspace
 tests, a normalized macro archive, package inventories for the eight migration packages, formatting,
-and diff hygiene. Before a release, install `cargo-semver-checks` and check those eight migration
-packages for semantic API compatibility:
+and diff hygiene. Before a release, install `cargo-semver-checks` and check the published public
+facade against its registry API baseline:
 
 ```sh
 scripts/verify-migration.sh --semver
 ```
+
+The extracted internal packages do not yet have registry baselines, and the macro package is
+proc-macro-only, which `cargo-semver-checks` does not support. Their release proof is provided by the
+workspace tests, downstream fixtures, and package-inventory checks in the same script.
 
 Platform-specific runtime behavior remains covered by native CI jobs and targeted smoke tests.

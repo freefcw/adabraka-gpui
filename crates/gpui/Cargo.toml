@@ -1,7 +1,7 @@
 [package]
 edition = "2024"
 name = "adabraka-gpui-core"
-version = "0.7.0"
+version = "0.8.0"
 authors = ["Adabraka Team"]
 publish = true
 description = "GPU-accelerated UI framework with system tray, global hotkeys, notifications, and daemon mode support (fork of Zed's GPUI)"
@@ -118,7 +118,7 @@ optional = true
 [dependencies.gpui_macros]
 path = "../gpui-macros"
 package = "adabraka-gpui-macros"
-version = "0.7.0"
+version = "0.8.0"
 
 [dependencies.http_client]
 path = "../http_client"

@@ -7,14 +7,14 @@ A GPU-accelerated UI framework for Rust, forked from [Zed's GPUI](https://github
 Add the following to your `Cargo.toml`:
 
 ```toml
-adabraka-gpui = "0.7.0"
+adabraka-gpui = "0.8.0"
 ```
 
 To keep downstream package size under control, you can disable default features and opt into only
 the image formats you need:
 
 ```toml
-adabraka-gpui = { version = "0.7.0", default-features = false, features = [
+adabraka-gpui = { version = "0.8.0", default-features = false, features = [
     "font-kit",
     "wayland",
     "x11",
