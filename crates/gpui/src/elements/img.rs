@@ -1,9 +1,10 @@
+#[cfg(feature = "image-format-webp")]
+use crate::decode_static_image_from_decoder;
 use crate::{
     AnyElement, AnyImageCache, App, Asset, AssetLogger, Bounds, DefiniteLength, Element, ElementId,
     Entity, GlobalElementId, Hitbox, Image, ImageCache, InspectorElementId, InteractiveElement,
     Interactivity, IntoElement, LayoutId, Length, ObjectFit, Pixels, RenderImage, Resource,
-    SharedString, SharedUri, StyleRefinement, Styled, Task, Window, decode_static_image,
-    decode_static_image_from_decoder, px,
+    SharedString, SharedUri, StyleRefinement, Styled, Task, Window, decode_static_image, px,
 };
 use anyhow::{Context as _, Result};
 
@@ -17,6 +18,7 @@ use image::Rgba;
 use image::codecs::gif::GifDecoder;
 #[cfg(feature = "image-format-webp")]
 use image::codecs::webp::WebPDecoder;
+#[cfg(any(feature = "image-format-gif", feature = "image-format-webp"))]
 use smallvec::SmallVec;
 #[cfg(any(feature = "image-format-gif", feature = "image-format-webp"))]
 use std::io::Cursor;
