@@ -535,8 +535,10 @@ struct Quad {
     Corners corner_radii;
     Edges border_widths;
     uint continuous_corners;
+    uint _pad_before_transform;
     TransformationMatrix transform;
     uint blend_mode;
+    uint _pad_end;
 };
 
 struct QuadVertexOutput {

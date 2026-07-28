@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Fixes
+
+- **Windows test compilation** — avoids importing the crate-wide `test` name into the draw
+  coordinator unit-test module, removing an ambiguous `#[test]` attribute on Windows.
+- **Windows visual snapshots** — aligns the DirectX HLSL `Quad` layout with the Rust scene struct's
+  explicit transform padding so offscreen readback renders scene content instead of a fully
+  transparent image.
+
 ## 0.8.0 (2026-07-28)
 
 ### Breaking changes

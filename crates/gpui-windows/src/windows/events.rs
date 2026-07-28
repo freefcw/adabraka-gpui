@@ -1751,7 +1751,7 @@ fn notify_frame_changed(handle: HWND) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::DrawCoordinator;
 
     #[test]
     fn draw_coordinator_defers_reentrant_draws() {
