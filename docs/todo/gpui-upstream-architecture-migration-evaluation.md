@@ -147,8 +147,8 @@ Adabraka 相比上游 GPUI 更强调后台/托盘/资源 profile/长期运行。
 
 验证：
 
-- `cargo test -p adabraka-gpui window_positioner`
-- `cargo check -p adabraka-gpui --no-default-features --features wgpu`
+- `cargo test -p adabraka-gpui-core window_positioner`
+- `cargo check -p adabraka-gpui-core --no-default-features --features wgpu`
 - 记录当前 `cargo fmt --check` 是否受既有无关格式化影响。
 
 ### Phase 1：Profiler / Observability
@@ -232,10 +232,10 @@ Adabraka 相比上游 GPUI 更强调后台/托盘/资源 profile/长期运行。
 
 | 验证层 | 命令/方式 | 覆盖内容 |
 | --- | --- | --- |
-| 基础编译 | `cargo check -p adabraka-gpui --no-default-features --features wgpu` | 默认 host 编译、wgpu feature |
-| 基础测试 | `cargo test -p adabraka-gpui window_positioner` | 快速 smoke，覆盖窗口定位 |
-| test-support | `cargo test -p adabraka-gpui --lib --features test-support` | 更完整基线，覆盖测试上下文、executor、window tests |
-| Linux 专项 | Linux 环境跑 `cargo test -p adabraka-gpui --lib --features test-support,wayland,x11` | Wayland/X11 dispatcher/window |
+| 基础编译 | `cargo check -p adabraka-gpui-core --no-default-features --features wgpu` | 默认 host 编译、wgpu feature |
+| 基础测试 | `cargo test -p adabraka-gpui-core window_positioner` | 快速 smoke，覆盖窗口定位 |
+| test-support | `cargo test -p adabraka-gpui-core --lib --features test-support` | 更完整基线，覆盖测试上下文、executor、window tests |
+| Linux 专项 | Linux 环境跑 `cargo test -p adabraka-gpui-core --lib --features test-support,wayland,x11` | Wayland/X11 dispatcher/window |
 | macOS 专项 | 本机跑 visual/headless smoke | AppKit/Metal/截图/字体 |
 | Windows 专项 | Windows runner 跑 display/device smoke | dispatcher、DirectX、monitor lifecycle |
 | 性能基线 | profiler 开关下运行 sample app | overhead、首帧、cache trim |

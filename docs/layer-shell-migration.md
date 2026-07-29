@@ -51,7 +51,7 @@ Wayland layer-shell surface; callers that require layer-shell semantics must sel
 | Implicit layer-shell behavior from `WindowKind::Overlay` | Use `WindowKind::LayerShell` explicitly. |
 
 The runtime-aware conversion used by the repository is available in
-[`window_positioning.rs`](../crates/gpui/examples/window_positioning.rs). It selects layer-shell
+[`window_positioning.rs`](../crates/gpui-compat/examples/window_positioning.rs). It selects layer-shell
 only when the active compositor is Wayland and otherwise uses a supported non-layer-shell window
 kind.
 
@@ -70,8 +70,8 @@ kind.
 The current public options are defined in
 [`platform/layer_shell.rs`](../crates/gpui/src/platform/layer_shell.rs). The Wayland and X11
 boundaries are implemented in
-[`wayland/window.rs`](../crates/gpui/src/platform/linux/wayland/window.rs) and
-[`x11/window.rs`](../crates/gpui/src/platform/linux/x11/window.rs).
+[`wayland/window.rs`](../crates/gpui-linux/src/linux/wayland/window.rs) and
+[`x11/window.rs`](../crates/gpui-linux/src/linux/x11/window.rs).
 
 ## Implementation provenance
 

@@ -50,7 +50,7 @@ pub struct Background {
 
 当前 WGSL 定义位置：
 
-- `crates/gpui/src/platform/wgpu/shaders.wgsl`
+- `crates/gpui-wgpu/src/shaders.wgsl`
 
 WGSL 当前语义：
 
@@ -236,7 +236,7 @@ P0 的目标是先让 WGPU storage buffer 中的 `Background` / `Quad` layout �
 
 修改文件：
 
-- `crates/gpui/src/platform/wgpu/shaders.wgsl`
+- `crates/gpui-wgpu/src/shaders.wgsl`
 
 建议先做最小 ABI 修复：
 

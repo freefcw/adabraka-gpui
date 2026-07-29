@@ -181,9 +181,9 @@
 ### 命令
 
 ```bash
-cargo test -p adabraka-gpui profiler
-cargo test -p adabraka-gpui --lib --features test-support profiler
-cargo check -p adabraka-gpui --no-default-features --features wgpu
+cargo test -p adabraka-gpui-core profiler
+cargo test -p adabraka-gpui-core --lib --features test-support profiler
+cargo check -p adabraka-gpui-core --no-default-features --features wgpu
 ```
 
 ### 手动验证
@@ -205,9 +205,9 @@ cargo check -p adabraka-gpui --no-default-features --features wgpu
 已验证：
 
 ```bash
-cargo test -p adabraka-gpui profiler
-cargo test -p adabraka-gpui --lib --features test-support -- profiler
-cargo check -p adabraka-gpui --no-default-features --features wgpu
+cargo test -p adabraka-gpui-core profiler
+cargo test -p adabraka-gpui-core --lib --features test-support -- profiler
+cargo check -p adabraka-gpui-core --no-default-features --features wgpu
 ```
 
 结果：全部通过。
@@ -393,28 +393,28 @@ set -e
 echo "=== 001 - Profiler / Observability ==="
 
 echo "[1/5] Compile checks..."
-cargo check -p adabraka-gpui
-cargo check -p adabraka-gpui --no-default-features
-cargo check -p adabraka-gpui --no-default-features --features wgpu
+cargo check -p adabraka-gpui-core
+cargo check -p adabraka-gpui-core --no-default-features
+cargo check -p adabraka-gpui-core --no-default-features --features wgpu
 
 echo "[2/5] Profiler unit tests..."
-cargo test -p adabraka-gpui --lib --features test-support -- profiler
+cargo test -p adabraka-gpui-core --lib --features test-support -- profiler
 
 echo "[3/5] Profiler integration tests..."
-cargo test -p adabraka-gpui --lib --features test-support -- profiler_enabled
-cargo test -p adabraka-gpui --lib --features test-support -- profiler_disabled
-cargo test -p adabraka-gpui --lib --features test-support -- profiler_concurrent
+cargo test -p adabraka-gpui-core --lib --features test-support -- profiler_enabled
+cargo test -p adabraka-gpui-core --lib --features test-support -- profiler_disabled
+cargo test -p adabraka-gpui-core --lib --features test-support -- profiler_concurrent
 
 echo "[4/5] Frozen tests (regression guard)..."
-cargo test -p adabraka-gpui --lib --features test-support -- app::test
-cargo test -p adabraka-gpui --lib --features test-support -- executor
-cargo test -p adabraka-gpui --lib --features test-support -- elements::list
+cargo test -p adabraka-gpui-core --lib --features test-support -- app::test
+cargo test -p adabraka-gpui-core --lib --features test-support -- executor
+cargo test -p adabraka-gpui-core --lib --features test-support -- elements::list
 
 echo "[5/5] Full lib test..."
-cargo test -p adabraka-gpui --lib --features test-support
+cargo test -p adabraka-gpui-core --lib --features test-support
 
 echo "(Optional) Profiler overhead smoke:"
-echo "  cargo test -p adabraka-gpui --lib --features test-support -- profiler_overhead --ignored"
+echo "  cargo test -p adabraka-gpui-core --lib --features test-support -- profiler_overhead --ignored"
 
 echo "=== 001 ALL PASSED ==="
 ```

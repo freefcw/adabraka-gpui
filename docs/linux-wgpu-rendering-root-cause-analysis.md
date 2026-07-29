@@ -62,7 +62,7 @@ struct Background {
 
 对应位置：
 
-- `crates/gpui/src/platform/wgpu/shaders.wgsl`
+- `crates/gpui-wgpu/src/shaders.wgsl`
 
 差异：
 

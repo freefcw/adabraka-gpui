@@ -164,8 +164,8 @@
 ### 自动测试
 
 ```bash
-cargo test -p adabraka-gpui visual_test --features test-support
-cargo test -p adabraka-gpui --lib --features test-support
+cargo test -p adabraka-gpui-core visual_test --features test-support
+cargo test -p adabraka-gpui-core --lib --features test-support
 ```
 
 自动测试只跑 mock 和 capability detection；真实 renderer 测试默认可 skip。
@@ -179,7 +179,7 @@ CI 策略：
 ### macOS 手动 smoke
 
 ```bash
-cargo test -p adabraka-gpui --test real_visual_smoke --features test-support -- --ignored
+cargo test -p adabraka-gpui-core --test real_visual_smoke --features test-support -- --ignored
 ```
 
 验证：
@@ -194,7 +194,7 @@ cargo test -p adabraka-gpui --test real_visual_smoke --features test-support -- 
 需要 Linux 环境和 wgpu/Wayland 或 X11：
 
 ```bash
-cargo test -p adabraka-gpui real_visual --features test-support,wayland,x11 -- --ignored
+cargo test -p adabraka-gpui-core real_visual --features test-support,wayland,x11 -- --ignored
 ```
 
 验证：
@@ -207,7 +207,7 @@ cargo test -p adabraka-gpui real_visual --features test-support,wayland,x11 -- -
 验证 DirectX renderer 和窗口创建：
 
 ```powershell
-cargo test -p adabraka-gpui --test real_visual_smoke --features test-support -- --ignored
+cargo test -p adabraka-gpui-core --test real_visual_smoke --features test-support -- --ignored
 ```
 
 ## 当前状态
@@ -234,11 +234,11 @@ cargo test -p adabraka-gpui --test real_visual_smoke --features test-support -- 
 已验证：
 
 ```bash
-cargo test -p adabraka-gpui --lib --features test-support -- visual_test_capabilities
-cargo test -p adabraka-gpui --lib --features test-support -- visual_test_mock_render_artifact
-cargo test -p adabraka-gpui --lib --features test-support -- visual_test_render_to_image
-cargo test -p adabraka-gpui --test real_visual_smoke --features test-support
-cargo test -p adabraka-gpui --test real_visual_smoke --features test-support -- --ignored
+cargo test -p adabraka-gpui-core --lib --features test-support -- visual_test_capabilities
+cargo test -p adabraka-gpui-core --lib --features test-support -- visual_test_mock_render_artifact
+cargo test -p adabraka-gpui-core --lib --features test-support -- visual_test_render_to_image
+cargo test -p adabraka-gpui-core --test real_visual_smoke --features test-support
+cargo test -p adabraka-gpui-core --test real_visual_smoke --features test-support -- --ignored
 ```
 
 结果：通过。当前 003 已完成 capability detection、mock structural artifact、macOS real renderer smoke 和 macOS screenshot readback smoke；跨平台 readback / snapshot 属后续扩展。
@@ -475,26 +475,26 @@ set -e
 echo "=== 003 - Visual Test Platform ==="
 
 echo "[1/5] Compile checks..."
-cargo check -p adabraka-gpui
-cargo check -p adabraka-gpui --no-default-features
-cargo check -p adabraka-gpui --no-default-features --features wgpu
+cargo check -p adabraka-gpui-core
+cargo check -p adabraka-gpui-core --no-default-features
+cargo check -p adabraka-gpui-core --no-default-features --features wgpu
 
 echo "[2/5] Capability detection tests (always run)..."
-cargo test -p adabraka-gpui --lib --features test-support -- visual_test_capabilities
+cargo test -p adabraka-gpui-core --lib --features test-support -- visual_test_capabilities
 
 echo "[3/5] Mock visual tests (no GPU required)..."
-cargo test -p adabraka-gpui --lib --features test-support -- visual_test
+cargo test -p adabraka-gpui-core --lib --features test-support -- visual_test
 
 echo "[4/5] Frozen tests (regression guard)..."
-cargo test -p adabraka-gpui --lib --features test-support -- app::test
-cargo test -p adabraka-gpui --lib --features test-support -- executor
+cargo test -p adabraka-gpui-core --lib --features test-support -- app::test
+cargo test -p adabraka-gpui-core --lib --features test-support -- executor
 
 echo "[5/5] Full lib test..."
-cargo test -p adabraka-gpui --lib --features test-support
+cargo test -p adabraka-gpui-core --lib --features test-support
 
 echo ""
 echo "(Optional) Real renderer smoke (macOS with GPU):"
-echo "  cargo test -p adabraka-gpui --test real_visual_smoke --features test-support -- --ignored"
+echo "  cargo test -p adabraka-gpui-core --test real_visual_smoke --features test-support -- --ignored"
 
 echo "=== 003 ALL PASSED ==="
 ```

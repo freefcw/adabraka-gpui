@@ -211,10 +211,10 @@ fn dispatch_on_main_thread(&self, runnable: Runnable, priority: TaskPriority);
 ### 改动前基线命令
 
 ```bash
-cargo test -p adabraka-gpui executor
-cargo test -p adabraka-gpui dispatcher
-cargo test -p adabraka-gpui --lib --features test-support
-cargo check -p adabraka-gpui --no-default-features --features wgpu
+cargo test -p adabraka-gpui-core executor
+cargo test -p adabraka-gpui-core dispatcher
+cargo test -p adabraka-gpui-core --lib --features test-support
+cargo check -p adabraka-gpui-core --no-default-features --features wgpu
 ```
 
 ### Step 1/2 验证
@@ -251,20 +251,20 @@ cargo check -p adabraka-gpui --no-default-features --features wgpu
 macOS：
 
 ```bash
-cargo test -p adabraka-gpui --lib --features test-support
+cargo test -p adabraka-gpui-core --lib --features test-support
 ```
 
 Linux：
 
 ```bash
-cargo test -p adabraka-gpui --lib --features test-support,wayland,x11
-cargo check -p adabraka-gpui --no-default-features --features wgpu
+cargo test -p adabraka-gpui-core --lib --features test-support,wayland,x11
+cargo check -p adabraka-gpui-core --no-default-features --features wgpu
 ```
 
 Windows：
 
 ```powershell
-cargo test -p adabraka-gpui --lib --features test-support
+cargo test -p adabraka-gpui-core --lib --features test-support
 ```
 
 ### 行为验证
@@ -290,9 +290,9 @@ cargo test -p adabraka-gpui --lib --features test-support
 已验证：
 
 ```bash
-cargo test -p adabraka-gpui --lib --features test-support -- baseline_
-cargo test -p adabraka-gpui --lib --features test-support -- spawn_with_priority
-cargo test -p adabraka-gpui --lib --features test-support -- priority
+cargo test -p adabraka-gpui-core --lib --features test-support -- baseline_
+cargo test -p adabraka-gpui-core --lib --features test-support -- spawn_with_priority
+cargo test -p adabraka-gpui-core --lib --features test-support -- priority
 ```
 
 结果：通过。
@@ -568,28 +568,28 @@ set -e
 echo "=== 004 - Scheduler / Queue ==="
 
 echo "[1/6] Compile checks..."
-cargo check -p adabraka-gpui
-cargo check -p adabraka-gpui --no-default-features
-cargo check -p adabraka-gpui --no-default-features --features wgpu
+cargo check -p adabraka-gpui-core
+cargo check -p adabraka-gpui-core --no-default-features
+cargo check -p adabraka-gpui-core --no-default-features --features wgpu
 
 echo "[2/6] Baseline tests (must pass before AND after changes)..."
-cargo test -p adabraka-gpui --lib --features test-support -- baseline_
+cargo test -p adabraka-gpui-core --lib --features test-support -- baseline_
 
 echo "[3/6] Priority tests..."
-cargo test -p adabraka-gpui --lib --features test-support -- spawn_with_priority
-cargo test -p adabraka-gpui --lib --features test-support -- priority
+cargo test -p adabraka-gpui-core --lib --features test-support -- spawn_with_priority
+cargo test -p adabraka-gpui-core --lib --features test-support -- priority
 
 echo "[4/6] Dispatcher tests..."
-cargo test -p adabraka-gpui --lib --features test-support -- dispatcher
-cargo test -p adabraka-gpui --lib --features test-support -- executor
+cargo test -p adabraka-gpui-core --lib --features test-support -- dispatcher
+cargo test -p adabraka-gpui-core --lib --features test-support -- executor
 
 echo "[5/6] Frozen tests (regression guard)..."
-cargo test -p adabraka-gpui --lib --features test-support -- app::test
-cargo test -p adabraka-gpui --lib --features test-support -- elements::list
-cargo test -p adabraka-gpui --lib --features test-support -- keymap
+cargo test -p adabraka-gpui-core --lib --features test-support -- app::test
+cargo test -p adabraka-gpui-core --lib --features test-support -- elements::list
+cargo test -p adabraka-gpui-core --lib --features test-support -- keymap
 
 echo "[6/6] Full lib test..."
-cargo test -p adabraka-gpui --lib --features test-support
+cargo test -p adabraka-gpui-core --lib --features test-support
 
 echo "=== 004 ALL PASSED ==="
 ```

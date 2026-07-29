@@ -19,7 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 COLOR_RS = ROOT / "crates/gpui/src/color.rs"
 SCENE_RS = ROOT / "crates/gpui/src/scene.rs"
-WGSL = ROOT / "crates/gpui/src/platform/wgpu/shaders.wgsl"
+WGSL = ROOT / "crates/gpui-wgpu/src/shaders.wgsl"
 
 
 @dataclass(frozen=True)
