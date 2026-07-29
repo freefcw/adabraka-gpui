@@ -15,7 +15,7 @@
 - [`ZED_SYNC_MAPPING.md`](./ZED_SYNC_MAPPING.md)
 - [`QUICK_SYNC_REFERENCE.md`](./QUICK_SYNC_REFERENCE.md)
 - [`TECHNICAL_SYNC_GUIDE.md`](./TECHNICAL_SYNC_GUIDE.md)
-- `BATCH*`、`SUMMARY.md`、`MERGE_STATUS_*` 等带批次或日期的报告
+- `BATCH*`、`SUMMARY.md` 等带批次或日期的历史报告
 
 历史报告中的路径、包名和命令可能已经失效。不要通过修改历史报告来表达当前状态；在 `CURRENT.md` 更新当前结论。
 

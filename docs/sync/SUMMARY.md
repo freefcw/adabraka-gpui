@@ -7,7 +7,7 @@
 ## 创建的文档
 
 ### 1. 主要映射文档
-**位置**: `docs/sync/ZED_SYNC_MAPPING.md`
+**位置**: `./ZED_SYNC_MAPPING.md`
 
 这是核心文档，包含：
 - 仓库基本信息和提取历史
@@ -20,7 +20,7 @@
 - 重要注意事项和最佳实践
 
 ### 2. 技术同步指南
-**位置**: `docs/sync/TECHNICAL_SYNC_GUIDE.md`
+**位置**: `./TECHNICAL_SYNC_GUIDE.md`
 
 这是技术实施文档，包含：
 - 详细的代码结构对比（带标记：SYNC/MODIFIED/ADABRAKA ONLY）
@@ -33,7 +33,7 @@
 - 故障排除指南
 
 ### 3. 快速参考表
-**位置**: `docs/sync/QUICK_SYNC_REFERENCE.md`
+**位置**: `./QUICK_SYNC_REFERENCE.md`
 
 这是日常使用的速查手册，包含：
 - Crate 名称快速映射表
@@ -45,7 +45,7 @@
 - 版本历史记录
 
 ### 4. 文档索引
-**位置**: `docs/sync/README.md`
+**位置**: `./README.md`
 
 这是文档导航页，包含：
 - 所有文档的概述和链接
@@ -130,15 +130,15 @@ Adabraka GPUI 在 Zed GPUI 基础上新增了 10 大功能：
 2. **关注更新**：查看 CHANGELOG 了解同步的内容
 3. **报告问题**：发现同步相关问题及时反馈
 
-## 自动化工具
+## 自动化工具模板
 
-文档中提供了两个脚本模板：
+文档中提供了两个逻辑模板（注：在技术指南中提供，未单独立项为仓库中的 shell 脚本）：
 
-### 1. 差异检测脚本
-`scripts/check-zed-diff.sh` - 自动检测核心文件的差异
+### 1. 差异检测逻辑模板
+`check-zed-diff` - 检测核心文件差异的示例逻辑
 
-### 2. 同步辅助脚本
-`scripts/sync-from-zed.sh` - 半自动化同步安全文件
+### 2. 同步辅助逻辑模板
+`sync-from-zed` - 半自动化同步安全文件的示例逻辑
 
 ## 下一步建议
 
