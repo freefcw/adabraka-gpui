@@ -308,12 +308,15 @@
 - **v0.6.0**: objc2 迁移 + 图像功能 + ksni 升级
 - **v0.6.1**: Zed 同步批次 1
 - **v0.6.2**: Zed 同步批次 2-3 + 性能优化
+- **v0.7.0**: Layer-Shell 显式 API + AppResourceProfile (Minimal/Utility/Desktop) + 水印淘汰算法
+- **v0.8.0**: Workspace 8 Crate 解耦拆分 + 权限/捕获状态 + 避免边框 Quad 过绘 + Win32 线程池调度 + Taffy 0.12.2
+- **v0.8.1**: DirectX 离屏 Readback 结构 Padding 物理对齐 + 发布语义自动化校验
 
 ## 统计
 
-- **总提交数**: 68
-- **主要功能版本**: 6
+- **总提交数**: 140+
+- **主要功能版本**: 9
 - **平台支持**: macOS, Linux (X11/Wayland), Windows
-- **新增 API**: 50+ 平台方法
-- **性能改进**: 5+ 关键优化
-- **Bug 修复**: 30+ 修复
+- **新增 API**: 60+ 平台方法
+- **性能改进**: 8+ 关键优化
+- **Bug 修复**: 45+ 修复

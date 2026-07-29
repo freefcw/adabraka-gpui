@@ -306,6 +306,21 @@ Zed 只在内部使用 TransformationMatrix，未暴露给用户 API。
 - ✅ 窗口失焦时恢复光标（Zed c01671eac1）
 - ✅ 移除 naga 构建依赖（Zed e712f3c6df）
 
+### 6. Layer-Shell 架构演进与 App 资源配置 (v0.7.0)
+**状态**: ✅ Adabraka 独有 / 架构增强
+
+- ✅ **规范化 Layer-Shell API**：采用 `WindowKind::LayerShell(LayerShellOptions)` 显式选择窗口类型，移除旧版隐式 Overlay 行为，提供 `wlr-layer-shell` 运行时校验与错误响应。
+- ✅ **应用资源配置文件 (`AppProfile`)**：提供 `Desktop`, `Utility`, `Minimal` 及 `Custom` 预设，运行时控制动态 Atlas 分配与 Line-layout 缓存水印淘汰（Watermark Eviction）。
+- ✅ **Linux WGPU Quad/Background ABI 对齐**：消除多 stop 渐变在 Linux 平台上的渲染偏差与 NaN 崩溃。
+
+### 7. 多 Crate 架构拆分与全平台契约硬化 (v0.8.0 / v0.8.1)
+**状态**: ✅ Adabraka 独有 / 架构重构
+
+- ✅ **Workspace 8 包拆分架构**：解耦核心引擎与底层平台包（`adabraka-gpui-core`, `gpui-wgpu`, `gpui-linux`, `gpui-macos`, `gpui-windows`, `gpui-platform`, `gpui-macros` 及Facade `adabraka-gpui`）。
+- ✅ **全平台权限与 Accessibility 契约**：引入 `PermissionStatus::Unavailable` 和 `PermissionRequestStatus`，支持键盘快捷键辅助树节点探测与自动化视觉测试产物。
+- ✅ **屏幕捕获生命周期**：增加流创建 `Ended` / `Cancelled` / `Failed` 回调机制，释放 macOS 捕获句柄。
+- ✅ **Windows DirectX 离屏 Readback 物理对齐 (v0.8.1)**：对齐 HLSL Quad Transform Padding 物理结构。
+
 ## 平台现代化（Adabraka 独有）
 
 ### macOS objc2 迁移 (v0.6.0)
@@ -315,25 +330,26 @@ Zed 只在内部使用 TransformationMatrix，未暴露给用户 API。
 - 消除所有 cocoa 弃用警告
 - Zed 仍在使用 cocoa crate
 
-### 图像格式可选功能 (v0.6.0)
+### 图像格式可选功能 (v0.6.0 / v0.8.0)
 **状态**: ✅ Adabraka 独有
 
-- `image-format-*` 功能标志
-- 允许下游减少二进制体积
-- Zed 默认启用所有格式
+- `image-format-*` 功能标志，默认精简包含 GIF, JPEG, PNG, WebP
+- 允许下游按需选择高级解码器（AVIF, EXR, QOI, HDR 等）控制二进制体积
 
 ## 性能优化对比
 
 ### Adabraka 独有优化
 
-1. **场景图排序优化** (v0.5.1)
+1. **场景图排序与去重优化** (v0.5.1 / v0.8.0)
    - `is_sorted_by_key` 检查跳过已排序数据
-   - GPU 缓冲区 1.5x 增长策略
+   - 避免无边框 Quad 过度绘制 (Overdraw)
+   - GPU 缓冲区 1.5x 增长策略与动态预算控制
 
-2. **DirectX 优化** (v0.5.1)
-   - DirectWrite 文本格式缓存
-   - 管线状态缓存
+2. **DirectX 与 macOS 线程调度优化** (v0.5.1 / v0.8.0)
+   - DirectWrite 文本格式缓存与管线状态缓存
    - 跨窗口文本布局缓存
+   - 使用 Win32 线程池与 macOS DisplayLink 共享调度
+   - Taffy 布局引擎升级至 0.12.2
 
 ### 从 Zed 同步的优化
 
@@ -343,12 +359,12 @@ Zed 只在内部使用 TransformationMatrix，未暴露给用户 API。
 
 ### Adabraka 独有功能统计
 
-- **桌面应用功能**: 21 项（守护进程、托盘、热键、通知等）
-- **渲染增强**: 4 项（变换、渐变、混合模式、调整事件）
-- **平台现代化**: 2 项（objc2 迁移、图像格式可选）
-- **性能优化**: 2 项（场景图、DirectX）
+- **桌面应用功能**: 26+ 项（守护进程、托盘、热键、通知、电源管理、原生对话框、屏捕生命周期、权限状态等）
+- **渲染与资源管理**: 7 项（变换、多 Stop 渐变、混合模式、Resource Profiles、Layer-shell 规范、WGPU 资源预算、DX/WGPU Readback）
+- **平台现代化与架构**: 4 项（objc2 迁移、图像格式按需选择、Workspace 8 Crate 拆分解耦、宏解析适配器）
+- **性能优化**: 5 项（场景图免排序、无边框 Quad 过载优化、Win32 线程池调度、DisplayLink 共享、DirectX/TextSystem 缓存）
 
-**总计**: 29 项主要功能/优化是 Adabraka 独有的
+**总计**: 42+ 项主要功能与架构演进为 Adabraka 独有
 
 ### Zed 同步功能统计
 
@@ -356,7 +372,7 @@ Zed 只在内部使用 TransformationMatrix，未暴露给用户 API。
 
 ### 定位差异
 
-- **Zed GPUI**: 专注于代码编辑器的 UI 框架
-- **Adabraka GPUI**: 通用桌面应用框架，支持后台应用、菜单栏工具、系统集成
+- **Zed GPUI**: 专注于 Zed 编辑器应用的单 Crate 内部 UI 框架
+- **Adabraka GPUI**: 模块化解耦、面向全平台原生生态与桌面应用的轻量通用 GUI 框架
 
-Adabraka 是 Zed GPUI 的超集，保持与上游的兼容性同时添加了大量桌面应用所需的系统级功能。
+Adabraka 是 Zed GPUI 的超集与模块化升级版，保持与上游核心兼容的同时提供了完整的平台能力与资源管理体系。

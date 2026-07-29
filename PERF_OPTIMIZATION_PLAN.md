@@ -6,19 +6,9 @@ Comprehensive audit of the GPUI rendering pipeline, memory allocation patterns, 
 
 ## Tier 1: Quick Wins (High Impact, Low Effort)
 
-### 1.1 Eliminate Double-Storage of Primitives in Scene
-**File**: `crates/gpui/src/scene.rs:67-115`
-**Problem**: Every primitive is stored TWICE - once in `paint_operations: Vec<PaintOperation>` (as `Primitive` enum) and again in the type-specific vec (`shadows`, `quads`, etc.). Each `insert_primitive()` call clones the primitive:
-```rust
-Primitive::Shadow(shadow) => {
-    shadow.order = order;
-    self.shadows.push(shadow.clone()); // Clone #1
-}
-// ...
-self.paint_operations.push(PaintOperation::Primitive(primitive)); // Clone #2 (move)
-```
-**Fix**: Store only in type-specific vecs. Replace `paint_operations` with a lightweight `Vec<(PrimitiveKind, usize)>` that stores just the kind and index. The `replay()` method can reconstruct from indices.
-**Impact**: HIGH - Eliminates 1 clone per primitive per frame. For a complex UI with 5000+ primitives, this saves ~200KB+ of allocation/copy per frame.
+### 1.1 [✅ Completed] Eliminate Double-Storage of Primitives in Scene
+**File**: `crates/gpui/src/scene.rs:84-145`
+**Status**: **[✅ Completed]** Primitive storage has been refactored to store primitives in type-specific vectors and reference them via `PaintOperation::Primitive(kind, index)` without double-cloning/storage.
 
 ### 1.2 Pre-allocate Scene Vectors with Previous Frame Capacity
 **File**: `crates/gpui/src/scene.rs:38-49`
@@ -33,17 +23,9 @@ pub fn clear_reuse(&mut self, prev: &mut Scene) {
 ```
 **Impact**: MEDIUM - Eliminates vector growth allocations after first frame. Biggest impact on app startup.
 
-### 1.3 Remove Unnecessary Sorting in Scene::finish()
-**File**: `crates/gpui/src/scene.rs:127-137`
-**Problem**: All 7 primitive vectors are sorted by `order` every frame:
-```rust
-self.shadows.sort_by_key(|shadow| shadow.order);
-self.quads.sort_by_key(|quad| quad.order);
-// ... 5 more sorts
-```
-Since primitives are mostly inserted in order (element tree traversal is depth-first), these vectors are nearly sorted.
-**Fix**: Use `sort_unstable_by_key()` instead of `sort_by_key()` - avoids allocation of temporary storage. Better yet, check if already sorted first with `is_sorted_by_key()` (Rust nightly) or a manual check.
-**Impact**: MEDIUM - `sort_unstable_by_key` is faster and doesn't allocate. For already-sorted data, skip entirely.
+### 1.3 [✅ Completed] Remove Unnecessary Sorting in Scene::finish()
+**File**: `crates/gpui/src/scene.rs:177-200`
+**Status**: **[✅ Completed]** `Scene::finish()` now uses `is_sorted_by_key()` checks to skip sorting entirely when vectors are already sorted, and uses `sort_unstable_by_key()` when sorting is needed.
 
 ### 1.4 Avoid Cloning Focus/Dispatch Listeners
 **File**: `crates/gpui/src/window.rs:1951-1970`
