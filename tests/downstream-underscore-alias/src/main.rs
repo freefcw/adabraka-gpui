@@ -24,6 +24,7 @@ impl adabraka_gpui::RenderOnce for DerivedElement {
 }
 
 #[derive(adabraka_gpui::AppContext, adabraka_gpui::VisualContext)]
+#[allow(dead_code)]
 struct AliasedContext<'a, 'b> {
     #[app]
     app: &'a mut adabraka_gpui::App,

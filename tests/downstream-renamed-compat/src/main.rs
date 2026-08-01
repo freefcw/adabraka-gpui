@@ -20,6 +20,7 @@ impl ui::RenderOnce for DerivedElement {
 }
 
 #[derive(ui::AppContext, ui::VisualContext)]
+#[allow(dead_code)]
 struct RenamedContext<'a, 'b> {
     #[app]
     app: &'a mut ui::App,
