@@ -57,19 +57,19 @@ image-rayon = ["image/rayon"]
 font-kit = []
 inspector = ["gpui_macros/inspector"]
 input-latency-histogram = ["dep:hdrhistogram"]
-leak-detection = ["backtrace"]
+leak-detection = ["dep:backtrace"]
 runtime_shaders = []
-screen-capture = ["scap"]
+screen-capture = ["dep:scap"]
 test-support = [
     "leak-detection",
     "collections/test-support",
-    "rand",
+    "dep:rand",
     "util/test-support",
     "http_client/test-support",
     "wayland",
     "x11",
 ]
-wayland = ["bitflags"]
+wayland = ["dep:bitflags"]
 windows-manifest = []
 x11 = ["scap?/x11"]
 

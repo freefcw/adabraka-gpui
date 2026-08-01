@@ -10,7 +10,7 @@ readme = false
 license = "Apache-2.0"
 
 [features]
-perf-enabled = ["perf"]
+perf-enabled = ["dep:perf"]
 
 [lib]
 name = "adabraka_util_macros"

@@ -11,9 +11,9 @@ license = "Apache-2.0"
 
 [features]
 test-support = [
-    "git2",
-    "rand",
-    "util_macros",
+    "dep:git2",
+    "dep:rand",
+    "dep:util_macros",
 ]
 
 [lib]

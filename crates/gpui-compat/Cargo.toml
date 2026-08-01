@@ -23,13 +23,6 @@ crate = "gpui"
 
 [features]
 accessibility = ["gpui_core/accessibility", "gpui_platform/accessibility"]
-as-raw-xcb-connection = ["gpui_platform/as-raw-xcb-connection"]
-ashpd = ["gpui_platform/ashpd"]
-backtrace = ["gpui_core/backtrace"]
-bitflags = ["gpui_core/bitflags"]
-bytemuck = ["gpui_platform/bytemuck"]
-calloop-wayland-source = ["gpui_platform/calloop-wayland-source"]
-cosmic-text = ["gpui_platform/cosmic-text"]
 default = [
     "accessibility",
     "font-kit",
@@ -39,7 +32,6 @@ default = [
     "image-default-formats",
     "image-rayon",
 ]
-filedescriptor = ["gpui_platform/filedescriptor"]
 font-kit = ["gpui_core/font-kit", "gpui_platform/font-kit"]
 image-default-formats = ["gpui_core/image-default-formats", "gpui_platform/image-default-formats"]
 image-format-avif = ["gpui_core/image-format-avif", "gpui_platform/image-format-avif"]
@@ -61,27 +53,13 @@ image-rayon = ["gpui_core/image-rayon", "gpui_platform/image-rayon"]
 input-latency-histogram = ["gpui_core/input-latency-histogram", "gpui_platform/input-latency-histogram"]
 inspector = ["gpui_core/inspector", "gpui_platform/inspector"]
 leak-detection = ["gpui_core/leak-detection", "gpui_platform/leak-detection"]
-open = ["gpui_platform/open"]
-rand = ["gpui_core/rand"]
 runtime_shaders = ["gpui_core/runtime_shaders", "gpui_platform/runtime_shaders"]
-scap = ["gpui_core/scap"]
 screen-capture = ["gpui_core/screen-capture", "gpui_platform/screen-capture"]
 test-support = ["gpui_core/test-support", "gpui_platform/test-support"]
 wayland = ["gpui_core/wayland", "gpui_platform/wayland"]
-wayland-backend = ["gpui_platform/wayland-backend"]
-wayland-client = ["gpui_platform/wayland-client"]
-wayland-cursor = ["gpui_platform/wayland-cursor"]
-wayland-protocols = ["gpui_platform/wayland-protocols"]
-wayland-protocols-plasma = ["gpui_platform/wayland-protocols-plasma"]
-wayland-protocols-wlr = ["gpui_platform/wayland-protocols-wlr"]
-wayland-scanner = ["gpui_platform/wayland-scanner"]
-wgpu = ["gpui_platform/wgpu"]
 windows-manifest = ["gpui_core/windows-manifest", "gpui_platform/windows-manifest"]
+wgpu = ["gpui_platform/wgpu"]
 x11 = ["gpui_core/x11", "gpui_platform/x11"]
-x11-clipboard = ["gpui_platform/x11-clipboard"]
-x11rb = ["gpui_platform/x11rb"]
-xim = ["gpui_platform/xim"]
-xkbcommon = ["gpui_platform/xkbcommon"]
 
 [lib]
 name = "gpui"
