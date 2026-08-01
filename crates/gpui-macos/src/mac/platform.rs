@@ -8,12 +8,12 @@ use super::{
 };
 use crate::{
     Action, AnyWindowHandle, BackgroundExecutor, ClipboardItem, ClipboardString, CursorStyle,
-    DevicePixels, ForegroundExecutor, GpuResourceBudget, Image, ImageFormat, KeyContext, Keymap, MacDispatcher,
-    MacDisplay, MacWindow, Menu, MenuItem, OsMenu, OwnedMenu, PathPromptOptions, Platform,
-    PlatformDisplay, PlatformKeyboardLayout, PlatformKeyboardMapper, PlatformTextSystem,
-    PlatformWindow, QuitMode, RendererCacheStats, Result, SemanticVersion, SharedString, Size, SystemMenuType,
-    Task, ThermalState, TrayAnchor, TrayIconClickEvent, TrayIconEvent, TrayIconRenderingMode,
-    TrayMenuItem, WindowAppearance, WindowParams,
+    DevicePixels, ForegroundExecutor, GpuResourceBudget, Image, ImageFormat, KeyContext, Keymap,
+    MacDispatcher, MacDisplay, MacWindow, Menu, MenuItem, OsMenu, OwnedMenu, PathPromptOptions,
+    Platform, PlatformDisplay, PlatformKeyboardLayout, PlatformKeyboardMapper, PlatformTextSystem,
+    PlatformWindow, QuitMode, RendererCacheStats, Result, SemanticVersion, SharedString, Size,
+    SystemMenuType, Task, ThermalState, TrayAnchor, TrayIconClickEvent, TrayIconEvent,
+    TrayIconRenderingMode, TrayMenuItem, WindowAppearance, WindowParams,
 };
 use anyhow::{Context as _, anyhow};
 use block::ConcreteBlock;
