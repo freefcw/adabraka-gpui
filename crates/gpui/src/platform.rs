@@ -1509,13 +1509,6 @@ pub struct WindowOptions {
 pub struct WindowParams {
     pub bounds: Bounds<Pixels>,
 
-    /// Atlas initial texture size (width = height, in device pixels).
-    pub atlas_initial_size: Size<DevicePixels>,
-
-    /// Initial renderer instance-buffer capacity in bytes.
-    #[cfg_attr(not(any(target_os = "linux", target_os = "freebsd")), allow(dead_code))]
-    pub instance_buffer_initial_size: usize,
-
     /// The titlebar configuration of the window
     #[cfg_attr(feature = "wayland", allow(dead_code))]
     pub titlebar: Option<TitlebarOptions>,

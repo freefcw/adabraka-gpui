@@ -898,6 +898,7 @@ impl LinuxClient for WaylandClient {
             state.gpu_context.clone(),
             WaylandClientStatePtr(Rc::downgrade(&self.0)),
             params,
+            &state.common.gpu_resource_budget,
             state.common.appearance,
             parent,
             outputs,

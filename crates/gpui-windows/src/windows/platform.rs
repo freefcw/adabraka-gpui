@@ -66,6 +66,7 @@ pub(crate) struct WindowsPlatformState {
     flashing_hwnd: Option<HWND>,
     /// Shared with every window to serialize draws across the UI thread.
     draw_coordinator: Rc<DrawCoordinator>,
+    atlas_initial_size: crate::Size<DevicePixels>,
 }
 
 #[derive(Default)]
@@ -106,6 +107,7 @@ impl WindowsPlatformState {
             context_menu_command_map: HashMap::new(),
             flashing_hwnd: None,
             draw_coordinator: Rc::new(DrawCoordinator::new()),
+            atlas_initial_size: crate::AppResourceProfile::default().gpu.atlas_size(),
         }
     }
 }
@@ -211,18 +213,20 @@ impl WindowsPlatform {
     }
 
     fn generate_creation_info(&self) -> WindowCreationInfo {
+        let state = self.inner.state.borrow();
         WindowCreationInfo {
             icon: self.icon,
             executor: self.foreground_executor.clone(),
-            current_cursor: self.inner.state.borrow().current_cursor,
+            current_cursor: state.current_cursor,
             windows_version: self.windows_version,
             drop_target_helper: self.drop_target_helper.clone(),
             validation_number: self.inner.validation_number,
             main_receiver: self.inner.main_receiver.clone(),
             platform_window_handle: self.handle,
             disable_direct_composition: self.disable_direct_composition,
-            directx_devices: (*self.inner.state.borrow().directx_devices).clone(),
-            draw_coordinator: self.inner.state.borrow().draw_coordinator.clone(),
+            directx_devices: (*state.directx_devices).clone(),
+            draw_coordinator: state.draw_coordinator.clone(),
+            atlas_initial_size: state.atlas_initial_size,
         }
     }
 
@@ -305,6 +309,10 @@ impl WindowsPlatform {
 }
 
 impl Platform for WindowsPlatform {
+    fn configure_gpu_resources(&self, gpu: &GpuResourceBudget) {
+        self.inner.state.borrow_mut().atlas_initial_size = gpu.atlas_size();
+    }
+
     fn background_executor(&self) -> BackgroundExecutor {
         self.background_executor.clone()
     }
@@ -1358,6 +1366,7 @@ pub(crate) struct WindowCreationInfo {
     pub(crate) directx_devices: DirectXDevices,
     /// Shared with [`WindowsPlatformState::draw_coordinator`] and every window.
     pub(crate) draw_coordinator: Rc<DrawCoordinator>,
+    pub(crate) atlas_initial_size: crate::Size<DevicePixels>,
 }
 
 struct PlatformWindowCreateContext {

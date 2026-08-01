@@ -8,10 +8,10 @@ use super::{
 };
 use crate::{
     Action, AnyWindowHandle, BackgroundExecutor, ClipboardItem, ClipboardString, CursorStyle,
-    ForegroundExecutor, GpuResourceBudget, Image, ImageFormat, KeyContext, Keymap, MacDispatcher,
+    DevicePixels, ForegroundExecutor, GpuResourceBudget, Image, ImageFormat, KeyContext, Keymap, MacDispatcher,
     MacDisplay, MacWindow, Menu, MenuItem, OsMenu, OwnedMenu, PathPromptOptions, Platform,
     PlatformDisplay, PlatformKeyboardLayout, PlatformKeyboardMapper, PlatformTextSystem,
-    PlatformWindow, QuitMode, RendererCacheStats, Result, SemanticVersion, SharedString, SystemMenuType,
+    PlatformWindow, QuitMode, RendererCacheStats, Result, SemanticVersion, SharedString, Size, SystemMenuType,
     Task, ThermalState, TrayAnchor, TrayIconClickEvent, TrayIconEvent, TrayIconRenderingMode,
     TrayMenuItem, WindowAppearance, WindowParams,
 };
@@ -224,6 +224,7 @@ pub(crate) struct MacPlatformState {
     foreground_executor: ForegroundExecutor,
     text_system: Arc<dyn PlatformTextSystem>,
     renderer_context: renderer::Context,
+    atlas_initial_size: Size<DevicePixels>,
     headless: bool,
     pasteboard: Retained<Objc2NSPasteboard>,
     text_hash_pasteboard_type: Retained<Objc2NSString>,
@@ -292,6 +293,7 @@ impl MacPlatform {
             background_executor: BackgroundExecutor::new(dispatcher.clone()),
             foreground_executor: ForegroundExecutor::new(dispatcher),
             renderer_context: renderer::Context::default(),
+            atlas_initial_size: crate::AppResourceProfile::default().gpu.atlas_size(),
             pasteboard,
             text_hash_pasteboard_type: Objc2NSString::from_str("zed-text-hash"),
             metadata_pasteboard_type: Objc2NSString::from_str("zed-metadata"),
@@ -761,12 +763,16 @@ impl Platform for MacPlatform {
         handle: AnyWindowHandle,
         options: WindowParams,
     ) -> Result<Box<dyn PlatformWindow>> {
-        let renderer_context = self.0.lock().renderer_context.clone();
+        let (renderer_context, atlas_initial_size) = {
+            let state = self.0.lock();
+            (state.renderer_context.clone(), state.atlas_initial_size)
+        };
         Ok(Box::new(MacWindow::open(
             handle,
             options,
             self.foreground_executor(),
             renderer_context,
+            atlas_initial_size,
         )))
     }
 
@@ -776,7 +782,9 @@ impl Platform for MacPlatform {
     }
 
     fn configure_gpu_resources(&self, gpu: &GpuResourceBudget) {
-        let context = self.0.lock().renderer_context.clone();
+        let mut state = self.0.lock();
+        state.atlas_initial_size = gpu.atlas_size();
+        let context = state.renderer_context.clone();
         context
             .lock()
             .configure_initial_buffer_size(gpu.instance_buffer_initial_size);

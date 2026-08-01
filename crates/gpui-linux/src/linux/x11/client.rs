@@ -1600,6 +1600,7 @@ impl LinuxClient for X11Client {
             state.common.foreground_executor.clone(),
             state.gpu_context.clone(),
             params,
+            &state.common.gpu_resource_budget,
             &state.xcb_connection,
             state.client_side_decorations_supported,
             state.x_root_index,

@@ -1,6 +1,6 @@
 use crate::{
     AnyWindowHandle, BackgroundExecutor, ClipboardItem, CursorStyle, DevicePixels,
-    DummyKeyboardMapper, ForegroundExecutor, Keymap, NoopTextSystem, Platform, PlatformDisplay,
+    DummyKeyboardMapper, ForegroundExecutor, GpuResourceBudget, Keymap, NoopTextSystem, Platform, PlatformDisplay,
     PlatformKeyboardLayout, PlatformKeyboardMapper, PlatformTextSystem, PromptButton,
     ScreenCaptureFrame, ScreenCaptureSource, ScreenCaptureStream, ScreenCaptureStreamTermination,
     ScreenCaptureTerminationCallback, SourceMetadata, Task, TestDisplay, TestWindow,
@@ -31,6 +31,7 @@ pub(crate) struct TestPlatform {
     active_display: Rc<dyn PlatformDisplay>,
     active_cursor: Mutex<CursorStyle>,
     current_clipboard_item: Mutex<Option<ClipboardItem>>,
+    pub(crate) gpu_resource_budget: Mutex<GpuResourceBudget>,
     pub(crate) did_quit: Mutex<bool>,
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     current_primary_item: Mutex<Option<ClipboardItem>>,
@@ -170,6 +171,7 @@ impl TestPlatform {
             active_display: Rc::new(TestDisplay::new()),
             active_window: Default::default(),
             current_clipboard_item: Mutex::new(None),
+            gpu_resource_budget: Mutex::new(crate::AppResourceProfile::default().gpu),
             did_quit: Mutex::new(false),
             #[cfg(any(target_os = "linux", target_os = "freebsd"))]
             current_primary_item: Mutex::new(None),
@@ -316,6 +318,10 @@ impl TestPlatform {
 }
 
 impl Platform for TestPlatform {
+    fn configure_gpu_resources(&self, gpu: &GpuResourceBudget) {
+        *self.gpu_resource_budget.lock() = gpu.clone();
+    }
+
     fn background_executor(&self) -> BackgroundExecutor {
         self.background_executor.clone()
     }

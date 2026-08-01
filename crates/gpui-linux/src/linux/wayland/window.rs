@@ -33,11 +33,11 @@ use gpui::layer_shell::{
     Anchor, KeyboardInteractivity, Layer, LayerShellNotSupportedError, LayerShellOptions,
 };
 use gpui::{
-    AnyWindowHandle, Bounds, Capslock, Decorations, DisplayId, GpuSpecs, Modifiers, Pixels,
-    PlatformAtlas, PlatformDisplay, PlatformInput, PlatformInputHandler, PlatformWindow, Point,
-    PromptButton, PromptLevel, RequestFrameOptions, ResizeEdge, Scene, Size, Tiling,
-    WindowAppearance, WindowBackgroundAppearance, WindowBounds, WindowControlArea, WindowControls,
-    WindowDecorations, WindowKind, WindowParams, px, size,
+    AnyWindowHandle, Bounds, Capslock, Decorations, DisplayId, GpuResourceBudget, GpuSpecs,
+    Modifiers, Pixels, PlatformAtlas, PlatformDisplay, PlatformInput, PlatformInputHandler,
+    PlatformWindow, Point, PromptButton, PromptLevel, RequestFrameOptions, ResizeEdge, Scene, Size,
+    Tiling, WindowAppearance, WindowBackgroundAppearance, WindowBounds, WindowControlArea,
+    WindowControls, WindowDecorations, WindowKind, WindowParams, px, size,
 };
 use gpui_wgpu::{GpuContext, WgpuRenderer, WgpuSurfaceConfig, wgpu};
 
@@ -187,6 +187,7 @@ impl WaylandWindowState {
         globals: Globals,
         gpu_context: GpuContext,
         options: WindowParams,
+        gpu_resource_budget: &GpuResourceBudget,
     ) -> anyhow::Result<Self> {
         let renderer = {
             let raw_window = RawWindow {
@@ -209,8 +210,8 @@ impl WaylandWindowState {
                 &raw_window,
                 config,
                 None,
-                options.atlas_initial_size,
-                options.instance_buffer_initial_size,
+                gpu_resource_budget.atlas_size(),
+                gpu_resource_budget.instance_buffer_initial_size,
             )?
         };
 
@@ -349,6 +350,7 @@ impl WaylandWindow {
         gpu_context: GpuContext,
         client: WaylandClientStatePtr,
         params: WindowParams,
+        gpu_resource_budget: &GpuResourceBudget,
         appearance: WindowAppearance,
         parent: Option<XdgToplevel>,
         outputs: Vec<Output>,
@@ -378,6 +380,7 @@ impl WaylandWindow {
                 globals,
                 gpu_context,
                 params,
+                gpu_resource_budget,
             )?)),
             callbacks: Rc::new(RefCell::new(Callbacks::default())),
         });

@@ -31,7 +31,7 @@ use crate::linux::LinuxDispatcher;
 use gpui::{
     Action, AnyWindowHandle, AttentionType, BackgroundExecutor, BiometricStatus, ClipboardItem,
     CursorStyle, DevicePixels, DialogOptions, DisplayId, FocusedWindowInfo, ForegroundExecutor,
-    Keymap, Keystroke, MediaKeyEvent, Menu, MenuItem, NetworkStatus, OsInfo, OwnedMenu,
+    GpuResourceBudget, Keymap, Keystroke, MediaKeyEvent, Menu, MenuItem, NetworkStatus, OsInfo,
     PathPromptOptions, Pixels, Platform, PlatformDisplay, PlatformKeyboardLayout,
     PlatformKeyboardMapper, PlatformTextSystem, PlatformWindow, Point, PowerSaveBlockerKind,
     Result, SharedString, SystemPowerEvent, Task, TrayIconClickEvent, TrayIconEvent,
@@ -268,6 +268,7 @@ pub(crate) struct LinuxCommon {
     #[allow(dead_code)]
     pub(crate) last_network_status: NetworkStatus,
     pub(crate) attention_window: Option<AnyWindowHandle>,
+    pub(crate) gpu_resource_budget: GpuResourceBudget,
 }
 
 impl LinuxCommon {
@@ -298,6 +299,7 @@ impl LinuxCommon {
             next_blocker_id: 0,
             last_network_status: NetworkStatus::Online,
             attention_window: None,
+            gpu_resource_budget: gpui::AppResourceProfile::default().gpu,
         };
 
         (common, main_receiver)
@@ -402,6 +404,10 @@ impl<P: LinuxClient> LinuxPlatform<P> {
 }
 
 impl<P: LinuxClient + 'static> Platform for LinuxPlatform<P> {
+    fn configure_gpu_resources(&self, gpu: &GpuResourceBudget) {
+        self.with_common(|common| common.gpu_resource_budget = gpu.clone());
+    }
+
     fn background_executor(&self) -> BackgroundExecutor {
         self.with_common(|common| common.background_executor.clone())
     }

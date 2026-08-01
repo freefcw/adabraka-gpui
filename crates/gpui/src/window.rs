@@ -1203,8 +1203,6 @@ impl Window {
             handle,
             WindowParams {
                 bounds,
-                atlas_initial_size: cx.resource_profile.atlas_size(),
-                instance_buffer_initial_size: cx.resource_profile.gpu.instance_buffer_initial_size,
                 titlebar,
                 kind,
                 is_movable,
@@ -6228,18 +6226,15 @@ mod tests {
     }
 
     #[test]
-    fn resource_profile_instance_buffer_budget_reaches_new_windows() {
+    fn resource_profile_gpu_budget_reaches_the_platform() {
         let cx = TestAppContext::single();
-        cx.update(|cx| {
-            cx.resource_profile.gpu.instance_buffer_initial_size = 768 * 1024;
-        });
-        let mut cx = cx;
-        let window = cx.add_window(|_, _| BorderOnlyQuadView);
-        let window = AnyWindowHandle::from(window);
 
         assert_eq!(
-            cx.test_window(window).0.lock().instance_buffer_initial_size,
-            768 * 1024
+            cx.test_platform()
+                .gpu_resource_budget
+                .lock()
+                .instance_buffer_initial_size,
+            2 * 1024 * 1024
         );
     }
 

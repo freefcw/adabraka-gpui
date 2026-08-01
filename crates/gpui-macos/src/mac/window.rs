@@ -2,7 +2,7 @@ use super::{
     BoolExt, MacDisplay, NSRange, NSStringExt, display_id_for_screen, ns_string, renderer,
 };
 use crate::{
-    AnyWindowHandle, Bounds, Capslock, CursorStyle, ExternalPaths, FileDropEvent,
+    AnyWindowHandle, Bounds, Capslock, CursorStyle, DevicePixels, ExternalPaths, FileDropEvent,
     ForegroundExecutor, KeyDownEvent, Keystroke, Modifiers, ModifiersChangedEvent, MouseButton,
     MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, PlatformAtlas, PlatformDisplay,
     PlatformInput, PlatformInputHandler, PlatformWindow, Point, PromptButton, PromptLevel,
@@ -815,8 +815,6 @@ impl MacWindow {
         handle: AnyWindowHandle,
         WindowParams {
             bounds,
-            atlas_initial_size,
-            instance_buffer_initial_size: _,
             titlebar,
             kind,
             is_movable,
@@ -834,6 +832,7 @@ impl MacWindow {
         }: WindowParams,
         executor: ForegroundExecutor,
         renderer_context: renderer::Context,
+        atlas_initial_size: Size<DevicePixels>,
     ) -> Self {
         unsafe {
             let pool: id = msg_send![class!(NSAutoreleasePool), new];

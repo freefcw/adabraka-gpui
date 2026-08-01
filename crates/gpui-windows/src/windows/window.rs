@@ -401,6 +401,7 @@ impl WindowsWindow {
             disable_direct_composition,
             directx_devices,
             draw_coordinator,
+            atlas_initial_size,
         } = creation_info;
         register_window_class(icon);
         let hide_title_bar = params
@@ -467,7 +468,7 @@ impl WindowsWindow {
             appearance,
             disable_direct_composition,
             directx_devices,
-            atlas_initial_size: params.atlas_initial_size,
+            atlas_initial_size,
             draw_coordinator,
         };
         let creation_result = unsafe {

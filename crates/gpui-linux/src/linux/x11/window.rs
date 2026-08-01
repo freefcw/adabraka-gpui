@@ -3,11 +3,11 @@ use x11rb::connection::RequestConnection;
 
 use crate::linux::X11ClientStatePtr;
 use gpui::{
-    AnyWindowHandle, Bounds, Decorations, DevicePixels, ForegroundExecutor, GpuSpecs, Modifiers,
-    Pixels, PlatformAtlas, PlatformDisplay, PlatformInput, PlatformInputHandler, PlatformWindow,
-    Point, PromptButton, PromptLevel, RequestFrameOptions, ResizeEdge, ScaledPixels, Scene, Size,
-    Tiling, WindowAppearance, WindowBackgroundAppearance, WindowBounds, WindowControlArea,
-    WindowDecorations, WindowKind, WindowParams, px, size,
+    AnyWindowHandle, Bounds, Decorations, DevicePixels, ForegroundExecutor, GpuResourceBudget,
+    GpuSpecs, Modifiers, Pixels, PlatformAtlas, PlatformDisplay, PlatformInput,
+    PlatformInputHandler, PlatformWindow, Point, PromptButton, PromptLevel, RequestFrameOptions,
+    ResizeEdge, ScaledPixels, Scene, Size, Tiling, WindowAppearance, WindowBackgroundAppearance,
+    WindowBounds, WindowControlArea, WindowDecorations, WindowKind, WindowParams, px, size,
 };
 use gpui_wgpu::{GpuContext, WgpuRenderer, WgpuSurfaceConfig};
 
@@ -483,6 +483,7 @@ impl X11WindowState {
         executor: ForegroundExecutor,
         gpu_context: GpuContext,
         params: WindowParams,
+        gpu_resource_budget: &GpuResourceBudget,
         xcb: &Rc<XCBConnection>,
         client_side_decorations_supported: bool,
         x_main_screen_index: usize,
@@ -783,8 +784,8 @@ impl X11WindowState {
                     &raw_window,
                     config,
                     None,
-                    params.atlas_initial_size,
-                    params.instance_buffer_initial_size,
+                    gpu_resource_budget.atlas_size(),
+                    gpu_resource_budget.instance_buffer_initial_size,
                 )?
             };
 
@@ -893,6 +894,7 @@ impl X11Window {
         executor: ForegroundExecutor,
         gpu_context: GpuContext,
         params: WindowParams,
+        gpu_resource_budget: &GpuResourceBudget,
         xcb: &Rc<XCBConnection>,
         client_side_decorations_supported: bool,
         x_main_screen_index: usize,
@@ -911,6 +913,7 @@ impl X11Window {
                 executor,
                 gpu_context,
                 params,
+                gpu_resource_budget,
                 xcb,
                 client_side_decorations_supported,
                 x_main_screen_index,
@@ -2066,8 +2069,6 @@ mod tests {
     fn window_params(is_resizable: bool, window_min_size: Option<Size<Pixels>>) -> WindowParams {
         WindowParams {
             bounds: Bounds::new(point(px(10.0), px(20.0)), size(px(320.0), px(240.0))),
-            atlas_initial_size: size(DevicePixels(1024), DevicePixels(1024)),
-            instance_buffer_initial_size: 2 * 1024 * 1024,
             titlebar: None,
             kind: WindowKind::Normal,
             is_movable: true,

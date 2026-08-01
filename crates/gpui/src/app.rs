@@ -3054,6 +3054,13 @@ mod test {
             app.resource_profile.gpu.instance_buffer_initial_size,
             768 * 1024
         );
+        assert_eq!(
+            platform_handle
+                .gpu_resource_budget
+                .lock()
+                .instance_buffer_initial_size,
+            768 * 1024
+        );
     }
 
     #[test]

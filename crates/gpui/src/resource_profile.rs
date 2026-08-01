@@ -157,15 +157,6 @@ impl AppResourceProfile {
             element_arena_size: 256 * 1024,
         }
     }
-
-    /// Returns the atlas initial size as a [`Size<DevicePixels>`] for internal use.
-    pub(crate) fn atlas_size(&self) -> Size<DevicePixels> {
-        let s = self.gpu.atlas_initial_size as i32;
-        Size {
-            width: DevicePixels(s),
-            height: DevicePixels(s),
-        }
-    }
 }
 
 impl Default for AppResourceProfile {
@@ -244,6 +235,15 @@ pub struct GpuResourceBudget {
 }
 
 impl GpuResourceBudget {
+    /// Returns the atlas initial size as a [`Size<DevicePixels>`] for renderer use.
+    pub fn atlas_size(&self) -> Size<DevicePixels> {
+        let s = self.atlas_initial_size as i32;
+        Size {
+            width: DevicePixels(s),
+            height: DevicePixels(s),
+        }
+    }
+
     /// Returns a renderer-safe instance-buffer capacity for a requested budget.
     ///
     /// Renderers require at least 16 bytes for a dynamic buffer binding, while
