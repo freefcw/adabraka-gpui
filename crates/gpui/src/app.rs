@@ -2961,7 +2961,7 @@ mod test {
 
     use super::{Application, ApplicationHandle, NullHttpClient};
     use crate::{
-        AppContext, AppResourceProfile, BackgroundExecutor, ForegroundExecutor, Platform,
+        AppContext, AppResourceProfile, BackgroundExecutor, ForegroundExecutor, Platform, QuitMode,
         TestAppContext, TestDispatcher, TestPlatform, TrayIconClickEvent, TrayIconEvent,
         TrayIconRenderingMode, point, px,
     };
@@ -2977,6 +2977,21 @@ mod test {
         let application = Application::with_platform(platform.clone());
 
         assert!(Rc::ptr_eq(&application.0.borrow().platform, &platform));
+    }
+
+    #[test]
+    fn test_with_quit_mode_updates_core_and_platform_state() {
+        let dispatcher = Arc::new(TestDispatcher::new(StdRng::seed_from_u64(0)));
+        let platform = TestPlatform::new(
+            BackgroundExecutor::new(dispatcher.clone()),
+            ForegroundExecutor::new(dispatcher),
+        );
+
+        let application =
+            Application::with_platform(platform.clone()).with_quit_mode(QuitMode::Explicit);
+
+        assert_eq!(application.0.borrow().quit_mode, QuitMode::Explicit);
+        assert_eq!(*platform.last_quit_mode.lock(), Some(QuitMode::Explicit));
     }
 
     #[test]

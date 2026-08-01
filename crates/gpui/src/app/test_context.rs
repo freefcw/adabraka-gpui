@@ -179,6 +179,7 @@ impl TestAppContext {
     }
 
     /// Access the test platform for crate-internal assertions.
+    #[cfg(test)]
     pub(crate) fn test_platform(&self) -> Rc<TestPlatform> {
         self.test_platform.clone()
     }

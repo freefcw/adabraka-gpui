@@ -6254,6 +6254,10 @@ mod tests {
     fn quit_mode_explicit_keeps_app_alive_after_last_window_closed() {
         let mut cx = TestAppContext::single();
         cx.update(|cx| cx.set_quit_mode(QuitMode::Explicit));
+        assert_eq!(
+            *cx.test_platform().last_quit_mode.lock(),
+            Some(QuitMode::Explicit)
+        );
         let window = cx.add_window(|_, _| BorderOnlyQuadView);
         let window = AnyWindowHandle::from(window);
 
@@ -6273,6 +6277,39 @@ mod tests {
         cx.update_window(window, |_, window, _| window.remove_window())
             .unwrap();
 
+        assert!(*cx.test_platform().did_quit.lock());
+    }
+
+    #[test]
+    fn quit_mode_runtime_change_applies_to_the_next_window_close() {
+        let mut cx = TestAppContext::single();
+        cx.update(|cx| cx.set_quit_mode(QuitMode::Explicit));
+        let window = AnyWindowHandle::from(cx.add_window(|_, _| BorderOnlyQuadView));
+
+        cx.update(|cx| cx.set_quit_mode(QuitMode::LastWindowClosed));
+        assert_eq!(
+            *cx.test_platform().last_quit_mode.lock(),
+            Some(QuitMode::LastWindowClosed)
+        );
+        cx.update_window(window, |_, window, _| window.remove_window())
+            .unwrap();
+
+        assert!(*cx.test_platform().did_quit.lock());
+    }
+
+    #[test]
+    fn quit_mode_last_window_closed_waits_for_every_window() {
+        let mut cx = TestAppContext::single();
+        cx.update(|cx| cx.set_quit_mode(QuitMode::LastWindowClosed));
+        let first = AnyWindowHandle::from(cx.add_window(|_, _| BorderOnlyQuadView));
+        let second = AnyWindowHandle::from(cx.add_window(|_, _| BorderOnlyQuadView));
+
+        cx.update_window(first, |_, window, _| window.remove_window())
+            .unwrap();
+        assert!(!*cx.test_platform().did_quit.lock());
+
+        cx.update_window(second, |_, window, _| window.remove_window())
+            .unwrap();
         assert!(*cx.test_platform().did_quit.lock());
     }
 

@@ -1,10 +1,11 @@
 use crate::{
     AnyWindowHandle, BackgroundExecutor, ClipboardItem, CursorStyle, DevicePixels,
-    DummyKeyboardMapper, ForegroundExecutor, GpuResourceBudget, Keymap, NoopTextSystem, Platform, PlatformDisplay,
-    PlatformKeyboardLayout, PlatformKeyboardMapper, PlatformTextSystem, PromptButton,
-    ScreenCaptureFrame, ScreenCaptureSource, ScreenCaptureStream, ScreenCaptureStreamTermination,
-    ScreenCaptureTerminationCallback, SourceMetadata, Task, TestDisplay, TestWindow,
-    TrayIconClickEvent, TrayIconEvent, TrayIconRenderingMode, WindowAppearance, WindowParams, size,
+    DummyKeyboardMapper, ForegroundExecutor, GpuResourceBudget, Keymap, NoopTextSystem, Platform,
+    PlatformDisplay, PlatformKeyboardLayout, PlatformKeyboardMapper, PlatformTextSystem,
+    PromptButton, QuitMode, ScreenCaptureFrame, ScreenCaptureSource, ScreenCaptureStream,
+    ScreenCaptureStreamTermination, ScreenCaptureTerminationCallback, SourceMetadata, Task,
+    TestDisplay, TestWindow, TrayIconClickEvent, TrayIconEvent, TrayIconRenderingMode,
+    WindowAppearance, WindowParams, size,
 };
 use anyhow::Result;
 use collections::VecDeque;
@@ -33,6 +34,7 @@ pub(crate) struct TestPlatform {
     current_clipboard_item: Mutex<Option<ClipboardItem>>,
     pub(crate) gpu_resource_budget: Mutex<GpuResourceBudget>,
     pub(crate) did_quit: Mutex<bool>,
+    pub(crate) last_quit_mode: Mutex<Option<QuitMode>>,
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     current_primary_item: Mutex<Option<ClipboardItem>>,
     pub(crate) prompts: RefCell<TestPrompts>,
@@ -173,6 +175,7 @@ impl TestPlatform {
             current_clipboard_item: Mutex::new(None),
             gpu_resource_budget: Mutex::new(crate::AppResourceProfile::default().gpu),
             did_quit: Mutex::new(false),
+            last_quit_mode: Mutex::new(None),
             #[cfg(any(target_os = "linux", target_os = "freebsd"))]
             current_primary_item: Mutex::new(None),
             weak: weak.clone(),
@@ -320,6 +323,10 @@ impl TestPlatform {
 impl Platform for TestPlatform {
     fn configure_gpu_resources(&self, gpu: &GpuResourceBudget) {
         *self.gpu_resource_budget.lock() = gpu.clone();
+    }
+
+    fn set_quit_mode(&self, mode: QuitMode) {
+        *self.last_quit_mode.lock() = Some(mode);
     }
 
     fn background_executor(&self) -> BackgroundExecutor {
