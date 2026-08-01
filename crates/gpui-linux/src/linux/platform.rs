@@ -32,7 +32,7 @@ use gpui::{
     Action, AnyWindowHandle, AttentionType, BackgroundExecutor, BiometricStatus, ClipboardItem,
     CursorStyle, DevicePixels, DialogOptions, DisplayId, FocusedWindowInfo, ForegroundExecutor,
     GpuResourceBudget, Keymap, Keystroke, MediaKeyEvent, Menu, MenuItem, NetworkStatus, OsInfo,
-    PathPromptOptions, Pixels, Platform, PlatformDisplay, PlatformKeyboardLayout,
+    OwnedMenu, PathPromptOptions, Pixels, Platform, PlatformDisplay, PlatformKeyboardLayout,
     PlatformKeyboardMapper, PlatformTextSystem, PlatformWindow, Point, PowerSaveBlockerKind,
     Result, SharedString, SystemPowerEvent, Task, TrayIconClickEvent, TrayIconEvent,
     TrayIconRenderingMode, TrayMenuItem, WindowAppearance, WindowParams, px,
