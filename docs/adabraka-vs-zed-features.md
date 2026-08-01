@@ -7,7 +7,7 @@
 ### 1. 守护进程模式 (v0.4.0)
 **状态**: ✅ Adabraka 独有
 
-- `set_keep_alive_without_windows()` - 无窗口保活
+- `set_quit_mode(QuitMode::Explicit)` - 无窗口保活（原 `set_keep_alive_without_windows()`，已改为语义化 `QuitMode`）
 - 应用可在没有可见窗口时继续运行
 - 适用于后台应用、菜单栏工具
 

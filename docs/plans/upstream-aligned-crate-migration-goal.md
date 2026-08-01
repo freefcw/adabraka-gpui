@@ -51,7 +51,7 @@ Adabraka GPUI keeps `adabraka-gpui` as its stable downstream entry point while m
 - **Goal drift**: New framework capabilities do not prove lower sync cost or downstream compatibility.
 - **Phase drift**: Helper-crate extraction alone does not prove that the platform boundary works.
 - **Validation drift**: Successful file movement is insufficient without downstream compile and behavior evidence.
-- **Compatibility drift**: Removing `Application::new()` would transfer internal migration cost to every consumer.
+- **Compatibility drift**: Removing `Application::new()` would transfer internal migration cost to every consumer. Settled: `Application::new/headless` are permanent facade API; do not schedule deprecation or removal in any version.
 - **Cleanup drift**: Feature cleanup and broad API redesign are excluded from mechanical movement phases.
 
 ## Priority Rationale
@@ -68,6 +68,7 @@ Adabraka GPUI keeps `adabraka-gpui` as its stable downstream entry point while m
 | Existing package remains the public compatibility entry point | Confirmed | Avoids mandatory downstream Cargo and startup changes | Enforced by compile fixture |
 | Internal crates may use new package names | Confirmed | Cargo.lock changes, public imports do not | Keep internal dependencies exact and unpublished until stable |
 | Platform traits can be made available to backend crates | Confirmed | Creates a new low-level contract | Keep backend APIs documented as internal/unstable |
+| `Application::new/headless` remain permanent public API in the published facade | Confirmed, settled | Deprecation or removal proposals are rejected as compatibility drift; the crate split must never break downstream entry points | Closed decision, not to be re-opened in any version; `with_platform` stays documented as the advanced opt-in |
 | Linux and Windows runtime smoke tests are available locally | Unresolved | Cross-compilation cannot prove runtime behavior | Require platform CI before release |
 
 ## Phases

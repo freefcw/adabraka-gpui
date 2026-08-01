@@ -145,7 +145,7 @@ zed/crates/                          → adabraka-gpui/crates/
 
 ### 4. 守护进程模式
 - **修改**: `crates/gpui/src/app.rs`
-- **API**: `App::set_keep_alive_without_windows()`
+- **API**: `App::set_quit_mode(QuitMode)`（原 `set_keep_alive_without_windows()`，已改为语义化 `QuitMode`）
 - **说明**: 允许应用在没有可见窗口时继续运行
 
 ### 5. 窗口控制增强
@@ -276,7 +276,7 @@ git commit -m "sync: merge changes from zed <commit-hash>
 使用特性标志分离 Adabraka 特有功能：
 ```rust
 #[cfg(feature = "daemon-mode")]
-pub fn set_keep_alive_without_windows(&mut self, keep_alive: bool) {
+pub fn set_quit_mode(&mut self, mode: QuitMode) {
     // Adabraka specific
 }
 ```

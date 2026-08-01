@@ -32,7 +32,7 @@
 
 ### 守护进程模式 (v0.4.0)
 - **Commit**: 3be75a6, bea2896, 72c044d, 7746069
-- 无窗口保活：`set_keep_alive_without_windows(true)`
+- 无窗口保活：`set_quit_mode(QuitMode::Explicit)`（原 `set_keep_alive_without_windows(true)`，已改为语义化 `QuitMode`）
 - macOS: `applicationShouldTerminateAfterLastWindowClosed` 委托
 - Linux/Windows: 事件循环标志控制
 

@@ -2,6 +2,42 @@
 
 ## Unreleased
 
+### Breaking changes
+
+- **`set_keep_alive_without_windows` replaced by `QuitMode`** — the boolean keep-alive flag is
+  gone; use `App::set_quit_mode` / `Application::with_quit_mode` with `QuitMode::Explicit`
+  (previous `true`) or `QuitMode::LastWindowClosed` (previous `false`) instead. The quit
+  decision is now owned by the core application rather than each platform backend; platforms
+  only receive `Platform::set_quit_mode` for platform-visible side effects (macOS
+  `ActivationPolicy`). Behavior change on macOS: `QuitMode::Default` now keeps the app alive
+  after the last window closes, following the macOS convention — previously the default quit
+  on last window close on every platform. Other platforms are unchanged (`Default` still
+  quits when the last window closes).
+- **Removed pass-through dependency features** — implementation-dependency features that enabled
+  no additional code are no longer public: `backtrace`, `rand`, `bitflags`, and `scap` on
+  `adabraka-gpui-core`, plus the Linux backend dependency names (`ashpd`, `bytemuck`,
+  `calloop-wayland-source`, `cosmic-text`, `filedescriptor`, `open`, `wayland-backend`,
+  `wayland-client`, `wayland-cursor`, `wayland-protocols`, `wayland-protocols-plasma`,
+  `wayland-protocols-wlr`, `wayland-scanner`, `x11-clipboard`, `x11rb`, `xim`, and
+  `xkbcommon`) across `adabraka-gpui`, `adabraka-gpui-platform`, and `adabraka-gpui-linux`,
+  and `git2`, `rand`, and `util_macros` on `adabraka_util` plus `perf` on
+  `adabraka_util_macros`.
+  Enable the corresponding semantic features instead: `leak-detection`, `test-support`,
+  `wayland`, `x11`, `screen-capture`, or `perf-enabled`. The `wgpu` feature is kept as a
+  no-op marker for headless compile checks; the WGPU backend is enabled by the
+  `wayland`/`x11` aggregates.
+
+### Improvements
+
+- **Renderer GPU budgets moved off `WindowParams`** — `atlas_initial_size` and
+  `instance_buffer_initial_size` are renderer memory policy, not per-window parameters. Platforms
+  now receive them through `Platform::configure_gpu_resources` (driven by
+  `Application::with_resource_profile`) and supply them to renderers at window creation, so
+  `WindowParams` no longer carries renderer resource policy.
+- **Feature contract checks** — `scripts/verify-features.sh` compiles the public feature
+  combinations used by CI and the docs runbooks, and pins every published crate's public
+  feature list against a whitelist so accidental additions or removals fail in CI.
+
 ## 0.8.1 (2026-07-28)
 
 ### Fixes

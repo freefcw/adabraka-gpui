@@ -89,7 +89,7 @@ impl App {
     pub fn update<R>(&mut self, update: impl FnOnce(&mut Self) -> R) -> R;
     
     // Adabraka 扩展 API
-    pub fn set_keep_alive_without_windows(&mut self, keep_alive: bool);
+    pub fn set_quit_mode(&mut self, mode: QuitMode);
     pub fn set_tray_icon(&mut self, icon: Image);
     pub fn set_tray_tooltip(&mut self, tooltip: impl Into<String>);
     pub fn set_tray_menu(&mut self, menu: Vec<TrayMenuItem>);
@@ -169,7 +169,7 @@ pub trait Platform: Send + Sync {
     fn display_link(&self) -> Box<dyn DisplayLink>;
     
     // Adabraka 扩展方法
-    fn set_keep_alive_without_windows(&self, keep_alive: bool);
+    fn set_quit_mode(&self, mode: QuitMode);
     fn set_tray_icon(&self, icon: Image);
     fn set_tray_menu(&self, menu: Vec<TrayMenuItem>);
     fn on_tray_menu_action(&self, callback: Box<dyn Fn(String)>);
@@ -225,7 +225,7 @@ pub trait Platform: Send + Sync {
 ### Adabraka 扩展保护检查
 
 #### App Context 扩展
-- [ ] `set_keep_alive_without_windows` 方法保留
+- [ ] `set_quit_mode` 方法保留
 - [ ] 托盘相关方法保留
 - [ ] 全局热键方法保留
 - [ ] 通知方法保留
@@ -366,9 +366,9 @@ impl App {
     }
     
     // === Adabraka 扩展方法（保留） ===
-    pub fn set_keep_alive_without_windows(&mut self, keep_alive: bool) {
+    pub fn set_quit_mode(&mut self, mode: QuitMode) {
         // Adabraka 的实现
-        self.platform.set_keep_alive_without_windows(keep_alive);
+        self.platform.set_quit_mode(mode);
     }
     
     pub fn set_tray_icon(&mut self, icon: Image) {
