@@ -302,10 +302,9 @@ impl X11ClientStatePtr {
             state.keyboard_focused_window = None;
         }
         state.cursor_styles.remove(&x_window);
-
-        if state.windows.is_empty() && !state.common.keep_alive_without_windows {
-            state.common.signal.stop();
-        }
+        // Lifecycle decisions are owned by the core application via
+        // `QuitMode`; core will call `Platform::quit` (which stops the loop
+        // signal) when the mode requires termination.
     }
 
     pub fn update_ime_position(&self, bounds: Bounds<Pixels>) {

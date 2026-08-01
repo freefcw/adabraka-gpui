@@ -5998,7 +5998,9 @@ pub fn outline(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Context, Render, TestAppContext, WindowOptions, canvas, div, hsla, px, size};
+    use crate::{
+        Context, QuitMode, Render, TestAppContext, WindowOptions, canvas, div, hsla, px, size,
+    };
     use std::{cell::Cell, rc::Rc};
 
     /// A re-entrant frame request must be deferred while a draw is on the
@@ -6251,5 +6253,47 @@ mod tests {
             .unwrap();
 
         assert_eq!(cx.test_window(window).0.lock().attention_requests, 1);
+    }
+
+    #[test]
+    fn quit_mode_explicit_keeps_app_alive_after_last_window_closed() {
+        let mut cx = TestAppContext::single();
+        cx.update(|cx| cx.set_quit_mode(QuitMode::Explicit));
+        let window = cx.add_window(|_, _| BorderOnlyQuadView);
+        let window = AnyWindowHandle::from(window);
+
+        cx.update_window(window, |_, window, _| window.remove_window())
+            .unwrap();
+
+        assert!(!*cx.test_platform().did_quit.lock());
+    }
+
+    #[test]
+    fn quit_mode_last_window_closed_quits_after_last_window_closed() {
+        let mut cx = TestAppContext::single();
+        cx.update(|cx| cx.set_quit_mode(QuitMode::LastWindowClosed));
+        let window = cx.add_window(|_, _| BorderOnlyQuadView);
+        let window = AnyWindowHandle::from(window);
+
+        cx.update_window(window, |_, window, _| window.remove_window())
+            .unwrap();
+
+        assert!(*cx.test_platform().did_quit.lock());
+    }
+
+    #[test]
+    fn quit_mode_default_follows_platform_convention() {
+        let mut cx = TestAppContext::single();
+        // QuitMode::Default is the initial value, no need to set it.
+        let window = cx.add_window(|_, _| BorderOnlyQuadView);
+        let window = AnyWindowHandle::from(window);
+
+        cx.update_window(window, |_, window, _| window.remove_window())
+            .unwrap();
+
+        // On macOS the default is to stay alive (Explicit-like); on other
+        // platforms the default is to quit when the last window closes.
+        let expected = cfg!(not(target_os = "macos"));
+        assert_eq!(*cx.test_platform().did_quit.lock(), expected);
     }
 }

@@ -245,8 +245,8 @@ impl Platform for VisualTestPlatform {
 
     fn on_keyboard_layout_change(&self, _callback: Box<dyn FnMut()>) {}
 
-    fn set_keep_alive_without_windows(&self, keep_alive: bool) {
-        self.platform.set_keep_alive_without_windows(keep_alive);
+    fn set_quit_mode(&self, mode: crate::QuitMode) {
+        self.platform.set_quit_mode(mode);
     }
 
     fn os_info(&self) -> crate::OsInfo {

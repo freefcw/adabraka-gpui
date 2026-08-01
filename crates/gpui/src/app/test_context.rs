@@ -178,6 +178,11 @@ impl TestAppContext {
         self.test_platform.did_prompt_for_new_path()
     }
 
+    /// Access the test platform for crate-internal assertions.
+    pub(crate) fn test_platform(&self) -> Rc<TestPlatform> {
+        self.test_platform.clone()
+    }
+
     /// returns a new `TestAppContext` re-using the same executors to interleave tasks.
     pub fn new_app(&self) -> TestAppContext {
         Self::build(self.dispatcher.clone(), self.fn_name)

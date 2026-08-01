@@ -31,6 +31,7 @@ pub(crate) struct TestPlatform {
     active_display: Rc<dyn PlatformDisplay>,
     active_cursor: Mutex<CursorStyle>,
     current_clipboard_item: Mutex<Option<ClipboardItem>>,
+    pub(crate) did_quit: Mutex<bool>,
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     current_primary_item: Mutex<Option<ClipboardItem>>,
     pub(crate) prompts: RefCell<TestPrompts>,
@@ -169,6 +170,7 @@ impl TestPlatform {
             active_display: Rc::new(TestDisplay::new()),
             active_window: Default::default(),
             current_clipboard_item: Mutex::new(None),
+            did_quit: Mutex::new(false),
             #[cfg(any(target_os = "linux", target_os = "freebsd"))]
             current_primary_item: Mutex::new(None),
             weak: weak.clone(),
@@ -340,7 +342,9 @@ impl Platform for TestPlatform {
         unimplemented!()
     }
 
-    fn quit(&self) {}
+    fn quit(&self) {
+        *self.did_quit.lock() = true;
+    }
 
     fn restart(&self, _: Option<PathBuf>) {
         //

@@ -156,6 +156,12 @@ impl Application {
         Self(self.0.with_resource_profile(profile))
     }
 
+    /// Configures when the application should automatically quit.
+    /// By default, [`QuitMode::Default`] is used.
+    pub fn with_quit_mode(self, mode: QuitMode) -> Self {
+        Self(self.0.with_quit_mode(mode))
+    }
+
     /// Starts the application.
     pub fn run<F>(self, on_finish_launching: F)
     where

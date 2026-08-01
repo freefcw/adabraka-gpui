@@ -5,10 +5,7 @@ use std::{
     mem::ManuallyDrop,
     path::{Path, PathBuf},
     rc::{Rc, Weak},
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
+    sync::Arc,
     time::Duration,
 };
 
@@ -50,7 +47,6 @@ pub(crate) struct WindowsPlatform {
 struct WindowsPlatformInner {
     state: RefCell<WindowsPlatformState>,
     raw_window_handles: std::sync::Weak<RwLock<SmallVec<[SafeHwnd; 4]>>>,
-    keep_alive_without_windows: AtomicBool,
     // The below members will never change throughout the entire lifecycle of the app.
     validation_number: usize,
     main_receiver: flume::Receiver<Runnable>,
@@ -718,12 +714,6 @@ impl Platform for WindowsPlatform {
         self.update_jump_list(menus, entries)
     }
 
-    fn set_keep_alive_without_windows(&self, keep_alive: bool) {
-        self.inner
-            .keep_alive_without_windows
-            .store(keep_alive, Ordering::Release);
-    }
-
     fn set_tray_icon(&self, icon: Option<&[u8]>) {
         let mut state = self.inner.state.borrow_mut();
         if let Some(ref mut tray) = state.tray {
@@ -973,7 +963,6 @@ impl WindowsPlatformInner {
         Ok(Rc::new(Self {
             state,
             raw_window_handles: context.raw_window_handles.clone(),
-            keep_alive_without_windows: AtomicBool::new(false),
             validation_number: context.validation_number,
             main_receiver: context.main_receiver.take().unwrap(),
         }))
@@ -1016,9 +1005,7 @@ impl WindowsPlatformInner {
         }
         match message {
             WM_GPUI_CLOSE_ONE_WINDOW => {
-                if self.close_one_window(HWND(lparam.0 as _)) {
-                    unsafe { PostQuitMessage(0) };
-                }
+                self.close_one_window(HWND(lparam.0 as _));
                 Some(0)
             }
             WM_GPUI_TASK_DISPATCHED_ON_MAIN_THREAD => self.run_foreground_task(),
@@ -1029,10 +1016,10 @@ impl WindowsPlatformInner {
         }
     }
 
-    fn close_one_window(&self, target_window: HWND) -> bool {
+    fn close_one_window(&self, target_window: HWND) {
         let Some(all_windows) = self.raw_window_handles.upgrade() else {
             log::error!("Failed to upgrade raw window handles");
-            return false;
+            return;
         };
         let mut lock = all_windows.write();
         let index = lock
@@ -1040,8 +1027,10 @@ impl WindowsPlatformInner {
             .position(|handle| handle.as_raw() == target_window)
             .unwrap();
         lock.remove(index);
-
-        lock.is_empty() && !self.keep_alive_without_windows.load(Ordering::Acquire)
+        // Lifecycle decisions are owned by the core application via
+        // `QuitMode`. The platform layer only cleans up its own bookkeeping;
+        // core will call `Platform::quit` (which posts `PostQuitMessage`)
+        // when the mode requires termination.
     }
 
     #[inline]

@@ -262,7 +262,6 @@ pub(crate) struct LinuxCommon {
     pub(crate) callbacks: PlatformHandlers,
     pub(crate) signal: LoopSignal,
     pub(crate) menus: Vec<OwnedMenu>,
-    pub(crate) keep_alive_without_windows: bool,
     pub(crate) power_save_blockers: HashMap<u32, PowerSaveHandle>,
     pub(crate) next_blocker_id: u32,
     // Reserved for future Linux network change monitoring.
@@ -295,7 +294,6 @@ impl LinuxCommon {
             callbacks,
             signal,
             menus: Vec::new(),
-            keep_alive_without_windows: false,
             power_save_blockers: HashMap::new(),
             next_blocker_id: 0,
             last_network_status: NetworkStatus::Online,
@@ -859,10 +857,6 @@ impl<P: LinuxClient + 'static> Platform for LinuxPlatform<P> {
     }
 
     fn add_recent_document(&self, _path: &Path) {}
-
-    fn set_keep_alive_without_windows(&self, keep_alive: bool) {
-        self.with_common(|common| common.keep_alive_without_windows = keep_alive);
-    }
 
     fn set_tray_icon(&self, icon: Option<&[u8]>) {
         LinuxClient::set_tray_icon(&self.inner, icon);

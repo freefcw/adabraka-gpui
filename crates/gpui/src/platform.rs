@@ -54,9 +54,10 @@ use crate::{
     Action, AnyWindowHandle, App, AsyncWindowContext, BackgroundExecutor, Bounds,
     DEFAULT_WINDOW_SIZE, DevicePixels, DispatchEventResult, Font, FontId, FontMetrics, FontRun,
     ForegroundExecutor, GlyphId, GpuResourceBudget, GpuSpecs, Hsla, ImageSource, Keymap,
-    LineLayout, Pixels, PlatformInput, Point, RenderGlyphParams, RenderImage, RenderImageParams,
-    RenderSvgParams, Scene, ShapedGlyph, ShapedRun, SharedString, Size, SvgRenderer,
-    SystemWindowTab, Task, TaskLabel, Window, WindowControlArea, hash, point, px, size,
+    LineLayout, Pixels, PlatformInput, Point, QuitMode, RenderGlyphParams, RenderImage,
+    RenderImageParams, RenderSvgParams, Scene, ShapedGlyph, ShapedRun, SharedString, Size,
+    SvgRenderer, SystemWindowTab, Task, TaskLabel, Window, WindowControlArea, hash, point, px,
+    size,
 };
 use anyhow::{Context as _, Result};
 use async_task::Runnable;
@@ -367,7 +368,13 @@ pub trait Platform: 'static {
         ))
     }
 
-    fn set_keep_alive_without_windows(&self, _keep_alive: bool) {}
+    /// Receive the application's configured [`QuitMode`].
+    ///
+    /// The core application state owns the actual lifecycle decision; platforms
+    /// only need this hook when quit mode carries a platform-visible side
+    /// effect (for example macOS `ActivationPolicy`). The default
+    /// implementation is a no-op.
+    fn set_quit_mode(&self, _mode: QuitMode) {}
 
     fn on_system_power_event(&self, _callback: Box<dyn FnMut(SystemPowerEvent)>) {}
     fn start_power_save_blocker(&self, _kind: PowerSaveBlockerKind) -> Option<u32> {

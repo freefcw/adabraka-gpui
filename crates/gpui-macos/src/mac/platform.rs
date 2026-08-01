@@ -11,7 +11,7 @@ use crate::{
     ForegroundExecutor, GpuResourceBudget, Image, ImageFormat, KeyContext, Keymap, MacDispatcher,
     MacDisplay, MacWindow, Menu, MenuItem, OsMenu, OwnedMenu, PathPromptOptions, Platform,
     PlatformDisplay, PlatformKeyboardLayout, PlatformKeyboardMapper, PlatformTextSystem,
-    PlatformWindow, RendererCacheStats, Result, SemanticVersion, SharedString, SystemMenuType,
+    PlatformWindow, QuitMode, RendererCacheStats, Result, SemanticVersion, SharedString, SystemMenuType,
     Task, ThermalState, TrayAnchor, TrayIconClickEvent, TrayIconEvent, TrayIconRenderingMode,
     TrayMenuItem, WindowAppearance, WindowParams,
 };
@@ -32,7 +32,7 @@ use objc::{
     class,
     declare::ClassDecl,
     msg_send,
-    runtime::{BOOL, Class, NO, Object, Sel, YES},
+    runtime::{BOOL, Class, NO, Object, Sel},
     sel, sel_impl,
 };
 use objc2::{AnyThread, MainThreadMarker, MainThreadOnly, rc::Retained};
@@ -242,7 +242,6 @@ pub(crate) struct MacPlatformState {
     menus: Option<Vec<OwnedMenu>>,
     keyboard_mapper: Rc<MacKeyboardMapper>,
     global_hotkey_mapper: NativeHotkeyMapper,
-    keep_alive_without_windows: bool,
     tray: Option<MacTray>,
     tray_icon_rendering_mode: TrayIconRenderingMode,
     tray_icon_callback: Option<Box<dyn FnMut(TrayIconEvent)>>,
@@ -310,7 +309,6 @@ impl MacPlatform {
             menus: None,
             keyboard_mapper,
             global_hotkey_mapper,
-            keep_alive_without_windows: false,
             tray: None,
             tray_icon_rendering_mode: TrayIconRenderingMode::default(),
             tray_icon_callback: None,
@@ -1365,8 +1363,22 @@ impl Platform for MacPlatform {
         })
     }
 
-    fn set_keep_alive_without_windows(&self, keep_alive: bool) {
-        self.0.lock().keep_alive_without_windows = keep_alive;
+    fn set_quit_mode(&self, mode: QuitMode) {
+        // `QuitMode::Explicit` is the daemon-style mode: keep the app alive
+        // without any windows and drop the Dock icon via the Accessory
+        // activation policy. Other modes keep the regular foreground policy.
+        // Lifecycle itself is owned by core; this hook only carries the
+        // platform-visible side effect.
+        let policy = match mode {
+            QuitMode::Explicit => Objc2NSApplicationActivationPolicy::Accessory,
+            QuitMode::LastWindowClosed | QuitMode::Default => {
+                Objc2NSApplicationActivationPolicy::Regular
+            }
+        };
+        unsafe {
+            let app = shared_application();
+            (&*app.cast::<Objc2NSApplication>()).setActivationPolicy(policy);
+        }
     }
 
     fn set_tray_icon(&self, icon: Option<&[u8]>) {
@@ -1846,8 +1858,6 @@ extern "C" fn will_finish_launching(_this: &mut Object, _: Sel, _: id) {
 
 extern "C" fn did_finish_launching(this: &mut Object, _: Sel, _: id) {
     unsafe {
-        let app = shared_application();
-
         let notification_center: *mut Object =
             msg_send![class!(NSNotificationCenter), defaultCenter];
         let name =
@@ -1889,14 +1899,6 @@ extern "C" fn did_finish_launching(this: &mut Object, _: Sel, _: id) {
         let callback = platform.0.lock().finish_launching.take();
         if let Some(callback) = callback {
             callback();
-        }
-
-        let keep_alive = platform.0.lock().keep_alive_without_windows;
-        let app = &*app.cast::<Objc2NSApplication>();
-        if keep_alive {
-            app.setActivationPolicy(Objc2NSApplicationActivationPolicy::Accessory);
-        } else {
-            app.setActivationPolicy(Objc2NSApplicationActivationPolicy::Regular);
         }
     }
 }
@@ -1972,14 +1974,11 @@ extern "C" fn on_thermal_state_change(this: &mut Object, _: Sel, _: id) {
     }
 }
 
-extern "C" fn should_terminate_after_last_window_closed(this: &mut Object, _: Sel, _: id) -> BOOL {
-    let platform = unsafe { get_mac_platform(this) };
-    let lock = platform.0.lock();
-    if lock.keep_alive_without_windows {
-        NO
-    } else {
-        YES
-    }
+extern "C" fn should_terminate_after_last_window_closed(_this: &mut Object, _: Sel, _: id) -> BOOL {
+    // Lifecycle decisions are owned by the core application via `QuitMode`;
+    // the platform layer always defers to that and never auto-terminates on
+    // window close. Core will call `Platform::quit` when the mode requires it.
+    NO
 }
 
 extern "C" fn open_urls(this: &mut Object, _: Sel, _: id, urls: id) {

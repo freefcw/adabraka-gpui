@@ -96,7 +96,7 @@ fn main() {
     };
 
     Application::new().run(|cx: &mut App| {
-        cx.set_keep_alive_without_windows(true);
+        cx.set_quit_mode(gpui::QuitMode::Explicit);
 
         setup_tray(cx);
         setup_global_hotkey(cx);
