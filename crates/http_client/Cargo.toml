@@ -98,7 +98,7 @@ version = "2.2"
 [dependencies.util]
 path = "../util"
 package = "adabraka_util"
-version = "0.5.1"
+version = "0.6.0"
 
 
 [lints.clippy]

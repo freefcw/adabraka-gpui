@@ -7,15 +7,23 @@ A GPU-accelerated UI framework for Rust, forked from [Zed's GPUI](https://github
 
 ## Getting Started
 
+The latest registry release is the stable 0.8 line:
+
 ```toml
 adabraka-gpui = "0.8.1"
 ```
 
-To trim image decoder footprint for downstream binaries, disable default features and list only the
-platform and image formats you need:
+The unreleased 0.9 development line is available from its Git branch:
 
 ```toml
-adabraka-gpui = { version = "0.8.1", default-features = false, features = [
+adabraka-gpui = { git = "https://github.com/freefcw/adabraka-gpui.git", branch = "develop/0.9" }
+```
+
+To trim image decoder footprint for a 0.9 development build, disable default features and list only
+the platform and image formats you need:
+
+```toml
+adabraka-gpui = { git = "https://github.com/freefcw/adabraka-gpui.git", branch = "develop/0.9", default-features = false, features = [
     "font-kit",
     "wayland",
     "x11",

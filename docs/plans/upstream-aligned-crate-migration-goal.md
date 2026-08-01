@@ -1,5 +1,9 @@
 # Goal Document: Upstream-Aligned Crate Migration
 
+> **Status**: The compatibility-preserving crate migration completed on the 0.8.x line. The
+> `develop/0.9` line uses 0.8.1 as its compatibility baseline and may contain separately approved,
+> changelog-documented breaking changes. `Application::new/headless` remain permanent facade APIs.
+
 ## Go / No-Go
 
 - **Judgment**: Go
@@ -7,7 +11,7 @@
 
 ## Target Outcome
 
-Adabraka GPUI keeps `adabraka-gpui` as its stable downstream entry point while moving renderer and operating-system implementations into upstream-aligned crates. Existing applications continue to compile with their current dependency declaration, startup API, feature names, and desktop behavior.
+Adabraka GPUI keeps `adabraka-gpui` as its stable downstream entry point while moving renderer and operating-system implementations into upstream-aligned crates. The completed 0.8.x migration preserved the existing dependency declaration, startup API, feature names, and desktop behavior. The 0.9 development line retains the stable facade and startup API while allowing explicitly approved breaking API and feature cleanup with changelog migration guidance.
 
 ## Goal Definition
 
@@ -16,14 +20,14 @@ Adabraka GPUI keeps `adabraka-gpui` as its stable downstream entry point while m
 - **Non-goals**:
   - Migrating the upstream scheduler, View API, web backend, or mobile APIs.
   - Redesigning desktop capabilities into a new service layer without measured need.
-  - Removing or renaming currently documented downstream features.
+  - Removing or renaming currently documented downstream features during the mechanical crate-migration phases. Separately approved 0.9 breaking cleanup is outside that constraint.
   - Combining new upstream features with mechanical crate moves.
 - **Deferred work**:
   - Structured notification actions, anchored popup/dialog behavior, container queries, scheduler, and web/mobile support.
   - Feature-default reduction after compile-time and binary-size measurements exist.
 - **Verification rule**: Every phase must keep the public compatibility fixture, workspace check, core test suite, examples, and locally installed target checks green before the next phase starts.
 - **Evidence source**: Cargo compile fixtures, unit and integration tests, target checks, public API usage examples, and a final diff review.
-- **Pass criteria**: Existing `adabraka-gpui` dependency syntax and `gpui::Application::new()` continue to compile; documented feature names remain accepted; the core test suite remains green; platform implementations no longer reside in the core implementation crate at completion.
+- **Pass criteria**: Existing `adabraka-gpui` dependency syntax and `gpui::Application::new()` continue to compile; the 0.8.x migration baseline keeps its documented feature names; any later 0.9 feature removal is explicitly versioned and documented; the core test suite remains green; platform implementations no longer reside in the core implementation crate at completion.
 - **Confidence note**: Compile and test evidence covers the local macOS target directly and Zig-backed Windows/Linux type-checks, including Windows public all-features after pinning the upstream-compatible capture dependency. Linux and Windows runtime desktop integration still require platform CI or host smoke tests.
 - **Judgment owner**: Automated tests and target checks, followed by repository diff review.
 
@@ -116,7 +120,7 @@ Adabraka GPUI keeps `adabraka-gpui` as its stable downstream entry point while m
 - **Purpose**: Make the published package the outward composition root before any concrete backend leaves core.
 - **Entry condition**: Phase 2 green and independently reviewed.
 - **Phase rules**:
-  - Keep package `adabraka-gpui`, lib target `gpui`, all feature names/defaults, examples, README, and downstream startup syntax at the compatibility root.
+  - Keep package `adabraka-gpui`, lib target `gpui`, the 0.8 migration baseline's feature names/defaults, examples, README, and downstream startup syntax at the compatibility root.
   - Move implementation source to `adabraka-gpui-core`, lib target `gpui_core`.
   - Wrap only `Application`; directly re-export every other core nominal type.
   - Do not move a backend or WGPU in this phase.
@@ -212,7 +216,7 @@ Adabraka GPUI keeps `adabraka-gpui` as its stable downstream entry point while m
 - **Purpose**: Remove temporary selectors/bridges and prove the public package hides the internal split.
 - **Entry condition**: Phase 7 code extraction is green; native runtime and registry release proof remain explicitly bounded.
 - **Phase rules**:
-  - Existing dependency syntax, startup API, feature names/defaults, examples, and daemon behavior are hard contracts.
+  - Existing dependency syntax, startup API, examples, and daemon behavior are hard contracts. Feature changes after the completed 0.8 migration require a separately approved breaking release and explicit migration guidance; the 0.9 cleanup follows that process.
   - Core contains contracts and application state, not concrete desktop/render backends.
 - **Todos**:
   - [ ] Remove temporary core backend selectors, target dependencies, and hidden bridges.

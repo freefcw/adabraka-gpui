@@ -4,6 +4,11 @@
 
 ## 当前基线
 
+- 当前开发分支：`develop/0.9`
+- 下一版本：GPUI 八个发布包为 `0.9.0`；`adabraka_util` 和 `adabraka_util_macros` 为 `0.6.0`
+- 兼容基线：GPUI `0.8.1`、utility crates `0.5.1`；breaking API/feature 变化必须在 `CHANGELOG.md` 提供迁移映射
+- 永久兼容入口：`Application::new/headless`；不在任何版本安排弃用或删除
+- Registry 发布顺序：`adabraka_util_macros 0.6.0` → `adabraka_util 0.6.0` → `adabraka-gpui-macros 0.9.0` → core/renderer/backends → platform → public facade
 - 当前仓库审计基线：`5aa5083184d6692167b905b51a00999d28ad20ab`（2026-07-26）
 - Zed 上游审计基线：`ec3d887507f272119d9fe146c685f0a941d0e798`（2026-07-22）
 - 上游仓库默认位置：`../zed`

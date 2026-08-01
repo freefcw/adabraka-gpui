@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.9.0 (Unreleased)
+
+The 0.9 development line intentionally contains the public API and Cargo feature changes below.
+Applications upgrading from 0.8.x should follow the migration mappings in this section.
 
 ### Breaking changes
 
@@ -15,17 +18,25 @@
   quits when the last window closes).
 - **Removed pass-through dependency features** — implementation-dependency features that enabled
   no additional code are no longer public: `backtrace`, `rand`, `bitflags`, and `scap` on
-  `adabraka-gpui-core`, plus the Linux backend dependency names (`ashpd`, `bytemuck`,
+  `adabraka-gpui-core`, plus the Linux backend dependency names (`as-raw-xcb-connection`,
+  `ashpd`, `bytemuck`,
   `calloop-wayland-source`, `cosmic-text`, `filedescriptor`, `open`, `wayland-backend`,
   `wayland-client`, `wayland-cursor`, `wayland-protocols`, `wayland-protocols-plasma`,
   `wayland-protocols-wlr`, `wayland-scanner`, `x11-clipboard`, `x11rb`, `xim`, and
-  `xkbcommon`) across `adabraka-gpui`, `adabraka-gpui-platform`, and `adabraka-gpui-linux`,
-  and `git2`, `rand`, and `util_macros` on `adabraka_util` plus `perf` on
-  `adabraka_util_macros`.
+  `xkbcommon`) across `adabraka-gpui`, `adabraka-gpui-platform`, and `adabraka-gpui-linux`.
   Enable the corresponding semantic features instead: `leak-detection`, `test-support`,
-  `wayland`, `x11`, `screen-capture`, or `perf-enabled`. The `wgpu` feature is kept as a
-  no-op marker for headless compile checks; the WGPU backend is enabled by the
+  `wayland`, `x11`, `screen-capture`, or `perf-enabled`. The `wgpu` feature remains a no-op
+  marker on `adabraka-gpui` and `adabraka-gpui-platform` for headless compile checks; the old
+  `adabraka-gpui-linux/wgpu` feature is removed, and the Linux WGPU backend is enabled by the
   `wayland`/`x11` aggregates.
+
+  | Removed feature | Replacement |
+  | --- | --- |
+  | `backtrace` | `leak-detection` |
+  | `scap` | `screen-capture` |
+  | Linux Wayland dependency names | `wayland` |
+  | Linux X11 dependency names | `x11` |
+  | `rand` on `adabraka-gpui-core` | `test-support` |
 
 ### Improvements
 
@@ -37,6 +48,16 @@
 - **Feature contract checks** — `scripts/verify-features.sh` compiles the public feature
   combinations used by CI and the docs runbooks, and pins every published crate's public
   feature list against a whitelist so accidental additions or removals fail in CI.
+
+## Utility crates 0.6.0 (Unreleased)
+
+### Breaking changes
+
+- **`adabraka_util` feature cleanup** — the dependency-name features `git2`, `rand`, and
+  `util_macros` are removed. Use the semantic `test-support` feature when the test helpers are
+  required.
+- **`adabraka_util_macros` feature cleanup** — the dependency-name feature `perf` is removed. Use
+  `perf-enabled` instead.
 
 ## 0.8.1 (2026-07-28)
 
