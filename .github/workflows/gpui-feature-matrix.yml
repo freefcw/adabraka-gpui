@@ -33,6 +33,11 @@ jobs:
             cache-key: linux-no-default
             linux-native: false
             command: cargo check -p adabraka-gpui --lib --no-default-features --locked
+          - name: Linux / feature contracts
+            os: ubuntu-24.04
+            cache-key: linux-feature-contracts
+            linux-native: true
+            command: bash scripts/verify-features.sh
           - name: Linux / accessibility + X11
             os: ubuntu-24.04
             cache-key: linux-accessibility-x11
