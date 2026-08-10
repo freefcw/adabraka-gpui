@@ -89,6 +89,10 @@ impl WindowsWindowInner {
         lparam: LPARAM,
     ) -> LRESULT {
         let handled = match msg {
+            // DefWindowProc may defer activation until after GPUI dispatches a
+            // non-client click. Return MA_ACTIVATE so handlers observe the
+            // clicked window as active even when they consume the event.
+            WM_MOUSEACTIVATE => Some(MA_ACTIVATE as isize),
             WM_ACTIVATE => self.handle_activate_msg(wparam),
             WM_CREATE => self.handle_create_msg(handle),
             WM_MOVE => self.handle_move_msg(handle, lparam),
