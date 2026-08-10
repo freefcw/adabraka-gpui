@@ -231,6 +231,7 @@ dependencies = [
  "smol",
  "strum",
  "ttf-parser",
+ "unicode-bidi",
  "unicode-segmentation",
  "uuid",
  "wayland-backend",

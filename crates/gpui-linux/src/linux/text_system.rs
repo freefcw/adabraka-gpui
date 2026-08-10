@@ -18,7 +18,7 @@ use pathfinder_geometry::{
     vector::{Vector2F, Vector2I},
 };
 use smallvec::SmallVec;
-use std::{borrow::Cow, sync::Arc};
+use std::{borrow::Cow, ops::Range, sync::Arc};
 use unicode_segmentation::UnicodeSegmentation;
 
 pub(crate) struct CosmicTextSystem(RwLock<CosmicTextSystemState>);
@@ -443,6 +443,106 @@ impl CosmicTextSystemState {
 
     #[profiling::function]
     fn layout_line(&mut self, text: &str, font_size: Pixels, font_runs: &[FontRun]) -> LineLayout {
+        if contains_paragraph_separator(text) {
+            self.layout_line_with_separators(text, font_size, font_runs)
+        } else {
+            self.layout_line_no_separators(text, font_size, font_runs)
+        }
+    }
+
+    fn layout_line_with_separators(
+        &mut self,
+        text: &str,
+        font_size: Pixels,
+        font_runs: &[FontRun],
+    ) -> LineLayout {
+        let mut layout = LineLayout {
+            font_size,
+            len: text.len(),
+            ..Default::default()
+        };
+        let mut paragraph_start = 0;
+
+        for (separator_start, separator) in text
+            .char_indices()
+            .filter(|(_, character)| is_paragraph_separator(*character))
+        {
+            let separator_end = separator_start + separator.len_utf8();
+            self.shape_segment(
+                text,
+                paragraph_start..separator_start,
+                font_size,
+                font_runs,
+                &mut layout,
+            );
+            self.shape_segment(
+                text,
+                separator_start..separator_end,
+                font_size,
+                font_runs,
+                &mut layout,
+            );
+            paragraph_start = separator_end;
+        }
+
+        self.shape_segment(
+            text,
+            paragraph_start..text.len(),
+            font_size,
+            font_runs,
+            &mut layout,
+        );
+
+        layout
+    }
+
+    fn shape_segment(
+        &mut self,
+        text: &str,
+        range: Range<usize>,
+        font_size: Pixels,
+        font_runs: &[FontRun],
+        layout: &mut LineLayout,
+    ) {
+        if range.is_empty() {
+            return;
+        }
+
+        let segment_font_runs = clip_font_runs(font_runs, range.clone());
+        let segment =
+            self.layout_line_no_separators(&text[range.clone()], font_size, &segment_font_runs);
+
+        let mut segment_runs = segment.runs;
+        for run in &mut segment_runs {
+            for glyph in &mut run.glyphs {
+                glyph.index += range.start;
+                glyph.position.x += layout.width;
+            }
+        }
+
+        for mut run in segment_runs {
+            if let Some(same_run) = layout
+                .runs
+                .last_mut()
+                .filter(|last| last.font_id == run.font_id)
+            {
+                same_run.glyphs.append(&mut run.glyphs);
+            } else {
+                layout.runs.push(run);
+            }
+        }
+
+        layout.width += segment.width;
+        layout.ascent = layout.ascent.max(segment.ascent);
+        layout.descent = layout.descent.max(segment.descent);
+    }
+
+    fn layout_line_no_separators(
+        &mut self,
+        text: &str,
+        font_size: Pixels,
+        font_runs: &[FontRun],
+    ) -> LineLayout {
         let mut attrs_list = AttrsList::new(&Attrs::new());
         let mut offs = 0;
         for run in font_runs {
@@ -512,7 +612,7 @@ impl CosmicTextSystemState {
         line.layout_to_buffer(
             &mut self.scratch,
             f32::from(font_size),
-            None, // We do our own wrapping
+            None,
             cosmic_text::Wrap::None,
             cosmic_text::Ellipsize::None,
             None,
@@ -537,7 +637,6 @@ impl CosmicTextSystemState {
             }
             let is_emoji = loaded_font.is_known_emoji_font;
 
-            // HACK: Prevent crash caused by variation selectors.
             if glyph.glyph_id == 3 && is_emoji {
                 continue;
             }
@@ -571,6 +670,46 @@ impl CosmicTextSystemState {
             len: text.len(),
         }
     }
+}
+
+#[inline(always)]
+fn is_paragraph_separator(character: char) -> bool {
+    unicode_bidi::bidi_class(character) == unicode_bidi::BidiClass::B
+}
+
+fn contains_paragraph_separator(text: &str) -> bool {
+    if text
+        .bytes()
+        .any(|byte| matches!(byte, b'\n' | b'\r' | 0x1c | 0x1d | 0x1e))
+    {
+        return true;
+    }
+
+    !text.is_ascii() && text.chars().any(is_paragraph_separator)
+}
+
+fn clip_font_runs(font_runs: &[FontRun], range: Range<usize>) -> SmallVec<[FontRun; 4]> {
+    let mut clipped = SmallVec::new();
+    let mut offs = 0;
+    for run in font_runs {
+        let run_start = offs;
+        offs += run.len;
+        if offs <= range.start {
+            continue;
+        }
+        if run_start >= range.end {
+            break;
+        }
+        let start = run_start.max(range.start);
+        let end = offs.min(range.end);
+        if start < end {
+            clipped.push(FontRun {
+                len: end - start,
+                font_id: run.font_id,
+            });
+        }
+    }
+    clipped
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -723,6 +862,86 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(run_font_ids, vec![primary_id, fallback_id, primary_id]);
+    }
+
+    #[test]
+    fn layout_line_handles_mixed_direction_paragraphs() {
+        let text_system = CosmicTextSystem::new();
+        text_system
+            .add_fonts(vec![Cow::Borrowed(IBM_PLEX_SANS)])
+            .unwrap();
+        let font_id = text_system
+            .font_id(&font(family_name(IBM_PLEX_SANS)))
+            .unwrap();
+
+        for separator in [
+            '\u{000a}', '\u{000d}', '\u{001c}', '\u{001d}', '\u{001e}', '\u{0085}', '\u{2029}',
+        ] {
+            let text = format!("A{separator}\u{05d0}");
+            let layout = text_system.layout_line(
+                &text,
+                px(16.),
+                &[FontRun {
+                    len: text.len(),
+                    font_id,
+                }],
+            );
+
+            assert_eq!(layout.len, text.len(), "{text:?}");
+            assert!(layout.width > Pixels::ZERO, "{text:?}");
+            for glyph in layout.runs.iter().flat_map(|run| &run.glyphs) {
+                assert!(glyph.index < text.len(), "{text:?}: {}", glyph.index);
+                assert!(text.is_char_boundary(glyph.index));
+            }
+        }
+    }
+
+    #[test]
+    fn paragraph_separator_detection_covers_fast_and_unicode_paths() {
+        for separator in [
+            '\u{000a}', '\u{000d}', '\u{001c}', '\u{001d}', '\u{001e}', '\u{0085}', '\u{2029}',
+        ] {
+            assert!(is_paragraph_separator(separator));
+            assert!(contains_paragraph_separator(&format!("a{separator}b")));
+        }
+
+        for text in [
+            "",
+            "plain ascii",
+            "\u{05d0}",
+            "tab\there",
+            "emoji \u{1f600}",
+        ] {
+            assert!(!contains_paragraph_separator(text), "{text:?}");
+        }
+    }
+
+    #[test]
+    fn font_runs_are_clipped_to_paragraph_segments() {
+        let runs = [
+            FontRun {
+                len: 3,
+                font_id: FontId(1),
+            },
+            FontRun {
+                len: 4,
+                font_id: FontId(2),
+            },
+        ];
+
+        assert_eq!(
+            clip_font_runs(&runs, 2..6),
+            smallvec::smallvec![
+                FontRun {
+                    len: 1,
+                    font_id: FontId(1),
+                },
+                FontRun {
+                    len: 3,
+                    font_id: FontId(2),
+                },
+            ]
+        );
     }
 
     #[test]
