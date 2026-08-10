@@ -863,6 +863,25 @@ pub trait Styled: Sized {
         self
     }
 
+    /// Sets grid rows with min-content minimum sizing.
+    /// Unlike `grid_rows`, these rows do not shrink to zero under min-content constraints.
+    fn grid_rows_min_content(mut self, rows: u16) -> Self {
+        self.style().grid_rows = Some(GridTemplate {
+            repeat: rows,
+            min_size: TemplateColumnMinSize::MinContent,
+        });
+        self
+    }
+
+    /// Sets grid rows with content-based max-content sizing.
+    fn grid_rows_max_content(mut self, rows: u16) -> Self {
+        self.style().grid_rows = Some(GridTemplate {
+            repeat: rows,
+            min_size: TemplateColumnMinSize::MaxContent,
+        });
+        self
+    }
+
     /// Sets the column start of this element.
     fn col_start(mut self, start: i16) -> Self {
         let grid_location = self.style().grid_location_mut();
@@ -959,5 +978,40 @@ pub trait Styled: Sized {
     fn debug_below(mut self) -> Self {
         self.style().debug_below = Some(true);
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn grid_content_sizing_builders_select_expected_modes() {
+        let mut min_columns = crate::div().grid_cols_min_content(2);
+        assert_eq!(
+            min_columns.style().grid_cols,
+            Some(GridTemplate {
+                repeat: 2,
+                min_size: TemplateColumnMinSize::MinContent,
+            })
+        );
+
+        let mut min_rows = crate::div().grid_rows_min_content(3);
+        assert_eq!(
+            min_rows.style().grid_rows,
+            Some(GridTemplate {
+                repeat: 3,
+                min_size: TemplateColumnMinSize::MinContent,
+            })
+        );
+
+        let mut max_rows = crate::div().grid_rows_max_content(4);
+        assert_eq!(
+            max_rows.style().grid_rows,
+            Some(GridTemplate {
+                repeat: 4,
+                min_size: TemplateColumnMinSize::MaxContent,
+            })
+        );
     }
 }
