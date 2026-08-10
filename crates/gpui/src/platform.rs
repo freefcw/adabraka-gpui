@@ -35,6 +35,8 @@ pub mod render_image;
 
 #[cfg(any(test, feature = "test-support"))]
 mod test;
+#[cfg(any(test, feature = "test-support"))]
+mod threaded_dispatcher;
 
 #[cfg(all(
     feature = "screen-capture",
@@ -100,6 +102,8 @@ pub(crate) use test::*;
 pub use test::{
     TestDispatcher, TestScreenCaptureSource, TestScreenCaptureStream, VisualRenderArtifact,
 };
+#[cfg(any(test, feature = "test-support"))]
+pub use threaded_dispatcher::ThreadedDispatcher;
 
 #[cfg(all(
     any(test, feature = "test-support"),
@@ -844,6 +848,11 @@ pub trait PlatformDispatcher: Send + Sync {
 
     #[cfg(any(test, feature = "test-support"))]
     fn as_test(&self) -> Option<&TestDispatcher> {
+        None
+    }
+
+    #[cfg(any(test, feature = "test-support"))]
+    fn as_threaded(&self) -> Option<&ThreadedDispatcher> {
         None
     }
 }
