@@ -526,12 +526,10 @@ impl Element for Img {
                         .style
                         .object_fit
                         .get_bounds(bounds, data.size(layout_state.frame_index));
-                    let corner_radii = style
-                        .corner_radii
-                        .to_pixels(window.rem_size())
-                        .clamp_radii_for_quad_size(new_bounds.size);
+                    let corner_radii = style.corner_radii.to_pixels(window.rem_size());
                     window
                         .paint_image(
+                            bounds,
                             new_bounds,
                             corner_radii,
                             data,
@@ -802,7 +800,7 @@ impl From<image::ImageError> for ImageCacheError {
 mod tests {
     use super::*;
     use crate::{
-        Context, ParentElement as _, Render, TestAppContext, Window, canvas, div, px, size,
+        Context, ParentElement as _, Render, TestAppContext, Window, canvas, div, point, px, size,
     };
     use image::{Frame, ImageBuffer, Rgba};
 
@@ -813,6 +811,11 @@ mod tests {
         Arc::new(RenderImage::new(SmallVec::from_iter(
             (0..frame_count).map(|_| frame.clone()),
         )))
+    }
+
+    fn test_image_with_size(width: u32, height: u32) -> Arc<RenderImage> {
+        let frame = Frame::new(ImageBuffer::from_pixel(width, height, Rgba([0, 0, 0, 0])));
+        Arc::new(RenderImage::new(SmallVec::from_elem(frame, 1)))
     }
 
     /// Overwrites the cached `frame_index` of the sibling `img` during paint.
@@ -858,6 +861,86 @@ mod tests {
         cx.simulate_resize(size(px(100.), px(100.)));
         view.update(&mut cx.cx, |_, cx| cx.notify());
         cx.run_until_parked();
+    }
+
+    #[gpui::test]
+    fn image_object_fit_cover_crops_to_element_bounds(cx: &mut TestAppContext) {
+        let cx = cx.add_empty_window();
+        let image = test_image_with_size(200, 100);
+        cx.draw(point(px(0.), px(0.)), size(px(100.), px(100.)), |_, _| {
+            img(ImageSource::Render(image.clone()))
+                .size_full()
+                .object_fit(ObjectFit::Fill)
+                .into_any_element()
+        });
+        let full_tile_bounds = cx.update(|window, _| {
+            window
+                .rendered_frame
+                .scene
+                .polychrome_sprites
+                .last()
+                .expect("fill image should paint a sprite")
+                .tile
+                .bounds
+        });
+
+        cx.draw(point(px(10.), px(20.)), size(px(100.), px(100.)), |_, _| {
+            img(ImageSource::Render(image))
+                .size_full()
+                .object_fit(ObjectFit::Cover)
+                .into_any_element()
+        });
+
+        let (rendered_bounds, rendered_tile_bounds, scale_factor) = cx.update(|window, _| {
+            let sprite = window
+                .rendered_frame
+                .scene
+                .polychrome_sprites
+                .last()
+                .expect("cover image should paint a sprite");
+            (sprite.bounds, sprite.tile.bounds, window.scale_factor())
+        });
+        assert_eq!(
+            rendered_bounds,
+            Bounds {
+                origin: point(px(10.).scale(scale_factor), px(20.).scale(scale_factor)),
+                size: size(px(100.).scale(scale_factor), px(100.).scale(scale_factor)),
+            }
+        );
+        assert_eq!(
+            (
+                rendered_tile_bounds.origin.x.0 - full_tile_bounds.origin.x.0,
+                rendered_tile_bounds.origin.y.0 - full_tile_bounds.origin.y.0,
+                rendered_tile_bounds.size.width.0,
+                rendered_tile_bounds.size.height.0,
+            ),
+            (50, 0, 100, 100),
+        );
+    }
+
+    #[gpui::test]
+    fn image_object_fit_cover_clamps_corner_radii_to_visible_bounds(cx: &mut TestAppContext) {
+        let cx = cx.add_empty_window();
+        cx.draw(point(px(0.), px(0.)), size(px(100.), px(100.)), |_, _| {
+            img(ImageSource::Render(test_image_with_size(200, 100)))
+                .size_full()
+                .rounded(px(100.))
+                .object_fit(ObjectFit::Cover)
+                .into_any_element()
+        });
+
+        let (corner_radius, expected_corner_radius) = cx.update(|window, _| {
+            (
+                window
+                    .rendered_frame
+                    .scene
+                    .polychrome_sprites
+                    .last()
+                    .map(|sprite| sprite.corner_radii.top_left),
+                px(50.).scale(window.scale_factor()),
+            )
+        });
+        assert_eq!(corner_radius, Some(expected_corner_radius));
     }
 
     #[gpui::test]
