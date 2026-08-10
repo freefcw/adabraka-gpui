@@ -22,10 +22,9 @@ use objc::{
     sel, sel_impl,
 };
 use objc2_app_kit::{
-    NSAppKitVersionNumber, NSAppKitVersionNumber12_0, NSAutoresizingMaskOptions,
-    NSBackingStoreType, NSBeep, NSEventModifierFlags, NSVisualEffectMaterial, NSVisualEffectState,
-    NSWindowButton, NSWindowCollectionBehavior, NSWindowOcclusionState, NSWindowOrderingMode,
-    NSWindowStyleMask, NSWindowTitleVisibility,
+    NSAutoresizingMaskOptions, NSBackingStoreType, NSBeep, NSEventModifierFlags,
+    NSVisualEffectMaterial, NSVisualEffectState, NSWindowButton, NSWindowCollectionBehavior,
+    NSWindowOcclusionState, NSWindowOrderingMode, NSWindowStyleMask, NSWindowTitleVisibility,
 };
 use parking_lot::Mutex;
 use raw_window_handle as rwh;
@@ -284,17 +283,6 @@ unsafe fn window_screen(window: id) -> id {
 
 unsafe fn window_style_mask(window: id) -> NSWindowStyleMask {
     unsafe { msg_send![window, styleMask] }
-}
-
-#[link(name = "CoreGraphics", kind = "framework")]
-unsafe extern "C" {
-    // Widely used private APIs; Apple uses them for their Terminal.app.
-    fn CGSMainConnectionID() -> id;
-    fn CGSSetWindowBackgroundBlurRadius(
-        connection_id: id,
-        window_id: NSInteger,
-        radius: i64,
-    ) -> i32;
 }
 
 #[ctor]
@@ -1568,47 +1556,30 @@ impl PlatformWindow for MacWindow {
             };
             let _: () = msg_send![this.native_window, setBackgroundColor: background_color];
 
-            if NSAppKitVersionNumber < NSAppKitVersionNumber12_0 {
-                // Whether `-[NSVisualEffectView respondsToSelector:@selector(_updateProxyLayer)]`.
-                // On macOS Catalina/Big Sur `NSVisualEffectView` doesn’t own concrete sublayers
-                // but uses a `CAProxyLayer`. Use the legacy WindowServer API.
-                let blur_radius = if background_appearance == WindowBackgroundAppearance::Blurred {
-                    80
-                } else {
-                    0
-                };
-
-                let window_number: NSInteger = msg_send![this.native_window, windowNumber];
-                CGSSetWindowBackgroundBlurRadius(CGSMainConnectionID(), window_number, blur_radius);
-            } else {
-                // On newer macOS `NSVisualEffectView` manages the effect layer directly. Using it
-                // could have a better performance (it downsamples the backdrop) and more control
-                // over the effect layer.
-                if background_appearance != WindowBackgroundAppearance::Blurred {
-                    if let Some(blur_view) = this.blurred_view {
-                        let _: () = msg_send![blur_view, removeFromSuperview];
-                        this.blurred_view = None;
-                    }
-                } else if this.blurred_view.is_none() {
-                    let content_view = window_content_view(this.native_window);
-                    let frame = view_bounds(content_view);
-                    let mut blur_view: id = msg_send![BLURRED_VIEW_CLASS, alloc];
-                    blur_view = view_init_with_frame(blur_view, frame);
-                    let _: () = msg_send![
-                        blur_view,
-                        setAutoresizingMask:
-                            NSAutoresizingMaskOptions::ViewWidthSizable
-                                | NSAutoresizingMaskOptions::ViewHeightSizable
-                    ];
-
-                    let _: () = msg_send![
-                        content_view,
-                        addSubview: blur_view
-                        positioned: NSWindowOrderingMode::Below
-                        relativeTo: nil
-                    ];
-                    this.blurred_view = Some(autorelease(blur_view));
+            if background_appearance != WindowBackgroundAppearance::Blurred {
+                if let Some(blur_view) = this.blurred_view {
+                    let _: () = msg_send![blur_view, removeFromSuperview];
+                    this.blurred_view = None;
                 }
+            } else if this.blurred_view.is_none() {
+                let content_view = window_content_view(this.native_window);
+                let frame = view_bounds(content_view);
+                let mut blur_view: id = msg_send![BLURRED_VIEW_CLASS, alloc];
+                blur_view = view_init_with_frame(blur_view, frame);
+                let _: () = msg_send![
+                    blur_view,
+                    setAutoresizingMask:
+                        NSAutoresizingMaskOptions::ViewWidthSizable
+                            | NSAutoresizingMaskOptions::ViewHeightSizable
+                ];
+
+                let _: () = msg_send![
+                    content_view,
+                    addSubview: blur_view
+                    positioned: NSWindowOrderingMode::Below
+                    relativeTo: nil
+                ];
+                this.blurred_view = Some(autorelease(blur_view));
             }
         }
     }
