@@ -70,7 +70,7 @@
     {"commit":"4ed3738c4068495e12d4d78044b005e5ed9d3b8c","status":"deferred","note":"Synced animations have no local UI consumer yet"},
     {"commit":"38ca9106c5306ef93e52c35643df015a27f15b72","status":"deferred","note":"Hover reconciliation requires stateful interaction adaptation"},
     {"commit":"59b2ebf10351b5c0b5cd4403f01ed0460eeec06d","status":"backport","note":"Preserve explicit image aspect ratios"},
-    {"commit":"1271f8b0e8f3278eed5dd3fc12ad4bd30dce2c5d","status":"deferred","note":"Toolchain pinning handled as local infrastructure policy"}
+    {"commit":"1271f8b0e8f3278eed5dd3fc12ad4bd30dce2c5d","status":"backport","note":"Pin Rust 1.97.1 and enforce it in CI; mechanical source cleanups remain unnecessary"}
   ],
   "supplemental_backports": [
     {"commit":"008d54299be7a5219bac4e4dd51f11ab8bfd6197","note":"Only the still-missing repeated-frame error counter hunk was backported; software adapter rejection was already equivalent"},
