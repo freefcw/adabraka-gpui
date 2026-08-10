@@ -216,14 +216,7 @@ impl CosmicTextSystemState {
     fn add_fonts(&mut self, fonts: Vec<Cow<'static, [u8]>>) -> Result<()> {
         let db = self.font_system.db_mut();
         for bytes in fonts {
-            match bytes {
-                Cow::Borrowed(embedded_font) => {
-                    db.load_font_data(embedded_font.to_vec());
-                }
-                Cow::Owned(bytes) => {
-                    db.load_font_data(bytes);
-                }
-            }
+            db.load_font_source(cosmic_text::fontdb::Source::Binary(Arc::new(bytes)));
         }
         Ok(())
     }
