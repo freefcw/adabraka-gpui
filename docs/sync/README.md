@@ -5,6 +5,8 @@
 ## 当前入口
 
 - [`CURRENT.md`](./CURRENT.md)：当前上游基线、crate/path 映射、明确分歧、同步流程和有效命令。
+- [`upstream-audit.json`](./upstream-audit.json)：当前增量区间的机器可读逐提交分类。
+- [`ZED_UPSTREAM_MIGRATION_REVIEW_2026-08-10.md`](./ZED_UPSTREAM_MIGRATION_REVIEW_2026-08-10.md)：本轮迁移价值审计与分阶段路线。
 - [`ZED_GPUI_INCREMENTAL_AUDIT_2026-07-01.md`](./ZED_GPUI_INCREMENTAL_AUDIT_2026-07-01.md)：自指定基线开始的历史增量审计。
 - [`ZED_GPUI_P1_BACKPORT_2026-07-20.md`](./ZED_GPUI_P1_BACKPORT_2026-07-20.md)：P1 backport 和当时的平台验证记录。
 
@@ -25,4 +27,5 @@
 2. 每个 backport 提交记录完整 `Zed-Origin`。
 3. 对未迁移提交明确标记 `equivalent`、`deferred` 或 `not-applicable`。
 4. 核心测试使用 `adabraka-gpui-core`，兼容测试使用 `adabraka-gpui`。
-5. 完整闭环运行 `scripts/verify-migration.sh`。
+5. 使用 `scripts/verify-upstream-sync.sh` 校验分类完整性和 `Zed-Origin` 来源追踪。
+6. 完整闭环运行 `scripts/verify-migration.sh`。
