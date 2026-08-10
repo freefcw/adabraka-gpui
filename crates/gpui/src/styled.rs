@@ -835,6 +835,16 @@ pub trait Styled: Sized {
         self
     }
 
+    /// Sets grid columns with min-content minimum sizing.
+    /// Unlike `grid_cols`, these columns do not shrink to zero under min-content constraints.
+    fn grid_cols_min_content(mut self, cols: u16) -> Self {
+        self.style().grid_cols = Some(GridTemplate {
+            repeat: cols,
+            min_size: TemplateColumnMinSize::MinContent,
+        });
+        self
+    }
+
     /// Sets grid columns to use content-based max-content widths.
     fn grid_cols_max_content(mut self, cols: u16) -> Self {
         self.style().grid_cols = Some(GridTemplate {
