@@ -1158,6 +1158,15 @@ pub trait StatefulInteractiveElement: InteractiveElement {
         self
     }
 
+    /// Set the author-provided identifier exposed to accessibility clients.
+    ///
+    /// Unlike the GPUI element ID, this value is visible outside the process.
+    /// Keep it stable and unique within its accessibility tree.
+    fn accessibility_id(mut self, id: impl Into<SharedString>) -> Self {
+        self.interactivity().accessibility_id = Some(id.into());
+        self
+    }
+
     /// Set the accessible label for this element.
     fn aria_label(mut self, label: impl Into<SharedString>) -> Self {
         self.interactivity().aria_label = Some(label.into());
@@ -1833,6 +1842,7 @@ pub struct Interactivity {
     pub(crate) a11y_action_listeners:
         Vec<(accesskit::Action, crate::window::a11y::A11yActionListener)>,
     pub(crate) override_role: Option<accesskit::Role>,
+    pub(crate) accessibility_id: Option<SharedString>,
     pub(crate) aria_label: Option<SharedString>,
     pub(crate) aria_description: Option<SharedString>,
     pub(crate) aria_value: Option<SharedString>,
@@ -2965,6 +2975,9 @@ impl Interactivity {
     }
 
     pub(crate) fn write_a11y_info(&self, node: &mut accesskit::Node) {
+        if let Some(id) = &self.accessibility_id {
+            node.set_author_id(id.to_string());
+        }
         if let Some(label) = &self.aria_label {
             node.set_label(label.to_string());
         }
@@ -3868,6 +3881,18 @@ mod tests {
 
         assert_eq!(node.description(), Some("Save the active document"));
         assert_eq!(node.keyboard_shortcut(), Some("Ctrl+S"));
+    }
+
+    #[test]
+    fn accessibility_id_is_written_to_accesskit() {
+        let element = div()
+            .id("buffer-font-size")
+            .accessibility_id("settings.buffer-font-size");
+        let mut node = accesskit::Node::new(accesskit::Role::SpinButton);
+
+        element.element.interactivity.write_a11y_info(&mut node);
+
+        assert_eq!(node.author_id(), Some("settings.buffer-font-size"));
     }
 
     #[test]
