@@ -5,17 +5,6 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=verify-common.sh
 source "$SCRIPT_DIR/verify-common.sh"
 
-readonly MIGRATION_PACKAGES=(
-    adabraka-gpui-macros
-    adabraka-gpui-core
-    adabraka-gpui-wgpu
-    adabraka-gpui-linux
-    adabraka-gpui-macos
-    adabraka-gpui-windows
-    adabraka-gpui-platform
-    adabraka-gpui
-)
-
 # Only the facade currently has a published library baseline. The macro package is
 # proc-macro-only, which cargo-semver-checks does not support, and the extracted
 # internal packages have not been published yet.
@@ -50,13 +39,8 @@ test_public_contracts
 echo "[3/5] Run workspace tests..."
 cargo test --locked --workspace --lib --tests -- --test-threads=1
 
-echo "[4/5] Verify macro archive and package inventories..."
-cargo package --locked --allow-dirty -p adabraka-gpui-macros >/dev/null
-echo "  verified archive: adabraka-gpui-macros"
-for package in "${MIGRATION_PACKAGES[@]}"; do
-    cargo package --locked --allow-dirty -p "$package" --list >/dev/null
-    echo "  packaged: $package"
-done
+echo "[4/5] Verify release archives and registry-only dependency resolution..."
+"$SCRIPT_DIR/verify-release-archives.sh"
 
 echo "[5/5] Check formatting and diff hygiene..."
 cargo fmt --all -- --check
