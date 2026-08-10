@@ -787,7 +787,7 @@ impl PlatformWindow for WindowsWindow {
                     cbSize: std::mem::size_of::<FLASHWINFO>() as u32,
                     hwnd,
                     dwFlags: FLASHW_ALL | FLASHW_TIMERNOFG,
-                    uCount: 0,
+                    uCount: 1,
                     dwTimeout: 0,
                 };
                 unsafe { FlashWindowEx(&mut info) };
