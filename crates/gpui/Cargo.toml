@@ -20,6 +20,7 @@ repository = "https://github.com/freefcw/adabraka-gpui"
 
 [features]
 accessibility = []
+bench = ["test-support"]
 default = [
     "accessibility",
     "font-kit",
@@ -77,6 +78,12 @@ x11 = ["scap?/x11"]
 name = "gpui_core"
 path = "src/gpui.rs"
 doctest = false
+
+[[bench]]
+name = "async_tasks"
+path = "benches/async_tasks.rs"
+harness = false
+required-features = ["bench"]
 
 [dependencies.accesskit]
 version = "0.24.0"
@@ -284,6 +291,9 @@ path = "../collections"
 features = ["test-support"]
 package = "adabraka_collections"
 version = "0.5.1"
+
+[dev-dependencies.criterion]
+version = "0.5"
 
 [dev-dependencies.env_logger]
 version = "0.11"

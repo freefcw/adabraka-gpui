@@ -10,6 +10,7 @@ check_compile_baseline() {
     cargo check --locked -p "$PUBLIC_PACKAGE" --no-default-features
     cargo check --locked -p "$PUBLIC_PACKAGE" --examples
     cargo check --locked -p "$WGPU_PACKAGE"
+    cargo check --locked -p "$CORE_PACKAGE" --features bench --benches
 }
 
 test_core() {

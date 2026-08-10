@@ -136,6 +136,11 @@ jobs:
             cache-key: linux-no-default
             linux-native: false
             command: cargo check -p adabraka-gpui --lib --no-default-features --locked
+          - name: Linux / async benchmark compile
+            os: ubuntu-24.04
+            cache-key: linux-async-benchmark
+            linux-native: false
+            command: cargo check -p adabraka-gpui-core --features bench --benches --locked
           - name: Linux / feature contracts
             os: ubuntu-24.04
             cache-key: linux-feature-contracts
