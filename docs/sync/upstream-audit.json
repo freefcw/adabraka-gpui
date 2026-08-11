@@ -68,7 +68,7 @@
     {"commit":"cc053a4a6fa2fd0e8793201ed9099466af1be0b1","status":"backport","note":"Accessibility author identifiers"},
     {"commit":"417d03305ac194470f5d85a4b584c34dcec8cf57","status":"not-applicable","note":"GPUI web repaint behavior"},
     {"commit":"4ed3738c4068495e12d4d78044b005e5ed9d3b8c","status":"deferred","note":"Synced animations have no local UI consumer yet"},
-    {"commit":"38ca9106c5306ef93e52c35643df015a27f15b72","status":"deferred","note":"Hover reconciliation requires stateful interaction adaptation"},
+    {"commit":"38ca9106c5306ef93e52c35643df015a27f15b72","status":"backport","note":"Reconcile stateful hover listeners after layout changes under a stationary pointer"},
     {"commit":"59b2ebf10351b5c0b5cd4403f01ed0460eeec06d","status":"backport","note":"Preserve explicit image aspect ratios"},
     {"commit":"1271f8b0e8f3278eed5dd3fc12ad4bd30dce2c5d","status":"backport","note":"Pin Rust 1.97.1 and enforce it in CI; mechanical source cleanups remain unnecessary"}
   ],
