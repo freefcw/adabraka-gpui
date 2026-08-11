@@ -23,7 +23,7 @@
   ],
   "entries": [
     {"commit":"547a6cd599a1649cb78d32447185a993f97a6c85","status":"not-applicable","note":"Zed editor context-menu consumer"},
-    {"commit":"dc682ef12096b799a7e2d247db842ec0219f3bbd","status":"deferred","note":"Asset error diagnostic improvement; independent follow-up"},
+    {"commit":"dc682ef12096b799a7e2d247db842ec0219f3bbd","status":"backport","note":"Log asset failures with Debug formatting to retain chained context"},
     {"commit":"d61edb0825ae9a8dcc06c4f30547f4a1348f4a8f","status":"not-applicable","note":"Zed LSP JSON merge semantics; no local caller"},
     {"commit":"8c7811ea7291dbfb59bf959400f385565e3dae77","status":"not-applicable","note":"Zed keymap asset organization"},
     {"commit":"c16d19c94dbc1c62752b736186ab8fd6f1cd25c6","status":"equivalent","note":"Local profiler has no upstream reverse lock-order path"},
