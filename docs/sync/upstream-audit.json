@@ -31,7 +31,7 @@
     {"commit":"58df5a14ce946fa27b14194d9d2fce8f87b1c331","status":"backport","note":"ObjectFit::Cover clipping and corner radii"},
     {"commit":"826f28eb8ffa661a0d1cdf639104d4c9131e8aa4","status":"backport","note":"Windows inactive popup behavior; IME hunk not applicable"},
     {"commit":"e191dd00c7e36cfcbbdccad2babca096067777c0","status":"not-applicable","note":"Zed collaboration debug buffers"},
-    {"commit":"a50a292fd179f5a4391ee1442b00741a9925cc0f","status":"deferred","note":"Unfocused scrolling frame scheduling needs focused regression"},
+    {"commit":"a50a292fd179f5a4391ee1442b00741a9925cc0f","status":"backport","note":"High-rate pointer input bypasses inactive-window throttling while retaining thermal caps"},
     {"commit":"c214057e086517920b214800725c5d16294ddf0d","status":"backport","note":"Linux Cosmic Text mixed-direction paragraphs"},
     {"commit":"63b52a7ee354741a7485e8a20ab087a485fcb8a1","status":"deferred","note":"Const color API ergonomics"},
     {"commit":"c97b7c0ea41acf56e9726964eca10c2078e921b0","status":"not-applicable","note":"GPUI web backend"},

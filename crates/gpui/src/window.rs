@@ -941,6 +941,25 @@ impl InputRateTracker {
     }
 }
 
+fn frame_throttle_interval(
+    force_render: bool,
+    require_presentation: bool,
+    has_next_frame_callbacks: bool,
+    is_active: bool,
+    has_high_rate_input: bool,
+    is_thermally_constrained: bool,
+) -> Option<Duration> {
+    if require_presentation || (!force_render && !has_next_frame_callbacks) {
+        None
+    } else if !is_active && !has_high_rate_input {
+        Some(Duration::from_micros(33333))
+    } else if is_thermally_constrained {
+        Some(Duration::from_micros(16667))
+    } else {
+        None
+    }
+}
+
 /// A point-in-time snapshot of the input latency histograms for a window.
 #[cfg(feature = "input-latency-histogram")]
 pub struct InputLatencySnapshot {
@@ -1385,18 +1404,20 @@ impl Window {
 
                 // Throttle frame rate based on conditions:
                 // - Thermal pressure (Serious/Critical): cap to ~60fps
-                // - Inactive window (not focused): cap to ~30fps to save energy
-                let min_frame_interval = if request_frame_options.require_presentation
-                    || (!force_render && next_frame_callbacks.borrow().is_empty())
-                {
-                    None
-                } else if !active.get() {
-                    Some(Duration::from_micros(33333))
-                } else if let Some(ThermalState::Critical | ThermalState::Serious) = thermal_state {
-                    Some(Duration::from_micros(16667))
-                } else {
-                    None
-                };
+                // - Inactive window (not focused): cap to ~30fps to save energy,
+                //   unless high-rate input is arriving under the pointer.
+                let has_high_rate_input = input_rate_tracker.borrow().is_high_rate();
+                let min_frame_interval = frame_throttle_interval(
+                    force_render,
+                    request_frame_options.require_presentation,
+                    !next_frame_callbacks.borrow().is_empty(),
+                    active.get(),
+                    has_high_rate_input,
+                    matches!(
+                        thermal_state,
+                        Some(ThermalState::Critical | ThermalState::Serious)
+                    ),
+                );
 
                 let now = Instant::now();
                 if let Some(min_interval) = min_frame_interval {
@@ -1428,10 +1449,11 @@ impl Window {
                         .log_err();
                 }
 
-                // Keep presenting if input was recently arriving at a high rate (>= 60fps).
+                // Keep presenting if input was recently arriving at a high rate (>= 60fps),
+                // including while an unfocused window receives pointer input.
                 let needs_present = request_frame_options.require_presentation
                     || needs_present.get()
-                    || (active.get() && input_rate_tracker.borrow_mut().is_high_rate());
+                    || has_high_rate_input;
 
                 if invalidator.is_dirty() || force_render {
                     measure("frame duration", || {
@@ -6051,6 +6073,23 @@ mod tests {
         Context, QuitMode, Render, TestAppContext, WindowOptions, canvas, div, hsla, px, size,
     };
     use std::{cell::Cell, rc::Rc};
+
+    #[test]
+    fn high_rate_input_avoids_inactive_window_throttling() {
+        assert_eq!(
+            frame_throttle_interval(true, false, false, false, false, false),
+            Some(Duration::from_micros(33333))
+        );
+        assert_eq!(
+            frame_throttle_interval(true, false, false, false, true, false),
+            None
+        );
+        assert_eq!(
+            frame_throttle_interval(true, false, false, false, true, true),
+            Some(Duration::from_micros(16667)),
+            "thermal pressure still caps high-rate input"
+        );
+    }
 
     /// A re-entrant frame request must be deferred while a draw is on the
     /// stack. `draw_in_progress` is the guard the request-frame callback uses
