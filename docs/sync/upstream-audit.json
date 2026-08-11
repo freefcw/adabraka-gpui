@@ -61,7 +61,7 @@
     {"commit":"655ed1385b00c01386bfbd9b7edea439eb1eec64","status":"backport","note":"Ignore inactive Wayland IME positions"},
     {"commit":"8e18ab0cd7cd8471a84d8d337bedeaefadd79a1e","status":"not-applicable","note":"No local ShellBuilder abstraction"},
     {"commit":"38df25d54c6f3b3ad8b94312405a53978fd496fc","status":"backport","note":"run_until checks readiness between main-thread runnables"},
-    {"commit":"a8cae3bd77f6e1c1dde98bb1dcebba0d254dbd71","status":"deferred","note":"Modifier event sequence requires platform regression evidence"},
+    {"commit":"a8cae3bd77f6e1c1dde98bb1dcebba0d254dbd71","status":"backport","note":"Multi-modifier gestures no longer dispatch standalone modifier bindings"},
     {"commit":"00cba838ad4e0be4b6176438551b72b2d512e9f8","status":"not-applicable","note":"Zed Markdown Mermaid UI"},
     {"commit":"82878540b5410b288a2c92cb9ee5675533e4d807","status":"backport","note":"run_ready_main_tasks is bounded to the queue present at call start"},
     {"commit":"d0f797a38c751cff745108e458bbc5ec73c70738","status":"backport","note":"Retain embedded font bytes without copying"},
