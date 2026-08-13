@@ -5,7 +5,7 @@ version = "0.9.0"
 publish = true
 description = "Macros used by Adabraka GPUI (originally from Zed - github.com/zed-industries/zed)"
 authors = ["Adabraka Team"]
-repository = "https://github.com/Augani/adabraka-gpui"
+repository = "https://github.com/freefcw/adabraka-gpui"
 readme = false
 license = "Apache-2.0"
 

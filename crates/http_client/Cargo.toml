@@ -5,7 +5,7 @@ version = "0.5.1"
 publish = true
 description = "A HTTP client library for Adabraka GPUI (originally from Zed - github.com/zed-industries/zed)"
 authors = ["Adabraka Team"]
-repository = "https://github.com/Augani/adabraka-gpui"
+repository = "https://github.com/freefcw/adabraka-gpui"
 readme = false
 license = "Apache-2.0"
 
