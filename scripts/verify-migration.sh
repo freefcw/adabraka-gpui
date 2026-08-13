@@ -29,20 +29,23 @@ esac
 
 echo "=== Migration and Release Verification ==="
 
-echo "[1/5] Compile public surface and renderer..."
+echo "[1/6] Compile public surface and renderer..."
 check_compile_baseline
 
-echo "[2/5] Run core and compatibility tests..."
+echo "[2/6] Run core and compatibility tests..."
 test_core --test-threads=1
 test_public_contracts
 
-echo "[3/5] Run workspace tests..."
+echo "[3/6] Run workspace tests..."
 cargo test --locked --workspace --lib --tests -- --test-threads=1
 
-echo "[4/5] Verify release archives and registry-only dependency resolution..."
+echo "[4/6] Verify public feature contracts..."
+"$SCRIPT_DIR/verify-features.sh"
+
+echo "[5/6] Verify release archives and registry-only dependency resolution..."
 "$SCRIPT_DIR/verify-release-archives.sh"
 
-echo "[5/5] Check formatting and diff hygiene..."
+echo "[6/6] Check formatting and diff hygiene..."
 cargo fmt --all -- --check
 git diff --check
 

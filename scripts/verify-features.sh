@@ -57,7 +57,7 @@ EXPECTED = {
         "wayland", "wgpu", "windows-manifest", "x11",
     ],
     "adabraka-gpui-core": [
-        "accessibility", "default", "font-kit", "image-default-formats",
+        "accessibility", "bench", "default", "font-kit", "image-default-formats",
         "image-format-avif", "image-format-bmp", "image-format-dds",
         "image-format-exr", "image-format-farbfeld", "image-format-gif",
         "image-format-hdr", "image-format-ico", "image-format-jpeg",

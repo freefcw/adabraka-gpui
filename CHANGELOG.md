@@ -48,6 +48,8 @@ Applications upgrading from 0.8.x should follow the migration mappings in this s
 - **Feature contract checks** — `scripts/verify-features.sh` compiles the public feature
   combinations used by CI and the docs runbooks, and pins every published crate's public
   feature list against a whitelist so accidental additions or removals fail in CI.
+- **Async benchmark feature** — `adabraka-gpui-core` exposes the `bench` feature used to compile
+  the production-like async task completion benchmark without enabling it for normal builds.
 
 ## Utility crates 0.6.0 (Unreleased)
 
