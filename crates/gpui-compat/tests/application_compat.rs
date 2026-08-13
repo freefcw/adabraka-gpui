@@ -1,4 +1,4 @@
-use gpui::{App, AppResourceProfile, Application, ApplicationHandle, Platform};
+use gpui::{App, AppResourceProfile, Application, ApplicationHandle, Platform, QuitMode};
 use std::{rc::Rc, sync::Arc};
 
 #[allow(dead_code)]
@@ -16,7 +16,8 @@ fn compile_application_surface(
         .inaccessible()
         .with_assets(())
         .with_http_client(http_client)
-        .with_resource_profile(AppResourceProfile::default());
+        .with_resource_profile(AppResourceProfile::default())
+        .with_quit_mode(QuitMode::Explicit);
 
     application.on_open_urls(|_| {});
     application.on_reopen(|_: &mut App| {});
