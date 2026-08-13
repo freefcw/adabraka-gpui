@@ -133,7 +133,7 @@ mod tests {
         let bounds = compute_window_bounds(
             size(px(200.), px(100.)),
             &WindowPosition::Center,
-            &[display.clone()],
+            std::slice::from_ref(&display),
             Some(&display),
         );
 
@@ -149,7 +149,7 @@ mod tests {
         let bounds = compute_window_bounds(
             size(px(200.), px(100.)),
             &WindowPosition::BottomRight { margin: px(10.) },
-            &[display.clone()],
+            std::slice::from_ref(&display),
             Some(&display),
         );
 

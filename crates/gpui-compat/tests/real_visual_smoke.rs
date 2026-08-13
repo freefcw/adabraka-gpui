@@ -5,7 +5,15 @@
     target_os = "windows"
 )))]
 fn main() {
+    if real_visual_required() {
+        eprintln!("real_visual_smoke is required but unsupported on this platform");
+        std::process::exit(1);
+    }
     println!("real_visual_smoke is not supported on this platform; skipping");
+}
+
+fn real_visual_required() -> bool {
+    std::env::var("GPUI_REQUIRE_REAL_VISUAL").is_ok_and(|value| value == "1")
 }
 
 #[cfg(any(
@@ -49,6 +57,10 @@ fn run() -> anyhow::Result<()> {
 
     let capabilities = VisualTestCapabilities::detect();
     let Some(cx) = RealVisualTestContext::new_if_supported() else {
+        anyhow::ensure!(
+            !real_visual_required(),
+            "real visual renderer is required but unavailable"
+        );
         println!("real visual renderer is not available; skipping");
         return Ok(());
     };

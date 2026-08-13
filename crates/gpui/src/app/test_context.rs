@@ -1573,23 +1573,11 @@ impl AnyWindowHandle {
 mod test_app_tests {
     use super::*;
     use crate::{InteractiveElement as _, Role, StatefulInteractiveElement as _, Styled as _, px};
-    #[cfg(any(
-        all(target_os = "macos", feature = "font-kit"),
-        all(
-            any(target_os = "linux", target_os = "freebsd"),
-            any(feature = "wayland", feature = "x11")
-        )
-    ))]
-    use crate::{TextRun, font};
     use std::cell::Cell;
-    #[cfg(target_os = "macos")]
-    use std::sync::atomic::AtomicBool;
     use std::sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
     };
-    #[cfg(target_os = "macos")]
-    use std::time::Duration;
 
     struct TestView {
         value: usize,
