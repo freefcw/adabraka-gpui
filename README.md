@@ -70,6 +70,9 @@ without this override fails with an actionable macro error instead of guessing a
 | Permission queries | Yes (Accessibility, Mic) | No | No | No |
 | Daemon mode (no dock icon) | Yes | Yes | Yes | Yes |
 
+Before publishing a release, validate these claims on real operating systems with the
+[0.9 desktop release smoke checklist](docs/release/0.9-desktop-smoke-checklist.md).
+
 ### Rendering Backends
 
 Linux X11 and Wayland now use the internal wgpu renderer ported from Zed's current GPUI stack.
