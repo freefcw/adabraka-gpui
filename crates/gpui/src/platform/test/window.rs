@@ -32,6 +32,7 @@ pub(crate) struct TestWindowState {
     is_fullscreen: bool,
     pub(crate) attention_requests: usize,
     a11y_callbacks: Option<A11yCallbacks>,
+    map_error: Option<String>,
     render_artifact: Option<VisualRenderArtifact>,
 }
 
@@ -110,6 +111,7 @@ impl TestWindow {
         params: WindowParams,
         platform: Weak<TestPlatform>,
         display: Rc<dyn PlatformDisplay>,
+        map_error: Option<String>,
     ) -> Self {
         Self(Rc::new(Mutex::new(TestWindowState {
             bounds: params.bounds,
@@ -130,6 +132,7 @@ impl TestWindow {
             is_fullscreen: false,
             attention_requests: 0,
             a11y_callbacks: None,
+            map_error,
             render_artifact: None,
         })))
     }
@@ -355,6 +358,13 @@ impl PlatformWindow for TestWindow {
 
     fn sprite_atlas(&self) -> sync::Arc<dyn crate::PlatformAtlas> {
         self.0.lock().sprite_atlas.clone()
+    }
+
+    fn map_window(&mut self) -> anyhow::Result<()> {
+        if let Some(message) = self.0.lock().map_error.take() {
+            anyhow::bail!(message);
+        }
+        Ok(())
     }
 
     fn as_test(&mut self) -> Option<&mut TestWindow> {

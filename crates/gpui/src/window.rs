@@ -1626,7 +1626,7 @@ impl Window {
             platform_window.set_app_id(&app_id);
         }
 
-        platform_window.map_window().unwrap();
+        platform_window.map_window()?;
 
         Ok(Window {
             handle,
@@ -6118,6 +6118,23 @@ mod tests {
         fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
             div()
         }
+    }
+
+    #[test]
+    fn open_window_propagates_platform_map_error() {
+        let cx = TestAppContext::single();
+        cx.test_platform()
+            .fail_next_window_map("test window mapping failed");
+
+        let result =
+            cx.update(|cx| cx.open_window(WindowOptions::default(), |_, cx| cx.new(|_| EmptyView)));
+
+        let error = match result {
+            Ok(_) => panic!("window mapping unexpectedly succeeded"),
+            Err(error) => error,
+        };
+        assert_eq!(error.to_string(), "test window mapping failed");
+        assert!(cx.read(|cx| cx.windows().is_empty()));
     }
 
     struct OpensWindowOnPaint {

@@ -35,6 +35,7 @@ pub(crate) struct TestPlatform {
     pub(crate) gpu_resource_budget: Mutex<GpuResourceBudget>,
     pub(crate) did_quit: Mutex<bool>,
     pub(crate) last_quit_mode: Mutex<Option<QuitMode>>,
+    next_window_map_error: Mutex<Option<String>>,
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     current_primary_item: Mutex<Option<ClipboardItem>>,
     pub(crate) prompts: RefCell<TestPrompts>,
@@ -176,6 +177,7 @@ impl TestPlatform {
             gpu_resource_budget: Mutex::new(crate::AppResourceProfile::default().gpu),
             did_quit: Mutex::new(false),
             last_quit_mode: Mutex::new(None),
+            next_window_map_error: Mutex::new(None),
             #[cfg(any(target_os = "linux", target_os = "freebsd"))]
             current_primary_item: Mutex::new(None),
             weak: weak.clone(),
@@ -237,6 +239,11 @@ impl TestPlatform {
 
     pub(crate) fn set_screen_capture_sources(&self, sources: Vec<TestScreenCaptureSource>) {
         *self.screen_capture_sources.borrow_mut() = sources;
+    }
+
+    #[cfg(test)]
+    pub(crate) fn fail_next_window_map(&self, message: impl Into<String>) {
+        *self.next_window_map_error.lock() = Some(message.into());
     }
 
     pub(crate) fn prompt(
@@ -424,6 +431,7 @@ impl Platform for TestPlatform {
             params,
             self.weak.clone(),
             self.active_display.clone(),
+            self.next_window_map_error.lock().take(),
         );
         Ok(Box::new(window))
     }
@@ -608,10 +616,9 @@ mod tests {
     use super::*;
     use crate::{PermissionRequestStatus, PermissionStatus, TestDispatcher};
     use rand::{SeedableRng, rngs::StdRng};
-    use std::{
-        sync::{Arc, mpsc},
-        time::Duration,
-    };
+    use std::sync::{Arc, mpsc};
+    #[cfg(feature = "screen-capture")]
+    use std::time::Duration;
 
     fn test_platform() -> Rc<TestPlatform> {
         let dispatcher = Arc::new(TestDispatcher::new(StdRng::seed_from_u64(0)));
