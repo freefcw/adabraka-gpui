@@ -308,6 +308,13 @@ impl PresentationState {
             Self::Presented | Self::RetryAfterPresent => Self::RetryAfterPresent,
         }
     }
+
+    /// After the first successful present, pace retries with compositor frame
+    /// callbacks so an occluded surface does not keep polling. Before the first
+    /// present a callback may never arrive, so those retries use the timer.
+    fn compositor_paced_retry(self) -> bool {
+        self == Self::RetryAfterPresent
+    }
 }
 
 #[cfg(test)]
@@ -340,6 +347,19 @@ mod presentation_state_tests {
         assert!(!PresentationState::Presented.requires_presentation());
         assert!(PresentationState::RetryBeforeFirstPresent.requires_presentation());
         assert!(PresentationState::RetryAfterPresent.requires_presentation());
+    }
+
+    #[test]
+    fn failed_present_after_a_successful_frame_uses_compositor_pacing() {
+        // frame() sets FrameLoop::Ticking before complete_frame, so the retry
+        // policy must follow presentation state rather than PresentationFailed.
+        let after_failed_present = PresentationState::Presented.failed();
+        assert_eq!(after_failed_present, PresentationState::RetryAfterPresent);
+        assert!(after_failed_present.compositor_paced_retry());
+        assert!(PresentationState::RetryAfterPresent.compositor_paced_retry());
+        assert!(!PresentationState::RetryBeforeFirstPresent.compositor_paced_retry());
+        assert!(!PresentationState::Unpresented.compositor_paced_retry());
+        assert!(!PresentationState::Presented.compositor_paced_retry());
     }
 }
 
@@ -685,6 +705,12 @@ impl WaylandWindowStatePtr {
     }
 
     pub fn frame(&self) {
+        if !self.state.borrow().visible {
+            self.state.borrow_mut().redraw_requested = true;
+            self.frame_loop.set(FrameLoop::Parked);
+            return;
+        }
+
         self.frame_loop.set(FrameLoop::Ticking);
         let mut state = self.state.borrow_mut();
         state.resize_throttle = false;
@@ -711,6 +737,10 @@ impl WaylandWindowStatePtr {
 
     fn complete_frame(&self) {
         let mut state = self.state.borrow_mut();
+        if !state.visible {
+            self.frame_loop.set(FrameLoop::Parked);
+            return;
+        }
         if is_unconfigured_layer_shell(&state.role) {
             self.frame_loop.set(FrameLoop::Unconfigured);
             return;
@@ -723,11 +753,11 @@ impl WaylandWindowStatePtr {
 
         if state.presentation.requires_presentation() {
             // Before the first present, or when throttling skipped draw, a
-            // callback may never arrive. Otherwise let the compositor pace
-            // retries so an occluded window does not keep polling.
-            if frame_loop == FrameLoop::PresentationFailed
-                && state.presentation == PresentationState::RetryAfterPresent
-            {
+            // callback may never arrive. After a successful present, pace
+            // retries with the compositor so an occluded window does not keep
+            // polling at 60 Hz. This depends on presentation state because
+            // frame() has already set Ticking.
+            if state.presentation.compositor_paced_retry() {
                 if state.pending_frame_callback.is_none() {
                     let callback = state.surface.frame(&state.globals.qh, state.surface.id());
                     state.pending_frame_callback = Some(callback);
@@ -783,6 +813,9 @@ impl WaylandWindowStatePtr {
     }
 
     pub fn schedule_frame(&self) {
+        if !self.state.borrow().visible {
+            return;
+        }
         match self.frame_loop.get() {
             FrameLoop::Parked => {
                 self.frame_loop.set(FrameLoop::Scheduled);
@@ -1573,7 +1606,7 @@ impl PlatformWindow for WaylandWindow {
     fn draw(&self, scene: &Scene) {
         let mut state = self.borrow_mut();
 
-        if is_unconfigured_layer_shell(&state.role) {
+        if !state.visible || is_unconfigured_layer_shell(&state.role) {
             state.redraw_requested = true;
             return;
         }
@@ -1758,6 +1791,7 @@ impl PlatformWindow for WaylandWindow {
     fn hide(&self) {
         let mut state = self.borrow_mut();
         state.visible = false;
+        self.0.frame_loop.set(FrameLoop::Parked);
         if is_unconfigured_layer_shell(&state.role) {
             return;
         }
