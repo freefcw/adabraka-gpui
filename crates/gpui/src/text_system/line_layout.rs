@@ -128,6 +128,68 @@ impl LineLayout {
         None
     }
 
+    /// Split this layout at a byte index, returning `(prefix, suffix)`.
+    ///
+    /// - `prefix` contains glyphs for bytes `[0, byte_index)` with original positions.
+    ///   Its width equals the x-advance up to the split point.
+    /// - `suffix` contains glyphs for bytes `[byte_index, len)` with positions
+    ///   shifted left so the first glyph starts at x=0, and byte indices rebased to 0.
+    /// - `font_size`, `ascent`, and `descent` are copied to both halves.
+    pub fn split_at(&self, byte_index: usize) -> (LineLayout, LineLayout) {
+        let x_offset = self.x_for_index(byte_index);
+
+        // Partition glyph runs. A single run may contribute glyphs to both halves.
+        let mut left_runs = Vec::new();
+        let mut right_runs = Vec::new();
+
+        for run in &self.runs {
+            let split_pos = run.glyphs.partition_point(|g| g.index < byte_index);
+
+            if split_pos > 0 {
+                left_runs.push(ShapedRun {
+                    font_id: run.font_id,
+                    glyphs: run.glyphs[..split_pos].to_vec(),
+                });
+            }
+
+            if split_pos < run.glyphs.len() {
+                let right_glyphs = run.glyphs[split_pos..]
+                    .iter()
+                    .map(|g| ShapedGlyph {
+                        id: g.id,
+                        position: point(g.position.x - x_offset, g.position.y),
+                        index: g.index - byte_index,
+                        is_emoji: g.is_emoji,
+                    })
+                    .collect();
+                right_runs.push(ShapedRun {
+                    font_id: run.font_id,
+                    glyphs: right_glyphs,
+                });
+            }
+        }
+
+        let left = LineLayout {
+            font_size: self.font_size,
+            width: x_offset,
+            ascent: self.ascent,
+            descent: self.descent,
+            runs: left_runs,
+            len: byte_index,
+        };
+
+        let right = LineLayout {
+            font_size: self.font_size,
+            width: self.width - x_offset,
+            ascent: self.ascent,
+            descent: self.descent,
+            runs: right_runs,
+            len: self.len - byte_index,
+        };
+
+        (left, right)
+    }
+
     fn compute_wrap_boundaries(
         &self,
         text: &str,
@@ -985,6 +1047,82 @@ mod tests {
         cache.clear();
 
         assert_eq!(cache.entry_counts(), (0, 0));
+    }
+
+    #[test]
+    fn test_split_at_partitions_glyphs_and_rebases_suffix() {
+        let layout = LineLayout {
+            font_size: px(16.),
+            width: px(30.),
+            ascent: px(12.),
+            descent: px(4.),
+            runs: vec![ShapedRun {
+                font_id: FontId(0),
+                glyphs: vec![glyph_at(0., 0), glyph_at(10., 1), glyph_at(20., 2)],
+            }],
+            len: 3,
+        };
+
+        let (left, right) = layout.split_at(1);
+
+        assert_eq!(left.len, 1);
+        assert_eq!(left.width, px(10.));
+        assert_eq!(left.font_size, layout.font_size);
+        assert_eq!(left.ascent, layout.ascent);
+        assert_eq!(left.descent, layout.descent);
+        assert_eq!(glyph_x_positions(&left), vec![0.]);
+        assert_eq!(left.runs[0].glyphs[0].index, 0);
+
+        assert_eq!(right.len, 2);
+        assert_eq!(right.width, px(20.));
+        assert_eq!(glyph_x_positions(&right), vec![0., 10.]);
+        assert_eq!(
+            right.runs[0]
+                .glyphs
+                .iter()
+                .map(|glyph| glyph.index)
+                .collect::<Vec<_>>(),
+            vec![0, 1]
+        );
+    }
+
+    #[test]
+    fn test_split_at_mid_run_and_empty_sides() {
+        let layout = LineLayout {
+            font_size: px(16.),
+            width: px(20.),
+            ascent: px(12.),
+            descent: px(4.),
+            runs: vec![
+                ShapedRun {
+                    font_id: FontId(0),
+                    glyphs: vec![glyph_at(0., 0), glyph_at(8., 1)],
+                },
+                ShapedRun {
+                    font_id: FontId(1),
+                    glyphs: vec![glyph_at(16., 2)],
+                },
+            ],
+            len: 3,
+        };
+
+        let (left, right) = layout.split_at(2);
+        assert_eq!(left.runs.len(), 1);
+        assert_eq!(left.runs[0].glyphs.len(), 2);
+        assert_eq!(right.runs.len(), 1);
+        assert_eq!(right.runs[0].font_id, FontId(1));
+        assert_eq!(glyph_x_positions(&right), vec![0.]);
+
+        let (empty_left, all_right) = layout.split_at(0);
+        assert!(empty_left.runs.is_empty());
+        assert_eq!(empty_left.width, px(0.));
+        assert_eq!(all_right.len, 3);
+        assert_eq!(all_right.runs.len(), 2);
+
+        let (all_left, empty_right) = layout.split_at(3);
+        assert_eq!(all_left.runs.len(), 2);
+        assert!(empty_right.runs.is_empty());
+        assert_eq!(empty_right.width, px(0.));
     }
 
     #[test]
