@@ -104,7 +104,7 @@ jobs:
           persist-credentials: false
 
       - name: Check shell scripts
-        run: shellcheck scripts/*.sh
+        run: shellcheck --source-path=scripts -x scripts/*.sh
 
       - name: Check workflow syntax
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.9
