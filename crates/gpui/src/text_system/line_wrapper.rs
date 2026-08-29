@@ -184,6 +184,12 @@ impl LineWrapper {
         matches!(c, '-' | '_' | '.' | '\'' | '’' | '‘' | '$' | '%' | '@' | '#' | '^' | '~' | ',' | '!' | ';' | '*') ||
         // Characters that used in URL, e.g. `https://github.com/zed-industries/zed?a=1&b=2` for better wrapping a long URL.
         matches!(c,  '/' | ':' | '?' | '&' | '=') ||
+        // Closing punctuation never starts a line (UAX #14 LB13: no break
+        // before `!`, `)`, `]`, `}`, closing quotes or an ellipsis) — `plz!`,
+        // `see)`, `quoted”` wrap as one word instead of orphaning the mark on
+        // the next line. `/` and `?` stay local URL-glue characters so long
+        // paths and query strings (`a/b`, `foo?b=2`) still wrap as one token.
+        matches!(c, ')' | ']' | '}' | '"' | '”' | '»' | '…') ||
         // `⋯` character is special used in Zed, to keep this at the end of the line.
         matches!(c, '⋯') ||
         // Non-breaking glue characters.
@@ -677,6 +683,10 @@ mod tests {
         assert_word("more⋯");
         assert_word("won’t");
         assert_word("‘twas");
+        assert_word("plz!");
+        assert_word("see)");
+        assert_word("quoted”");
+        assert_word("well…");
         assert_word("foo\u{00A0}bar");
         assert_word("foo\u{202F}bar");
         assert_word("foo\u{2011}bar");
