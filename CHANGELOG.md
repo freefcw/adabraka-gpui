@@ -44,6 +44,15 @@ Applications upgrading from 0.8.x should follow the migration mappings in this s
 
 ### Improvements
 
+- **Spring animations** — `SpringConfig`, `SpringAnimation`, and `AnimationExt::with_spring`
+  simulate interruptible physical motion. Overlay, HUD, and daemon surfaces can retarget a
+  spring without restarting it. Duration-based easing can overshoot via `sampled_easing`.
+- **Animation max FPS** — `Animation::with_max_fps` schedules timer-driven redraws instead of
+  requesting a frame on every vsync, useful for looping HUD/daemon decorations.
+- **Configurable inactive-window FPS** — `WindowOptions::inactive_frame_interval` controls the
+  minimum interval between animation frames while a window is unfocused (`None` disables the
+  throttle). The default remains ~30 FPS.
+
 - **Renderer GPU budgets moved off `WindowParams`** — `atlas_initial_size` and
   `instance_buffer_initial_size` are renderer memory policy, not per-window parameters. Platforms
   now receive them through `Platform::configure_gpu_resources` (driven by

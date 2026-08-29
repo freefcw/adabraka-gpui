@@ -948,11 +948,12 @@ fn frame_throttle_interval(
     is_active: bool,
     has_high_rate_input: bool,
     is_thermally_constrained: bool,
+    inactive_frame_interval: Option<Duration>,
 ) -> Option<Duration> {
     if require_presentation || (!force_render && !has_next_frame_callbacks) {
         None
     } else if !is_active && !has_high_rate_input {
-        Some(Duration::from_micros(33333))
+        inactive_frame_interval
     } else if is_thermally_constrained {
         Some(Duration::from_micros(16667))
     } else {
@@ -1203,6 +1204,7 @@ impl Window {
             kind,
             is_movable,
             app_owns_titlebar_drag,
+            inactive_frame_interval,
             is_resizable,
             is_minimizable,
             display_id,
@@ -1417,6 +1419,7 @@ impl Window {
                         thermal_state,
                         Some(ThermalState::Critical | ThermalState::Serious)
                     ),
+                    inactive_frame_interval,
                 );
 
                 let now = Instant::now();
@@ -6095,18 +6098,33 @@ mod tests {
 
     #[test]
     fn high_rate_input_avoids_inactive_window_throttling() {
+        let default_inactive = Some(Duration::from_micros(33333));
         assert_eq!(
-            frame_throttle_interval(true, false, false, false, false, false),
-            Some(Duration::from_micros(33333))
+            frame_throttle_interval(true, false, false, false, false, false, default_inactive),
+            default_inactive
         );
         assert_eq!(
-            frame_throttle_interval(true, false, false, false, true, false),
+            frame_throttle_interval(true, false, false, false, true, false, default_inactive),
             None
         );
         assert_eq!(
-            frame_throttle_interval(true, false, false, false, true, true),
+            frame_throttle_interval(true, false, false, false, true, true, default_inactive),
             Some(Duration::from_micros(16667)),
             "thermal pressure still caps high-rate input"
+        );
+    }
+
+    #[test]
+    fn inactive_frame_interval_is_configurable() {
+        let custom = Some(Duration::from_millis(16));
+        assert_eq!(
+            frame_throttle_interval(true, false, false, false, false, false, custom),
+            custom
+        );
+        assert_eq!(
+            frame_throttle_interval(true, false, false, false, false, false, None),
+            None,
+            "None disables inactive-window throttling"
         );
     }
 
