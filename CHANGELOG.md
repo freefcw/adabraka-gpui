@@ -58,6 +58,9 @@ Applications upgrading from 0.8.x should follow the migration mappings in this s
   throttle). The default remains ~30 FPS.
 - **`LineLayout::{split_at, paint, paint_background}`** — callers can hold `Arc<LineLayout>`
   and their own decoration runs without allocating a large `ShapedLine`.
+- **Windows Restart Manager** — `WM_QUERYENDSESSION` / `WM_ENDSESSION` shut the app down
+  cleanly so installers can replace binaries. `Platform::on_quit` now reports whether
+  shutdown ran synchronously.
 
 - **Renderer GPU budgets moved off `WindowParams`** — `atlas_initial_size` and
   `instance_buffer_initial_size` are renderer memory policy, not per-window parameters. Platforms

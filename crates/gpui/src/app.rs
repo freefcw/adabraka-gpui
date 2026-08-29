@@ -821,8 +821,17 @@ impl App {
 
         platform.on_quit(Box::new({
             let cx = app.clone();
-            move || {
-                cx.borrow_mut().shutdown();
+            move || match cx.try_borrow_mut() {
+                Ok(mut cx) => {
+                    cx.shutdown();
+                    true
+                }
+                Err(_) => {
+                    // Quit was requested while the AppCell was borrowed, so we
+                    // can't shut down synchronously. The platform decides how
+                    // to proceed (Windows Restart Manager posts WM_QUIT).
+                    false
+                }
             }
         }));
 
