@@ -6388,13 +6388,9 @@ mod tests {
     fn resource_profile_gpu_budget_reaches_the_platform() {
         let cx = TestAppContext::single();
 
-        assert_eq!(
-            cx.test_platform()
-                .gpu_resource_budget
-                .lock()
-                .instance_buffer_initial_size,
-            2 * 1024 * 1024
-        );
+        let budget = cx.test_platform().gpu_resource_budget.lock().clone();
+        assert_eq!(budget.instance_buffer_initial_size, 2 * 1024 * 1024);
+        assert_eq!(budget.instance_buffer_max_size, 256 * 1024 * 1024);
     }
 
     #[test]

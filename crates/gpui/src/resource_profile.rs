@@ -37,6 +37,12 @@
 //! - **Instance buffer initial size** (`instance_buffer_initial_size`):
 //!   Controls the initial capacity of renderer instance buffers where supported.
 //!   Renderers may grow beyond this value automatically when a scene requires it.
+//!
+//! - **Instance buffer max size** (`instance_buffer_max_size`):
+//!   Caps how far a renderer may grow the instance buffer for a single frame.
+//!   Batch upload binds each primitive array as one storage buffer, so this
+//!   watermark keeps Minimal/Utility profiles from following Zed's 256 MiB
+//!   desktop ceiling.
 
 use crate::{DevicePixels, Size};
 
@@ -121,6 +127,7 @@ impl AppResourceProfile {
             gpu: GpuResourceBudget {
                 atlas_initial_size: 1024,
                 instance_buffer_initial_size: 2 * 1024 * 1024,
+                instance_buffer_max_size: 256 * 1024 * 1024,
             },
             element_arena_size: 1024 * 1024,
         }
@@ -137,6 +144,7 @@ impl AppResourceProfile {
             gpu: GpuResourceBudget {
                 atlas_initial_size: 1024,
                 instance_buffer_initial_size: 1024 * 1024,
+                instance_buffer_max_size: 64 * 1024 * 1024,
             },
             element_arena_size: 512 * 1024,
         }
@@ -153,6 +161,7 @@ impl AppResourceProfile {
             gpu: GpuResourceBudget {
                 atlas_initial_size: 512,
                 instance_buffer_initial_size: 512 * 1024,
+                instance_buffer_max_size: 16 * 1024 * 1024,
             },
             element_arena_size: 256 * 1024,
         }
@@ -232,6 +241,17 @@ pub struct GpuResourceBudget {
     ///
     /// Default: 2 MiB for desktop applications.
     pub instance_buffer_initial_size: usize,
+
+    /// Maximum renderer instance buffer capacity in bytes, where supported.
+    ///
+    /// Batch upload sizes the GPU buffer to fit the whole scene at frame start.
+    /// This is the growth ceiling after device limits are applied. Desktop
+    /// matches Zed's 256 MiB native cap; Utility and Minimal stay lower so a
+    /// tray or dialog profile cannot balloon to a full-editor working set.
+    ///
+    /// Values below [`Self::instance_buffer_initial_size`] are raised to that
+    /// initial budget.
+    pub instance_buffer_max_size: usize,
 }
 
 impl GpuResourceBudget {
@@ -257,11 +277,69 @@ impl GpuResourceBudget {
             .max(MIN_INSTANCE_BUFFER_CAPACITY)
             .min(max_buffer_size)
     }
+
+    /// Returns `(initial, max)` instance-buffer capacities after applying the
+    /// profile watermarks and a device/binding ceiling.
+    ///
+    /// `device_max_buffer_size` should already be the minimum of the device
+    /// `max_buffer_size`, `max_storage_buffer_binding_size`, and any renderer
+    /// hard cap. The profile max is never below the profile initial size.
+    #[doc(hidden)]
+    pub fn normalize_instance_buffer_limits(
+        instance_buffer_initial_size: usize,
+        instance_buffer_max_size: usize,
+        device_max_buffer_size: u64,
+    ) -> (u64, u64) {
+        let device_max = device_max_buffer_size.max(MIN_INSTANCE_BUFFER_CAPACITY);
+        let profile_max = (instance_buffer_max_size as u64)
+            .max(instance_buffer_initial_size as u64)
+            .max(MIN_INSTANCE_BUFFER_CAPACITY)
+            .min(device_max);
+        let initial =
+            Self::normalize_instance_buffer_capacity(instance_buffer_initial_size, profile_max);
+        (initial, profile_max)
+    }
+
+    /// Next instance-buffer capacity that can hold `required` bytes.
+    ///
+    /// Growth doubles the current profile-backed allocation and will jump to
+    /// the next power of two of `required` when a single frame exceeds that,
+    /// but never past `max_capacity`. Returns `None` when the scene cannot
+    /// fit the profile/device watermark.
+    #[doc(hidden)]
+    pub fn next_instance_buffer_capacity(
+        current: u64,
+        required: u64,
+        max_capacity: u64,
+    ) -> Option<u64> {
+        if required > max_capacity {
+            return None;
+        }
+        if current >= required {
+            return Some(current);
+        }
+        let grown = current
+            .saturating_mul(2)
+            .max(required.next_power_of_two())
+            .min(max_capacity);
+        (grown >= required).then_some(grown)
+    }
+
+    /// Bytes reserved for one storage-buffer binding of `data_len` bytes.
+    ///
+    /// wgpu rejects zero-sized bindings, so empty primitive arrays still
+    /// reserve [`MIN_INSTANCE_BUFFER_CAPACITY`] and then align.
+    #[doc(hidden)]
+    pub fn aligned_instance_allocation(data_len: u64, alignment: u64) -> u64 {
+        data_len
+            .max(MIN_INSTANCE_BUFFER_CAPACITY)
+            .next_multiple_of(alignment.max(1))
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::GpuResourceBudget;
+    use super::{AppResourceProfile, GpuResourceBudget};
 
     #[test]
     fn instance_buffer_capacity_uses_the_requested_budget_within_device_limits() {
@@ -279,6 +357,79 @@ mod tests {
                 8 * 1024 * 1024,
             ),
             8 * 1024 * 1024
+        );
+    }
+
+    #[test]
+    fn instance_buffer_limits_keep_profile_watermarks_under_the_device_cap() {
+        let (initial, max) = GpuResourceBudget::normalize_instance_buffer_limits(
+            512 * 1024,
+            16 * 1024 * 1024,
+            8 * 1024 * 1024,
+        );
+        assert_eq!(initial, 512 * 1024);
+        assert_eq!(max, 8 * 1024 * 1024);
+    }
+
+    #[test]
+    fn instance_buffer_limits_raise_a_max_below_the_initial_budget() {
+        let (initial, max) = GpuResourceBudget::normalize_instance_buffer_limits(
+            2 * 1024 * 1024,
+            1024,
+            8 * 1024 * 1024,
+        );
+        assert_eq!(initial, 2 * 1024 * 1024);
+        assert_eq!(max, 2 * 1024 * 1024);
+    }
+
+    #[test]
+    fn instance_buffer_growth_starts_from_the_profile_allocation() {
+        assert_eq!(
+            GpuResourceBudget::next_instance_buffer_capacity(
+                512 * 1024,
+                600 * 1024,
+                16 * 1024 * 1024
+            ),
+            Some(1024 * 1024)
+        );
+        assert_eq!(
+            GpuResourceBudget::next_instance_buffer_capacity(
+                512 * 1024,
+                3 * 1024 * 1024,
+                16 * 1024 * 1024,
+            ),
+            Some(4 * 1024 * 1024)
+        );
+        assert_eq!(
+            GpuResourceBudget::next_instance_buffer_capacity(
+                512 * 1024,
+                32 * 1024 * 1024,
+                16 * 1024 * 1024,
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn preset_profiles_cap_batch_upload_below_zed_desktop_ceiling() {
+        let desktop = AppResourceProfile::desktop().gpu;
+        let utility = AppResourceProfile::utility().gpu;
+        let minimal = AppResourceProfile::minimal().gpu;
+        assert_eq!(desktop.instance_buffer_max_size, 256 * 1024 * 1024);
+        assert_eq!(utility.instance_buffer_max_size, 64 * 1024 * 1024);
+        assert_eq!(minimal.instance_buffer_max_size, 16 * 1024 * 1024);
+        assert!(minimal.instance_buffer_max_size < utility.instance_buffer_max_size);
+        assert!(utility.instance_buffer_max_size < desktop.instance_buffer_max_size);
+        assert!(desktop.instance_buffer_initial_size <= desktop.instance_buffer_max_size);
+    }
+
+    #[test]
+    fn aligned_instance_allocation_reserves_the_binding_minimum() {
+        assert_eq!(GpuResourceBudget::aligned_instance_allocation(0, 256), 256);
+        assert_eq!(GpuResourceBudget::aligned_instance_allocation(16, 256), 256);
+        assert_eq!(
+            GpuResourceBudget::aligned_instance_allocation(300, 256),
+            512
         );
     }
 }

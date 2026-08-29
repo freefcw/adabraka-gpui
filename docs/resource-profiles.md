@@ -146,20 +146,22 @@ Controls the initial dimensions of GPU textures allocated for the glyph/image at
 
 Controls the initial capacity of each renderer's per-frame instance buffer.
 
-**Field:**
+**Fields:**
 - `instance_buffer_initial_size`: Initial capacity in bytes
+- `instance_buffer_max_size`: Growth ceiling in bytes for batch upload
 
 **How It Works:**
-- The configured value is applied when a WGPU renderer is created.
-- A renderer may grow beyond this value when a scene requires more space.
-- Values below the renderer minimum are raised to 16 bytes; values above the device limit are clamped.
+- The configured initial value is applied when a WGPU renderer is created.
+- At the start of each frame the renderer bulk-uploads instance data and may grow the buffer to fit the scene.
+- Growth is capped by the profile max, then by the device `max_buffer_size` / `max_storage_buffer_binding_size`.
+- Values below the renderer minimum are raised to 16 bytes; a max below the initial budget is raised to that initial budget.
 - The WGPU backend applies this setting on Linux. Other backends may use their own support path.
 
 **Tuning Guidelines:**
-- 2 MiB: default for desktop applications
-- 1 MiB: suitable for utility windows
-- 512 KiB: suitable for minimal applications
-- Increase it when complex scenes frequently trigger early buffer growth.
+- 2 MiB initial / 256 MiB max: default for desktop applications
+- 1 MiB initial / 64 MiB max: suitable for utility windows
+- 512 KiB initial / 16 MiB max: suitable for minimal applications
+- Raise the max when a profile must accept unusually large scenes without failing the frame.
 
 ### Element Arena Size
 
@@ -216,6 +218,7 @@ Application::new()
         gpu: GpuResourceBudget {
             atlas_initial_size: 768,  // Non-standard size
             instance_buffer_initial_size: 768 * 1024,
+            instance_buffer_max_size: 32 * 1024 * 1024,
         },
         element_arena_size: 384 * 1024,  // 384 KiB
     }))
