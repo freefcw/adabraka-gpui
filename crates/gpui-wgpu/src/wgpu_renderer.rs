@@ -1309,7 +1309,11 @@ impl WgpuRenderer {
         let frame_view = frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
-        let _ = self.render_scene_to_view(scene, &frame_view);
+        if !self.render_scene_to_view(scene, &frame_view) {
+            // Do not present an unrecorded swapchain image as a successful frame.
+            // Wayland treats a false return as "not presented" and commits instead.
+            return false;
+        }
         frame.present();
         true
     }
@@ -1970,17 +1974,37 @@ impl RenderingParameters {
     }
 }
 
+/// Maps a `Scene::batches()` slice to instance indices in the uploaded array.
+///
+/// `BatchIterator` always yields subslices of the scene vectors
+/// (`&self.quads[start..end]`, and the same for shadows/underlines/sprites).
+/// This helper does not use `offset_from`: if that invariant is broken it
+/// logs and returns an empty range instead of invoking UB.
 fn batch_instance_range<T>(full: &[T], batch: &[T]) -> Range<u32> {
     if batch.is_empty() {
         return 0..0;
     }
-    let start = unsafe { batch.as_ptr().offset_from(full.as_ptr()) };
-    debug_assert!(
-        start >= 0,
-        "primitive batch must be a subslice of the scene array"
-    );
-    let start = start as u32;
-    start..start + batch.len() as u32
+    let size = std::mem::size_of::<T>();
+    if size == 0 {
+        return 0..0;
+    }
+    let full_addr = full.as_ptr() as usize;
+    let batch_addr = batch.as_ptr() as usize;
+    let Some(byte_offset) = batch_addr.checked_sub(full_addr) else {
+        log::error!("primitive batch is not a subslice of the scene array");
+        return 0..0;
+    };
+    if !byte_offset.is_multiple_of(size) {
+        log::error!("primitive batch is not a subslice of the scene array");
+        return 0..0;
+    }
+    let start = byte_offset / size;
+    let end = start.saturating_add(batch.len());
+    if end > full.len() {
+        log::error!("primitive batch is not a subslice of the scene array");
+        return 0..0;
+    }
+    start as u32..end as u32
 }
 
 fn path_sprites(paths: &[Path<ScaledPixels>]) -> Vec<PathSprite> {
@@ -2062,6 +2086,13 @@ mod tests {
         assert_eq!(batch_instance_range(&items, &items[2..4]), 2..4);
         assert_eq!(batch_instance_range(&items, &items[..]), 0..5);
         assert_eq!(batch_instance_range(&items, &items[0..0]), 0..0);
+    }
+
+    #[test]
+    fn batch_range_is_empty_when_the_slice_is_not_from_the_scene_array() {
+        let scene = [1u32, 2, 3, 4, 5];
+        let other = [3u32, 4];
+        assert_eq!(batch_instance_range(&scene, &other), 0..0);
     }
 
     #[test]
