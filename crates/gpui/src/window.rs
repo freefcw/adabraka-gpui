@@ -1820,12 +1820,14 @@ impl Window {
         }
 
         self.focus = Some(handle.id);
-        self.clear_pending_keystrokes();
+        self.pending_input.take();
         self.refresh();
     }
 
     /// Remove focus from all elements within this context's window.
-    pub fn blur(&mut self) {
+    pub fn blur(&mut self, cx: &mut App) {
+        self.clear_pending_keystrokes(cx);
+
         if !self.focus_enabled {
             return;
         }
@@ -1835,8 +1837,8 @@ impl Window {
     }
 
     /// Blur the window and don't allow anything in it to be focused again.
-    pub fn disable_focus(&mut self) {
-        self.blur();
+    pub fn disable_focus(&mut self, cx: &mut App) {
+        self.blur(cx);
         self.focus_enabled = false;
     }
 
@@ -4697,8 +4699,23 @@ impl Window {
         self.pending_input.is_some()
     }
 
-    pub(crate) fn clear_pending_keystrokes(&mut self) {
-        self.pending_input.take();
+    #[cfg(test)]
+    pub(crate) fn pending_input_is_none(&self) -> bool {
+        self.pending_input.is_none()
+    }
+
+    fn defer_pending_input_changed(&self, cx: &mut App) {
+        // Avoid re-entrant entity updates by deferring observer notifications to the end of the
+        // current effect cycle, and only for this window.
+        self.defer(cx, |window, cx| {
+            window.pending_input_changed(cx);
+        });
+    }
+
+    pub(crate) fn clear_pending_keystrokes(&mut self, cx: &mut App) {
+        if self.pending_input.take().is_some() {
+            self.defer_pending_input_changed(cx);
+        }
     }
 
     /// Returns the currently pending input keystrokes that might result in a multi-stroke key binding.
@@ -5343,7 +5360,7 @@ impl Window {
                     self.focus(&handle);
                 }
             }
-            accesskit::Action::Blur => self.blur(),
+            accesskit::Action::Blur => self.blur(cx),
             _ => {
                 log::debug!(
                     "Unhandled a11y action: {:?} on {:?}",
