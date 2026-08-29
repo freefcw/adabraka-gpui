@@ -28,11 +28,14 @@ pub(crate) unsafe fn from_native(appearance: *mut Object) -> WindowAppearance {
 }
 
 pub(crate) fn to_native(appearance: WindowAppearance) -> Option<Retained<NSAppearance>> {
-    let name = match appearance {
-        WindowAppearance::Light => NSAppearanceNameAqua,
-        WindowAppearance::Dark => NSAppearanceNameDarkAqua,
-        WindowAppearance::VibrantLight => NSAppearanceNameVibrantLight,
-        WindowAppearance::VibrantDark => NSAppearanceNameVibrantDark,
+    // `NSAppearanceName*` are extern statics; reading them is unsafe.
+    let name = unsafe {
+        match appearance {
+            WindowAppearance::Light => NSAppearanceNameAqua,
+            WindowAppearance::Dark => NSAppearanceNameDarkAqua,
+            WindowAppearance::VibrantLight => NSAppearanceNameVibrantLight,
+            WindowAppearance::VibrantDark => NSAppearanceNameVibrantDark,
+        }
     };
-    unsafe { NSAppearance::appearanceNamed(name) }
+    NSAppearance::appearanceNamed(name)
 }
