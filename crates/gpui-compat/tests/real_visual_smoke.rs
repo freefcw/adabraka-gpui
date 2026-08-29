@@ -47,6 +47,12 @@ fn run() -> anyhow::Result<()> {
     };
     use std::{cell::RefCell, rc::Rc};
 
+    // xvfb + wgpu can hang in adapter/present, and Linux quit-during-launch used
+    // to block forever in calloop. Fail required visual smoke in seconds, not 45m.
+    // macOS/Windows keep the unbounded run so their assertions are unchanged.
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    let _watchdog = LinuxRealVisualWatchdog::arm(std::time::Duration::from_secs(90));
+
     struct PaintedView;
 
     impl Render for PaintedView {
@@ -238,4 +244,49 @@ fn run_layer_shell_smoke(cx: &mut gpui::RealVisualTestContext) -> anyhow::Result
 #[cfg(not(all(any(target_os = "linux", target_os = "freebsd"), feature = "wayland")))]
 fn run_layer_shell_smoke(_cx: &mut gpui::RealVisualTestContext) -> anyhow::Result<()> {
     Ok(())
+}
+
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+struct LinuxRealVisualWatchdog {
+    cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+impl LinuxRealVisualWatchdog {
+    fn arm(timeout: std::time::Duration) -> Self {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
+        use std::time::Instant;
+
+        let cancel = Arc::new(AtomicBool::new(false));
+        let cancel_for_thread = cancel.clone();
+        std::thread::Builder::new()
+            .name("real-visual-watchdog".into())
+            .spawn(move || {
+                let deadline = Instant::now() + timeout;
+                while Instant::now() < deadline {
+                    if cancel_for_thread.load(Ordering::Relaxed) {
+                        return;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                }
+                if !cancel_for_thread.load(Ordering::Relaxed) {
+                    eprintln!(
+                        "real_visual_smoke timed out after {}s waiting for the Linux renderer (GPUI_REQUIRE_REAL_VISUAL=1)",
+                        timeout.as_secs()
+                    );
+                    std::process::exit(1);
+                }
+            })
+            .expect("start real visual watchdog");
+        Self { cancel }
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+impl Drop for LinuxRealVisualWatchdog {
+    fn drop(&mut self) {
+        self.cancel
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+    }
 }
