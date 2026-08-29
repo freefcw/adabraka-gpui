@@ -42,7 +42,7 @@
     {"commit":"82aef44308540b576e4e51fb379efa71614e5c91","status":"not-applicable","note":"Idle scheduling abstraction currently benefits web delivery"},
     {"commit":"5ccbbbd88f74a6283241db699ea00cb14f7e5a7f","status":"backport","note":"Content-sized grid row builders"},
     {"commit":"dc1e815e47835095748cbb036541992abd9ac826","status":"equivalent","note":"Local macOS printable-key path remains GPUI-first"},
-    {"commit":"a11083f9a79495e9c7ddee0c5782f22d07695c31","status":"deferred","note":"Appearance callback deferral belongs with appearance override"},
+    {"commit":"a11083f9a79495e9c7ddee0c5782f22d07695c31","status":"backport","note":"Defer appearance callbacks to avoid re-entrant App borrows"},
     {"commit":"f52fd9ac44b298c089491d9920daa22964c32cc8","status":"deferred","note":"External file drag product capability"},
     {"commit":"36911f8cabc0f76f611dedf7c760b08a22b6cdf4","status":"not-applicable","note":"Zed documentation wording"},
     {"commit":"a473ea63a8bc199a73a7e44de3e1d9252e3ca895","status":"not-applicable","note":"Zed image-viewer consumer"},
