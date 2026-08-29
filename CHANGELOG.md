@@ -54,6 +54,11 @@ Applications upgrading from 0.8.x should follow the migration mappings in this s
   feature list against a whitelist so accidental additions or removals fail in CI.
 - **Async benchmark feature** — `adabraka-gpui-core` exposes the `bench` feature used to compile
   the production-like async task completion benchmark without enabling it for normal builds.
+- **Taffy 0.13** — the layout engine pin moves from `0.12.2` to `0.13.0`. Public `Styled`
+  builder signatures are unchanged (`flex_grow` / `flex_shrink` remain parameterless helpers
+  that set `1.0`). Post-bump list/text cache fixes and auto-sized window-root fill were already
+  present; this release adds the content-sized grid-column regression coverage that lands with
+  the Zed 0.13 bump.
 
 ## Utility crates 0.6.0 (Unreleased)
 
