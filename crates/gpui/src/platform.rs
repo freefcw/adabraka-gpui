@@ -872,6 +872,8 @@ pub trait PlatformTextSystem: Send + Sync {
     fn add_fonts(&self, fonts: Vec<Cow<'static, [u8]>>) -> Result<()>;
     fn all_font_names(&self) -> Vec<String>;
     fn font_id(&self, descriptor: &Font) -> Result<FontId>;
+    /// Prewarm any system font caches needed to shape text.
+    fn prewarm_fonts(&self, _font_ids: &[FontId]) {}
     fn font_metrics(&self, font_id: FontId) -> FontMetrics;
     fn typographic_bounds(&self, font_id: FontId, glyph_id: GlyphId) -> Result<Bounds<f32>>;
     fn advance(&self, font_id: FontId, glyph_id: GlyphId) -> Result<Size<f32>>;

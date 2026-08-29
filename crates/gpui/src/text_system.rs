@@ -161,6 +161,22 @@ impl TextSystem {
         self.platform_text_system.add_fonts(fonts)
     }
 
+    /// Prewarm any system font caches needed to shape text.
+    ///
+    /// This may be expensive, so callers should generally invoke it on a
+    /// background executor. Missing entries are still populated on demand by
+    /// the normal shaping path.
+    pub fn prewarm_fonts(&self, fonts: &[Font]) {
+        let mut font_ids = SmallVec::<[FontId; 8]>::new();
+        for font in fonts {
+            let font_id = self.resolve_font(font);
+            if !font_ids.contains(&font_id) {
+                font_ids.push(font_id);
+            }
+        }
+        self.platform_text_system.prewarm_fonts(&font_ids);
+    }
+
     /// Returns the platform-recommended glyph dilation level for the given foreground color.
     /// Used to compensate perceived stroke weight on platforms where the OS text renderer
     /// applies font-smoothing differently for light vs dark glyphs.
