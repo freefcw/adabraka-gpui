@@ -220,6 +220,8 @@ Application::new()
             instance_buffer_initial_size: 768 * 1024,
             instance_buffer_max_size: 32 * 1024 * 1024,
         },
+        // Or GpuResourceBudget::new(768, 768 * 1024) / ..GpuResourceBudget::default()
+        // if you only need atlas + initial size (max defaults to 256 MiB).
         element_arena_size: 384 * 1024,  // 384 KiB
     }))
     .run(|cx| {
