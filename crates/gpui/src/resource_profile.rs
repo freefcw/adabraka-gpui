@@ -215,6 +215,11 @@ pub struct TextResourceBudget {
 const MIN_INSTANCE_BUFFER_CAPACITY: u64 = 16;
 
 /// GPU resource budget.
+///
+/// `instance_buffer_max_size` is new in 0.9. Existing struct literals that listed
+/// only atlas and initial-buffer fields will not compile. Use
+/// [`Self::new`] or `..GpuResourceBudget::default()` to keep a two-field update
+/// path; presets already fill the ceiling.
 #[derive(Clone, Debug)]
 pub struct GpuResourceBudget {
     /// Initial width and height (in device pixels) for newly created atlas
@@ -251,10 +256,32 @@ pub struct GpuResourceBudget {
     ///
     /// Values below [`Self::instance_buffer_initial_size`] are raised to that
     /// initial budget.
+    ///
+    /// Callers that only set atlas and initial size should use [`Self::new`]
+    /// instead of a struct literal.
     pub instance_buffer_max_size: usize,
 }
 
+impl Default for GpuResourceBudget {
+    fn default() -> Self {
+        AppResourceProfile::desktop().gpu
+    }
+}
+
 impl GpuResourceBudget {
+    /// Build a budget from atlas and initial instance-buffer sizes.
+    ///
+    /// The growth ceiling defaults to Zed's 256 MiB native cap — the implicit
+    /// limit before this field existed — so two-argument construction stays
+    /// source-compatible. Presets still apply tighter Utility/Minimal caps.
+    pub fn new(atlas_initial_size: u32, instance_buffer_initial_size: usize) -> Self {
+        Self {
+            atlas_initial_size,
+            instance_buffer_initial_size,
+            instance_buffer_max_size: 256 * 1024 * 1024,
+        }
+    }
+
     /// Returns the atlas initial size as a [`Size<DevicePixels>`] for renderer use.
     pub fn atlas_size(&self) -> Size<DevicePixels> {
         let s = self.atlas_initial_size as i32;
@@ -421,6 +448,27 @@ mod tests {
         assert!(minimal.instance_buffer_max_size < utility.instance_buffer_max_size);
         assert!(utility.instance_buffer_max_size < desktop.instance_buffer_max_size);
         assert!(desktop.instance_buffer_initial_size <= desktop.instance_buffer_max_size);
+    }
+
+    #[test]
+    fn new_and_default_keep_a_two_field_construction_path() {
+        let custom = GpuResourceBudget::new(768, 768 * 1024);
+        assert_eq!(custom.atlas_initial_size, 768);
+        assert_eq!(custom.instance_buffer_initial_size, 768 * 1024);
+        assert_eq!(custom.instance_buffer_max_size, 256 * 1024 * 1024);
+
+        let patched = GpuResourceBudget {
+            atlas_initial_size: 512,
+            instance_buffer_initial_size: 512 * 1024,
+            ..GpuResourceBudget::default()
+        };
+        assert_eq!(patched.instance_buffer_max_size, 256 * 1024 * 1024);
+        assert_eq!(
+            GpuResourceBudget::default().instance_buffer_initial_size,
+            AppResourceProfile::desktop()
+                .gpu
+                .instance_buffer_initial_size
+        );
     }
 
     #[test]

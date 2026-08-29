@@ -11,6 +11,10 @@ Applications upgrading from 0.8.x should follow the migration mappings in this s
   keystrokes and keybinding-indicator observers are cleared when a window is
   blurred. Call `window.blur(cx)` / `window.disable_focus(cx)` instead of the
   previous no-argument forms.
+- **`GpuResourceBudget` requires `instance_buffer_max_size`** — struct literals that listed only
+  atlas and initial instance-buffer sizes will not compile. Use `GpuResourceBudget::new(atlas,
+  initial)` or `..GpuResourceBudget::default()` (256 MiB ceiling, the previous implicit Zed cap).
+  `AppProfile::{Desktop,Utility,Minimal}` already fill profile-specific maxima.
 - **`set_keep_alive_without_windows` replaced by `QuitMode`** — the boolean keep-alive flag is
   gone; use `App::set_quit_mode` / `Application::with_quit_mode` with `QuitMode::Explicit`
   (previous `true`) or `QuitMode::LastWindowClosed` (previous `false`) instead. The quit
