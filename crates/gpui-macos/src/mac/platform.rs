@@ -804,6 +804,16 @@ impl Platform for MacPlatform {
         }
     }
 
+    fn set_window_appearance(&self, appearance: Option<WindowAppearance>) {
+        unsafe {
+            let app = shared_application();
+            // `None` clears the override by setting a nil appearance, so the app
+            // falls back to tracking the system-wide light/dark setting.
+            let ns_appearance = appearance.and_then(super::window_appearance::to_native);
+            (&*app.cast::<Objc2NSApplication>()).setAppearance(ns_appearance.as_deref());
+        }
+    }
+
     fn open_url(&self, url: &str) {
         unsafe {
             let url_string = Objc2NSString::from_str(url);

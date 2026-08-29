@@ -45,6 +45,7 @@ pub(crate) struct TestPlatform {
     tray_icon_event_callback: RefCell<Option<Box<dyn FnMut(TrayIconEvent)>>>,
     tray_icon_click_event_callback: RefCell<Option<Box<dyn FnMut(TrayIconClickEvent)>>>,
     pub opened_url: RefCell<Option<String>>,
+    appearance_override: Mutex<Option<WindowAppearance>>,
     pub text_system: Arc<dyn PlatformTextSystem>,
     #[cfg(target_os = "windows")]
     bitmap_factory: std::mem::ManuallyDrop<IWICImagingFactory>,
@@ -186,6 +187,7 @@ impl TestPlatform {
             tray_icon_event_callback: Default::default(),
             tray_icon_click_event_callback: Default::default(),
             opened_url: Default::default(),
+            appearance_override: Mutex::new(None),
             #[cfg(target_os = "windows")]
             bitmap_factory,
             text_system,
@@ -437,7 +439,13 @@ impl Platform for TestPlatform {
     }
 
     fn window_appearance(&self) -> WindowAppearance {
-        WindowAppearance::Light
+        self.appearance_override
+            .lock()
+            .unwrap_or(WindowAppearance::Light)
+    }
+
+    fn set_window_appearance(&self, appearance: Option<WindowAppearance>) {
+        *self.appearance_override.lock() = appearance;
     }
 
     fn set_tray_icon(&self, icon: Option<&[u8]>) {
