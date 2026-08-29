@@ -21,9 +21,9 @@ use crate::{
     Hitbox, HitboxBehavior, HitboxId, InspectorElementId, IntoElement, IsZero, KeyContext,
     KeyDownEvent, KeyUpEvent, KeyboardButton, KeyboardClickEvent, LayoutId, ModifiersChangedEvent,
     MouseButton, MouseClickEvent, MouseDownEvent, MouseExitEvent, MouseMoveEvent, MouseUpEvent,
-    Overflow, ParentElement, PinchEvent, Pixels, Point, Render, ScrollWheelEvent, SharedString,
-    Size, Style, StyleRefinement, Styled, Task, TooltipId, Visibility, Window, WindowControlArea,
-    point, px, size,
+    OngoingScroll, Overflow, ParentElement, PinchEvent, Pixels, Point, Render, ScrollWheelEvent,
+    SharedString, Size, Style, StyleRefinement, Styled, Task, TooltipId, Visibility, Window,
+    WindowControlArea, point, px, size,
 };
 use collections::HashMap;
 use refineable::Refineable;
@@ -1345,6 +1345,14 @@ pub trait StatefulInteractiveElement: InteractiveElement {
         self
     }
 
+    /// Restrict scrolling of this element to the axis of the input gesture.
+    ///
+    /// See [`Style::restrict_scroll_to_axis`](crate::Style::restrict_scroll_to_axis) for details.
+    fn restrict_scroll_to_axis(mut self) -> Self {
+        self.interactivity().base_style.restrict_scroll_to_axis = Some(true);
+        self
+    }
+
     /// Set the space to be reserved for rendering the scrollbar.
     ///
     /// This will only affect the layout of the element when overflow for this element is set to
@@ -1802,6 +1810,7 @@ pub struct Interactivity {
     pub(crate) tracked_scroll_handle: Option<ScrollHandle>,
     pub(crate) scroll_anchor: Option<ScrollAnchor>,
     pub(crate) scroll_offset: Option<Rc<RefCell<Point<Pixels>>>>,
+    pub(crate) ongoing_scroll: Option<Rc<RefCell<OngoingScroll>>>,
     pub(crate) group: Option<SharedString>,
     /// The base style of the element, before any modifications are applied
     /// by focus, active, etc.
@@ -1942,7 +1951,9 @@ impl Interactivity {
                 }
 
                 if let Some(scroll_handle) = self.tracked_scroll_handle.as_ref() {
-                    self.scroll_offset = Some(scroll_handle.0.borrow().offset.clone());
+                    let scroll_handle_state = scroll_handle.0.borrow();
+                    self.scroll_offset = Some(scroll_handle_state.offset.clone());
+                    self.ongoing_scroll = Some(scroll_handle_state.ongoing_scroll.clone());
                 } else if (self.base_style.overflow.x == Some(Overflow::Scroll)
                     || self.base_style.overflow.y == Some(Overflow::Scroll))
                     && let Some(element_state) = element_state.as_mut()
@@ -1951,6 +1962,12 @@ impl Interactivity {
                         element_state
                             .scroll_offset
                             .get_or_insert_with(Rc::default)
+                            .clone(),
+                    );
+                    self.ongoing_scroll = Some(
+                        element_state
+                            .ongoing_scroll
+                            .get_or_insert_with(|| Rc::new(RefCell::new(OngoingScroll::default())))
                             .clone(),
                     );
                 }
@@ -2834,6 +2851,7 @@ impl Interactivity {
         _cx: &mut App,
     ) {
         if let Some(scroll_offset) = self.scroll_offset.clone() {
+            let ongoing_scroll = self.ongoing_scroll.clone();
             let overflow = style.overflow;
             let allow_concurrent_scroll = style.allow_concurrent_scroll;
             let restrict_scroll_to_axis = style.restrict_scroll_to_axis;
@@ -2844,24 +2862,35 @@ impl Interactivity {
                 if phase == DispatchPhase::Bubble && hitbox.should_handle_scroll(window) {
                     let mut scroll_offset = scroll_offset.borrow_mut();
                     let old_scroll_offset = *scroll_offset;
-                    let delta = event.delta.pixel_delta(line_height);
+                    let mut delta = event.delta.pixel_delta(line_height);
 
-                    let mut delta_x = Pixels::ZERO;
-                    if overflow.x == Overflow::Scroll {
-                        if !delta.x.is_zero() {
-                            delta_x = delta.x;
-                        } else if !restrict_scroll_to_axis && overflow.y != Overflow::Scroll {
-                            delta_x = delta.y;
-                        }
+                    if restrict_scroll_to_axis
+                        && event.delta.precise()
+                        && let Some(ongoing_scroll) = &ongoing_scroll
+                    {
+                        ongoing_scroll
+                            .borrow_mut()
+                            .filter(&mut delta, event.touch_phase);
                     }
-                    let mut delta_y = Pixels::ZERO;
-                    if overflow.y == Overflow::Scroll {
-                        if !delta.y.is_zero() {
-                            delta_y = delta.y;
-                        } else if !restrict_scroll_to_axis && overflow.x != Overflow::Scroll {
-                            delta_y = delta.x;
+
+                    let mut delta_x = match overflow.x {
+                        Overflow::Scroll if !delta.x.is_zero() => delta.x,
+                        Overflow::Scroll
+                            if !restrict_scroll_to_axis && overflow.y != Overflow::Scroll =>
+                        {
+                            delta.y
                         }
-                    }
+                        _ => Pixels::ZERO,
+                    };
+                    let mut delta_y = match overflow.y {
+                        Overflow::Scroll if !delta.y.is_zero() => delta.y,
+                        Overflow::Scroll
+                            if !restrict_scroll_to_axis && overflow.x != Overflow::Scroll =>
+                        {
+                            delta.x
+                        }
+                        _ => Pixels::ZERO,
+                    };
                     if !allow_concurrent_scroll && !delta_x.is_zero() && !delta_y.is_zero() {
                         if delta_x.abs() > delta_y.abs() {
                             delta_y = Pixels::ZERO;
@@ -3081,6 +3110,7 @@ pub struct InteractiveElementState {
     pub(crate) hover_state: Option<Rc<RefCell<bool>>>,
     pub(crate) pending_mouse_down: Option<Rc<RefCell<Option<MouseDownEvent>>>>,
     pub(crate) scroll_offset: Option<Rc<RefCell<Point<Pixels>>>>,
+    ongoing_scroll: Option<Rc<RefCell<OngoingScroll>>>,
     pub(crate) active_tooltip: Option<Rc<RefCell<Option<ActiveTooltip>>>>,
     pub(crate) prev_bounds: Option<Bounds<Pixels>>,
 }
@@ -3596,6 +3626,7 @@ impl ScrollAnchor {
 #[derive(Default, Debug)]
 struct ScrollHandleState {
     offset: Rc<RefCell<Point<Pixels>>>,
+    ongoing_scroll: Rc<RefCell<OngoingScroll>>,
     bounds: Bounds<Pixels>,
     max_offset: Size<Pixels>,
     child_bounds: Vec<Bounds<Pixels>>,
@@ -3810,7 +3841,7 @@ mod tests {
     use super::*;
     use crate::{
         AnyWindowHandle, AppContext as _, Context, InputEvent as _, MouseButton, Render,
-        TestAppContext, fallback_prompt_renderer, hsla, point,
+        ScrollDelta, ScrollWheelEvent, TestAppContext, fallback_prompt_renderer, hsla, point, size,
     };
     use std::{
         cell::{Cell, RefCell},
@@ -4131,5 +4162,149 @@ mod tests {
         assert_eq!(bounds("cell-1").size.width, px(200.));
         assert_eq!(bounds("cell-2").origin.x, px(300.));
         assert_eq!(bounds("cell-2").size.width, px(50.));
+    }
+
+    #[test]
+    fn restrict_scroll_to_axis_sets_style_flag() {
+        let mut element = div().id("axis-lock").restrict_scroll_to_axis();
+        assert_eq!(
+            element
+                .element
+                .interactivity
+                .base_style
+                .restrict_scroll_to_axis,
+            Some(true)
+        );
+    }
+
+    struct AxisLockedScrollView {
+        handle: ScrollHandle,
+    }
+
+    impl Render for AxisLockedScrollView {
+        fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .id("axis-lock-scroller")
+                .size_full()
+                .overflow_scroll()
+                .restrict_scroll_to_axis()
+                .track_scroll(&self.handle)
+                .child(div().size(px(2000.)))
+        }
+    }
+
+    #[gpui::test]
+    fn restrict_scroll_to_axis_locks_precise_gestures_to_start_axis(cx: &mut TestAppContext) {
+        let handle = ScrollHandle::new();
+        let (_, cx) = cx.add_window_view({
+            let handle = handle.clone();
+            move |_, _| AxisLockedScrollView { handle }
+        });
+        cx.simulate_resize(size(px(200.), px(200.)));
+
+        cx.update(|window, cx| {
+            window.dispatch_event(
+                ScrollWheelEvent {
+                    position: point(px(50.), px(50.)),
+                    delta: ScrollDelta::Pixels(point(px(-20.), px(-4.))),
+                    touch_phase: crate::TouchPhase::Started,
+                    ..Default::default()
+                }
+                .to_platform_input(),
+                cx,
+            );
+        });
+        cx.run_until_parked();
+        let after_start = handle.offset();
+        assert!(after_start.x < px(0.), "horizontal start should scroll x");
+        assert_eq!(
+            after_start.y,
+            px(0.),
+            "sticky start axis should drop the weaker vertical component"
+        );
+
+        cx.update(|window, cx| {
+            window.dispatch_event(
+                ScrollWheelEvent {
+                    position: point(px(50.), px(50.)),
+                    delta: ScrollDelta::Pixels(point(px(-3.), px(-2.))),
+                    touch_phase: crate::TouchPhase::Moved,
+                    ..Default::default()
+                }
+                .to_platform_input(),
+                cx,
+            );
+        });
+        cx.run_until_parked();
+        let after_continue = handle.offset();
+        assert!(after_continue.x < after_start.x);
+        assert_eq!(after_continue.y, px(0.));
+
+        cx.update(|window, cx| {
+            window.dispatch_event(
+                ScrollWheelEvent {
+                    position: point(px(50.), px(50.)),
+                    delta: ScrollDelta::Pixels(point(px(-2.), px(-20.))),
+                    touch_phase: crate::TouchPhase::Moved,
+                    ..Default::default()
+                }
+                .to_platform_input(),
+                cx,
+            );
+        });
+        cx.run_until_parked();
+        let after_unlock = handle.offset();
+        assert!(
+            after_unlock.y < px(0.),
+            "a strong perpendicular delta should break the axis lock"
+        );
+    }
+
+    #[gpui::test]
+    fn restrict_scroll_to_axis_style_flag_still_blocks_axis_remap(cx: &mut TestAppContext) {
+        let handle = ScrollHandle::new();
+        struct VerticalOnly {
+            handle: ScrollHandle,
+        }
+        impl Render for VerticalOnly {
+            fn render(
+                &mut self,
+                _window: &mut Window,
+                _cx: &mut Context<Self>,
+            ) -> impl IntoElement {
+                let mut scroller = div()
+                    .id("vertical-only")
+                    .size_full()
+                    .overflow_y_scroll()
+                    .track_scroll(&self.handle)
+                    .child(div().h(px(2000.)).w_full());
+                scroller.style().restrict_scroll_to_axis = Some(true);
+                scroller
+            }
+        }
+
+        let (_, cx) = cx.add_window_view({
+            let handle = handle.clone();
+            move |_, _| VerticalOnly { handle }
+        });
+        cx.simulate_resize(size(px(200.), px(200.)));
+
+        cx.update(|window, cx| {
+            window.dispatch_event(
+                ScrollWheelEvent {
+                    position: point(px(50.), px(50.)),
+                    delta: ScrollDelta::Pixels(point(px(-20.), px(0.))),
+                    ..Default::default()
+                }
+                .to_platform_input(),
+                cx,
+            );
+        });
+        cx.run_until_parked();
+        assert_eq!(
+            handle.offset(),
+            point(px(0.), px(0.)),
+            "existing restrict_scroll_to_axis callers must not have horizontal input remapped onto a vertical-only scroller"
+        );
     }
 }
