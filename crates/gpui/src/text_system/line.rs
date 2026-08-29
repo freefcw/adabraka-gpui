@@ -140,6 +140,64 @@ impl ShapedLine {
     }
 }
 
+impl LineLayout {
+    /// Paint this layout to the window, using the given decoration runs to color
+    /// glyphs and draw underlines and strikethroughs.
+    ///
+    /// This is a lower-level alternative to [`ShapedLine::paint`] for callers that
+    /// hold a bare layout and track decorations themselves.
+    pub fn paint(
+        &self,
+        origin: Point<Pixels>,
+        line_height: Pixels,
+        align: TextAlign,
+        align_width: Option<Pixels>,
+        decoration_runs: &[DecorationRun],
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Result<()> {
+        paint_line(
+            origin,
+            self,
+            line_height,
+            align,
+            align_width,
+            decoration_runs,
+            &[],
+            window,
+            cx,
+        )
+    }
+
+    /// Paint the background of this layout to the window, using the given
+    /// decoration runs to determine background colors.
+    ///
+    /// This is a lower-level alternative to [`ShapedLine::paint_background`] for
+    /// callers that hold a bare layout and track decorations themselves.
+    pub fn paint_background(
+        &self,
+        origin: Point<Pixels>,
+        line_height: Pixels,
+        align: TextAlign,
+        align_width: Option<Pixels>,
+        decoration_runs: &[DecorationRun],
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Result<()> {
+        paint_line_background(
+            origin,
+            self,
+            line_height,
+            align,
+            align_width,
+            decoration_runs,
+            &[],
+            window,
+            cx,
+        )
+    }
+}
+
 /// A line of text that has been shaped, decorated, and wrapped by the text layout system.
 #[derive(Clone, Default, Debug, Deref, DerefMut)]
 pub struct WrappedLine {
