@@ -1786,6 +1786,15 @@ impl App {
                 }
 
                 if self.pending_effects.is_empty() {
+                    for window in self.windows.values().filter_map(|window| window.as_ref()) {
+                        if window.invalidator.is_dirty()
+                            || window.needs_present.get()
+                            || !window.next_frame_callbacks.borrow().is_empty()
+                        {
+                            window.platform_window.schedule_frame();
+                        }
+                    }
+
                     break;
                 }
             }
@@ -2970,16 +2979,47 @@ impl<'a, T> Drop for GpuiBorrow<'a, T> {
 
 #[cfg(test)]
 mod test {
-    use std::{cell::RefCell, rc::Rc, sync::Arc};
+    use std::{
+        cell::{Cell, RefCell},
+        rc::Rc,
+        sync::Arc,
+    };
 
     use rand::{SeedableRng, rngs::StdRng};
 
     use super::{Application, ApplicationHandle, NullHttpClient};
     use crate::{
-        AppContext, AppResourceProfile, BackgroundExecutor, ForegroundExecutor, Platform, QuitMode,
-        TestAppContext, TestDispatcher, TestPlatform, TrayIconClickEvent, TrayIconEvent,
-        TrayIconRenderingMode, WindowAppearance, point, px,
+        AppContext, AppResourceProfile, BackgroundExecutor, Context, Empty, ForegroundExecutor,
+        IntoElement, Platform, QuitMode, Render, TestAppContext, TestDispatcher, TestPlatform,
+        TrayIconClickEvent, TrayIconEvent, TrayIconRenderingMode, Window, WindowAppearance, point,
+        px,
     };
+
+    struct RenderCounter(Rc<Cell<usize>>);
+
+    impl Render for RenderCounter {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            self.0.set(self.0.get() + 1);
+            Empty
+        }
+    }
+
+    #[crate::test]
+    fn async_app_refresh_flushes_refresh_effect(cx: &mut TestAppContext) {
+        let render_count = Rc::new(Cell::new(0));
+
+        let _window = cx.add_window({
+            let render_count = render_count.clone();
+            move |_, _| RenderCounter(render_count)
+        });
+
+        cx.run_until_parked();
+        let render_count_before_refresh = render_count.get();
+
+        cx.to_async().refresh().unwrap();
+
+        assert_eq!(render_count.get(), render_count_before_refresh + 1);
+    }
 
     #[test]
     fn test_with_platform_uses_injected_platform() {
