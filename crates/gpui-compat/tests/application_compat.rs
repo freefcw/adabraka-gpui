@@ -20,7 +20,11 @@ fn compile_application_surface(
         .with_quit_mode(QuitMode::Explicit);
 
     application.on_open_urls(|_| {});
-    application.on_reopen(|_: &mut App| {});
+    application.on_reopen(|cx: &mut App| {
+        cx.set_window_appearance(Some(gpui::WindowAppearance::Dark));
+        let _ = cx.window_appearance();
+        cx.set_window_appearance(None);
+    });
     let _ = application.background_executor();
     let _ = application.foreground_executor();
     let _ = application.text_system();

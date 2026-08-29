@@ -67,6 +67,7 @@ pub(crate) struct WindowsPlatformState {
     /// Shared with every window to serialize draws across the UI thread.
     draw_coordinator: Rc<DrawCoordinator>,
     atlas_initial_size: crate::Size<DevicePixels>,
+    appearance_override: Option<WindowAppearance>,
 }
 
 #[derive(Default)]
@@ -108,6 +109,7 @@ impl WindowsPlatformState {
             flashing_hwnd: None,
             draw_coordinator: Rc::new(DrawCoordinator::new()),
             atlas_initial_size: crate::AppResourceProfile::default().gpu.atlas_size(),
+            appearance_override: None,
         }
     }
 }
@@ -458,7 +460,15 @@ impl Platform for WindowsPlatform {
     }
 
     fn window_appearance(&self) -> WindowAppearance {
-        system_appearance().log_err().unwrap_or_default()
+        self.inner
+            .state
+            .borrow()
+            .appearance_override
+            .unwrap_or_else(|| system_appearance().log_err().unwrap_or_default())
+    }
+
+    fn set_window_appearance(&self, appearance: Option<WindowAppearance>) {
+        self.inner.state.borrow_mut().appearance_override = appearance;
     }
 
     fn open_url(&self, url: &str) {

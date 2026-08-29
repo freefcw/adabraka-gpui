@@ -258,6 +258,7 @@ pub(crate) struct LinuxCommon {
     pub(crate) foreground_executor: ForegroundExecutor,
     pub(crate) text_system: Arc<dyn PlatformTextSystem>,
     pub(crate) appearance: WindowAppearance,
+    pub(crate) appearance_override: Option<WindowAppearance>,
     pub(crate) auto_hide_scrollbars: bool,
     pub(crate) callbacks: PlatformHandlers,
     pub(crate) signal: LoopSignal,
@@ -292,6 +293,7 @@ impl LinuxCommon {
             foreground_executor: ForegroundExecutor::new(dispatcher),
             text_system,
             appearance: WindowAppearance::Light,
+            appearance_override: None,
             auto_hide_scrollbars: false,
             callbacks,
             signal,
@@ -852,7 +854,11 @@ impl<P: LinuxClient + 'static> Platform for LinuxPlatform<P> {
     }
 
     fn window_appearance(&self) -> WindowAppearance {
-        self.with_common(|common| common.appearance)
+        self.with_common(|common| common.appearance_override.unwrap_or(common.appearance))
+    }
+
+    fn set_window_appearance(&self, appearance: Option<WindowAppearance>) {
+        self.with_common(|common| common.appearance_override = appearance);
     }
 
     fn register_url_scheme(&self, _: &str) -> Task<anyhow::Result<()>> {

@@ -1,5 +1,6 @@
 use crate::WindowAppearance;
 use objc::runtime::Object;
+use objc2::rc::Retained;
 use objc2_app_kit::{
     NSAppearance, NSAppearanceNameAqua, NSAppearanceNameDarkAqua, NSAppearanceNameVibrantDark,
     NSAppearanceNameVibrantLight,
@@ -24,4 +25,14 @@ pub(crate) unsafe fn from_native(appearance: *mut Object) -> WindowAppearance {
             WindowAppearance::Light
         }
     }
+}
+
+pub(crate) fn to_native(appearance: WindowAppearance) -> Option<Retained<NSAppearance>> {
+    let name = match appearance {
+        WindowAppearance::Light => NSAppearanceNameAqua,
+        WindowAppearance::Dark => NSAppearanceNameDarkAqua,
+        WindowAppearance::VibrantLight => NSAppearanceNameVibrantLight,
+        WindowAppearance::VibrantDark => NSAppearanceNameVibrantDark,
+    };
+    unsafe { NSAppearance::appearanceNamed(name) }
 }

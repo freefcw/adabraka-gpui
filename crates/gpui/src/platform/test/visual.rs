@@ -130,6 +130,10 @@ impl Platform for VisualTestPlatform {
         self.platform.window_appearance()
     }
 
+    fn set_window_appearance(&self, appearance: Option<WindowAppearance>) {
+        self.platform.set_window_appearance(appearance);
+    }
+
     fn open_url(&self, url: &str) {
         self.platform.open_url(url);
     }

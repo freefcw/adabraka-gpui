@@ -35,7 +35,7 @@
     {"commit":"c214057e086517920b214800725c5d16294ddf0d","status":"backport","note":"Linux Cosmic Text mixed-direction paragraphs"},
     {"commit":"63b52a7ee354741a7485e8a20ab087a485fcb8a1","status":"deferred","note":"Const color API ergonomics"},
     {"commit":"c97b7c0ea41acf56e9726964eca10c2078e921b0","status":"not-applicable","note":"GPUI web backend"},
-    {"commit":"8e4e5a39eed932d943cb7a3e7078885b75d1ea54","status":"deferred","note":"Application appearance override requires core/platform contract"},
+    {"commit":"8e4e5a39eed932d943cb7a3e7078885b75d1ea54","status":"backport","note":"Application appearance override through core/platform and desktop backends"},
     {"commit":"b2131e9df8aa16d7d287f0b098df3088310d00d6","status":"not-applicable","note":"GPUI web worker fetch"},
     {"commit":"1102219f812293a09da88eff1df95fbcedde6b09","status":"not-applicable","note":"Zed markdown preview navigation"},
     {"commit":"06b6160d46ae8a9074cd367ed64f742b47beca64","status":"backport","note":"Remove private pre-macOS 12 blur APIs"},
