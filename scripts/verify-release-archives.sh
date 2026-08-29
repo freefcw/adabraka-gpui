@@ -59,7 +59,7 @@ done
 echo "packaging ${#RELEASE_PACKAGES[@]} workspace release crates together"
 cargo package --locked --allow-dirty --no-verify "${package_args[@]}" >/dev/null
 
-while IFS=$'\t' read -r package version manifest_path; do
+while IFS=$'\t' read -r package version _manifest_path; do
     archive="$REPO_ROOT/target/package/$package-$version.crate"
     if [[ ! -f "$archive" ]]; then
         echo "missing archive: $archive" >&2
