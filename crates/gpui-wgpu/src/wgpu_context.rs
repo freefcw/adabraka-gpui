@@ -178,9 +178,22 @@ impl WgpuContext {
     }
 
     #[cfg(not(target_family = "wasm"))]
+    fn instance_backends() -> wgpu::Backends {
+        match std::env::var("WGPU_BACKEND")
+            .ok()
+            .map(|value| value.to_ascii_lowercase())
+            .as_deref()
+        {
+            Some("gl" | "gles" | "opengl" | "opengles") => wgpu::Backends::GL,
+            Some("vulkan" | "vk") => wgpu::Backends::VULKAN,
+            _ => wgpu::Backends::VULKAN | wgpu::Backends::GL,
+        }
+    }
+
+    #[cfg(not(target_family = "wasm"))]
     pub fn instance(display: Box<dyn wgpu::wgt::WgpuHasDisplayHandle>) -> wgpu::Instance {
         wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::VULKAN | wgpu::Backends::GL,
+            backends: Self::instance_backends(),
             flags: wgpu::InstanceFlags::default(),
             backend_options: wgpu::BackendOptions::default(),
             memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),

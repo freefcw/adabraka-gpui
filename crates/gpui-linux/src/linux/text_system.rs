@@ -929,19 +929,17 @@ mod tests {
             },
         ];
 
-        assert_eq!(
-            clip_font_runs(&runs, 2..6),
-            smallvec::smallvec![
-                FontRun {
-                    len: 1,
-                    font_id: FontId(1),
-                },
-                FontRun {
-                    len: 3,
-                    font_id: FontId(2),
-                },
-            ]
-        );
+        let expected: SmallVec<[FontRun; 4]> = smallvec::smallvec![
+            FontRun {
+                len: 1,
+                font_id: FontId(1),
+            },
+            FontRun {
+                len: 3,
+                font_id: FontId(2),
+            },
+        ];
+        assert_eq!(clip_font_runs(&runs, 2..6), expected);
     }
 
     #[test]

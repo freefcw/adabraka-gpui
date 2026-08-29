@@ -1,5 +1,5 @@
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     collections::HashMap,
     env,
     path::{Path, PathBuf},
@@ -261,6 +261,7 @@ pub(crate) struct LinuxCommon {
     pub(crate) auto_hide_scrollbars: bool,
     pub(crate) callbacks: PlatformHandlers,
     pub(crate) signal: LoopSignal,
+    pub(crate) quit_requested: Cell<bool>,
     pub(crate) menus: Vec<OwnedMenu>,
     pub(crate) power_save_blockers: HashMap<u32, PowerSaveHandle>,
     pub(crate) next_blocker_id: u32,
@@ -294,6 +295,7 @@ impl LinuxCommon {
             auto_hide_scrollbars: false,
             callbacks,
             signal,
+            quit_requested: Cell::new(false),
             menus: Vec::new(),
             power_save_blockers: HashMap::new(),
             next_blocker_id: 0,
@@ -435,7 +437,14 @@ impl<P: LinuxClient + 'static> Platform for LinuxPlatform<P> {
     fn run(&self, on_finish_launching: Box<dyn FnOnce()>) {
         on_finish_launching();
 
-        LinuxClient::run(&self.inner);
+        // calloop's EventLoop::run() clears LoopSignal::stop on entry, then
+        // dispatch(None) waits forever. Visual smoke (and other tests) quit
+        // during finish-launching; entering the X11/Wayland loop after that
+        // hangs until an external timeout.
+        let already_quit = self.with_common(|common| common.quit_requested.get());
+        if !already_quit {
+            LinuxClient::run(&self.inner);
+        }
 
         let quit = self.with_common(|common| common.callbacks.quit.take());
         if let Some(mut fun) = quit {
@@ -444,7 +453,11 @@ impl<P: LinuxClient + 'static> Platform for LinuxPlatform<P> {
     }
 
     fn quit(&self) {
-        self.with_common(|common| common.signal.stop());
+        self.with_common(|common| {
+            common.quit_requested.set(true);
+            common.signal.stop();
+            common.signal.wakeup();
+        });
     }
 
     fn compositor_name(&self) -> &'static str {

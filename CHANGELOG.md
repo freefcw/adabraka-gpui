@@ -7,6 +7,10 @@ Applications upgrading from 0.8.x should follow the migration mappings in this s
 
 ### Breaking changes
 
+- **`Window::blur` and `Window::disable_focus` now take `&mut App`** — pending
+  keystrokes and keybinding-indicator observers are cleared when a window is
+  blurred. Call `window.blur(cx)` / `window.disable_focus(cx)` instead of the
+  previous no-argument forms.
 - **`set_keep_alive_without_windows` replaced by `QuitMode`** — the boolean keep-alive flag is
   gone; use `App::set_quit_mode` / `Application::with_quit_mode` with `QuitMode::Explicit`
   (previous `true`) or `QuitMode::LastWindowClosed` (previous `false`) instead. The quit
