@@ -779,14 +779,7 @@ impl X11WindowState {
                     transparent: false,
                     preferred_present_mode: None,
                 };
-                WgpuRenderer::new(
-                    gpu_context,
-                    &raw_window,
-                    config,
-                    None,
-                    gpu_resource_budget.atlas_size(),
-                    gpu_resource_budget.instance_buffer_initial_size,
-                )?
+                WgpuRenderer::new(gpu_context, &raw_window, config, None, gpu_resource_budget)?
             };
 
             let display = Rc::new(X11Display::new(xcb, scale_factor, x_screen_index)?);

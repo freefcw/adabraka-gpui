@@ -208,14 +208,7 @@ impl WaylandWindowState {
                 // Prefer Mailbox on Wayland to avoid blocking the event loop on FIFO stalls.
                 preferred_present_mode: Some(wgpu::PresentMode::Mailbox),
             };
-            WgpuRenderer::new(
-                gpu_context,
-                &raw_window,
-                config,
-                None,
-                gpu_resource_budget.atlas_size(),
-                gpu_resource_budget.instance_buffer_initial_size,
-            )?
+            WgpuRenderer::new(gpu_context, &raw_window, config, None, gpu_resource_budget)?
         };
 
         Ok(Self {
