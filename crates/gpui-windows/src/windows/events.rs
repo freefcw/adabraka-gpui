@@ -27,6 +27,7 @@ pub(crate) const WM_GPUI_FORCE_UPDATE_WINDOW: u32 = WM_USER + 5;
 pub(crate) const WM_GPUI_KEYBOARD_LAYOUT_CHANGED: u32 = WM_USER + 6;
 pub(crate) const WM_GPUI_GPU_DEVICE_LOST: u32 = WM_USER + 7;
 pub(crate) const WM_GPUI_TRAY_ICON: u32 = WM_USER + 8;
+pub(crate) const WM_GPUI_END_SESSION: u32 = WM_USER + 9;
 pub(crate) const WM_GPUI_NETWORK_CHANGE: u32 = WM_USER + 10;
 pub(crate) const WM_GPUI_MEDIA_KEY: u32 = WM_USER + 11;
 pub(crate) const WM_GPUI_CONTEXT_MENU_ACTION: u32 = WM_USER + 12;
@@ -108,6 +109,8 @@ impl WindowsWindowInner {
             WM_PAINT => self.handle_paint_msg(handle),
             WM_CLOSE => self.handle_close_msg(),
             WM_DESTROY => self.handle_destroy_msg(handle),
+            WM_QUERYENDSESSION => Some(1),
+            WM_ENDSESSION => self.handle_end_session_msg(wparam),
             WM_MOUSEMOVE => self.handle_mouse_move_msg(handle, lparam, wparam),
             WM_MOUSELEAVE | WM_NCMOUSELEAVE => self.handle_mouse_leave_msg(),
             WM_NCMOUSEMOVE => self.handle_nc_mouse_move_msg(handle, lparam),
@@ -318,6 +321,20 @@ impl WindowsWindowInner {
         let should_close = callback();
         self.state.borrow_mut().callbacks.should_close = Some(callback);
         if should_close { None } else { Some(0) }
+    }
+
+    fn handle_end_session_msg(&self, wparam: WPARAM) -> Option<isize> {
+        if wparam.0 != 0 {
+            unsafe {
+                SendMessageW(
+                    self.platform_window_handle,
+                    WM_GPUI_END_SESSION,
+                    Some(WPARAM(self.validation_number)),
+                    None,
+                );
+            }
+        }
+        Some(0)
     }
 
     fn handle_destroy_msg(&self, handle: HWND) -> Option<isize> {
@@ -1755,7 +1772,18 @@ fn notify_frame_changed(handle: HWND) {
 
 #[cfg(test)]
 mod tests {
-    use super::DrawCoordinator;
+    use super::{
+        DrawCoordinator, WM_GPUI_END_SESSION, WM_GPUI_GPU_DEVICE_LOST, WM_GPUI_NETWORK_CHANGE,
+        WM_GPUI_TRAY_ICON,
+    };
+
+    #[test]
+    fn end_session_message_occupies_the_unused_user_slot() {
+        assert_eq!(WM_GPUI_END_SESSION, WM_GPUI_TRAY_ICON + 1);
+        assert_eq!(WM_GPUI_END_SESSION, WM_GPUI_NETWORK_CHANGE - 1);
+        assert_ne!(WM_GPUI_END_SESSION, WM_GPUI_GPU_DEVICE_LOST);
+        assert_ne!(WM_GPUI_END_SESSION, WM_GPUI_TRAY_ICON);
+    }
 
     #[test]
     fn draw_coordinator_defers_reentrant_draws() {
