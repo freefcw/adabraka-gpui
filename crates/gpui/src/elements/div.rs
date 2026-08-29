@@ -4126,7 +4126,10 @@ mod tests {
         };
 
         assert_eq!(bounds("cell-0").origin.x, px(0.));
+        assert_eq!(bounds("cell-0").size.width, px(100.));
         assert_eq!(bounds("cell-1").origin.x, px(100.));
+        assert_eq!(bounds("cell-1").size.width, px(200.));
         assert_eq!(bounds("cell-2").origin.x, px(300.));
+        assert_eq!(bounds("cell-2").size.width, px(50.));
     }
 }
