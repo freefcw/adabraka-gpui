@@ -1059,7 +1059,7 @@ pub struct Window {
     next_hitbox_id: HitboxId,
     pub(crate) next_tooltip_id: TooltipId,
     pub(crate) tooltip_bounds: Option<TooltipBounds>,
-    next_frame_callbacks: Rc<RefCell<Vec<FrameCallback>>>,
+    pub(crate) next_frame_callbacks: Rc<RefCell<Vec<FrameCallback>>>,
     pub(crate) dirty_views: FxHashSet<EntityId>,
     focus_listeners: SubscriberSet<(), AnyWindowFocusListener>,
     pub(crate) focus_lost_listeners: SubscriberSet<(), AnyObserver>,
@@ -1382,11 +1382,11 @@ impl Window {
                 // unwinds. Remember force_render so the deferred frame still
                 // bypasses the view cache.
                 //
-                // Returning here skips `complete_frame`, which on Wayland would
-                // stall the window's frame callbacks (no `surface.commit()`) —
-                // but calling it would hit the App borrow panic above, and this
-                // branch is unreachable there in practice: only Windows pumps
-                // platform events (and thus requests frames) mid-draw.
+                // Returning here skips a demand-driven `schedule_frame` retry.
+                // Calling into App would panic on its already-mutable borrow,
+                // and this branch is unreachable on Wayland in practice: only
+                // Windows pumps platform events (and thus requests frames)
+                // mid-draw.
                 if draw_in_progress() {
                     log::debug!("deferring re-entrant window draw request");
                     deferred_force_render |= request_frame_options.force_render;
@@ -1425,12 +1425,11 @@ impl Window {
                         if now.duration_since(last_frame) < min_interval {
                             // Don't lose a pending forced render to throttling.
                             deferred_force_render |= force_render;
-                            // Must still complete the frame on platforms that require it.
-                            // On Wayland, `surface.frame()` was already called to request the
-                            // next frame callback, so we must call `surface.commit()` (via
-                            // `complete_frame`) or the compositor won't send another callback.
+                            // Deferred by throttling: ask demand-driven platforms to retry.
                             handle
-                                .update(&mut cx, |_, window, _| window.complete_frame())
+                                .update(&mut cx, |_, window, _| {
+                                    window.platform_window.schedule_frame();
+                                })
                                 .log_err();
                             return;
                         }
@@ -1477,7 +1476,11 @@ impl Window {
 
                 handle
                     .update(&mut cx, |_, window, _| {
-                        window.complete_frame();
+                        if window.invalidator.is_dirty()
+                            || !window.next_frame_callbacks.borrow().is_empty()
+                        {
+                            window.platform_window.schedule_frame();
+                        }
                     })
                     .log_err();
             }
@@ -2096,6 +2099,7 @@ impl Window {
     /// Schedule the given closure to be run directly after the current frame is rendered.
     pub fn on_next_frame(&self, callback: impl FnOnce(&mut Window, &mut App) + 'static) {
         RefCell::borrow_mut(&self.next_frame_callbacks).push(Box::new(callback));
+        self.platform_window.schedule_frame();
     }
 
     /// Schedule a frame to be drawn on the next animation frame.
@@ -2451,10 +2455,6 @@ impl Window {
     /// The current state of the keyboard's capslock
     pub fn capslock(&self) -> Capslock {
         self.capslock
-    }
-
-    fn complete_frame(&self) {
-        self.platform_window.completed_frame();
     }
 
     /// Produces a new frame and assigns it to `rendered_frame`. To actually show

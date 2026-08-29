@@ -757,7 +757,7 @@ pub trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
     fn render_to_image(&self, _scene: &Scene) -> anyhow::Result<image::RgbaImage> {
         anyhow::bail!("render_to_image not implemented for this platform")
     }
-    fn completed_frame(&self) {}
+    fn schedule_frame(&self) {}
     fn sprite_atlas(&self) -> Arc<dyn PlatformAtlas>;
 
     // macOS specific methods
