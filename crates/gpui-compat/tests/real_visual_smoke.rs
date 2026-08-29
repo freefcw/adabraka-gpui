@@ -254,8 +254,8 @@ struct LinuxRealVisualWatchdog {
 #[cfg(any(target_os = "linux", target_os = "freebsd"))]
 impl LinuxRealVisualWatchdog {
     fn arm(timeout: std::time::Duration) -> Self {
-        use std::sync::atomic::{AtomicBool, Ordering};
         use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, Ordering};
         use std::time::Instant;
 
         let cancel = Arc::new(AtomicBool::new(false));
