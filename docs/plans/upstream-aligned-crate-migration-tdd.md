@@ -57,5 +57,12 @@ The public `screen-capture` feature builds for the Windows target with the same 
 - **Command after refactor**: `cargo test -p adabraka-gpui-core`.
 - **Observed result**: 195 tests passed.
 
+### Superseded
+A workspace `[patch.crates-io]` entry never reaches a published manifest, so the repair held only
+inside this checkout. It is replaced by a `windows-capture = ">=1.3.6, <1.5"` requirement on
+`adabraka-gpui-core`'s `screen-capture` feature, which travels with the published crate. The cost is
+Zed's unpublished `Monitor::name` display detection fix, for which `zed-scap` already falls back to
+the GDI device name.
+
 ### Next Behavior
 Native Windows screen-capture and desktop-integration smoke still require a Windows host.
