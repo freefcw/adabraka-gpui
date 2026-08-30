@@ -1,5 +1,7 @@
 # Changelog
 
+## Unreleased
+
 ## 0.9.0 (2026-08-30)
 
 The 0.9 development line intentionally contains the public API and Cargo feature changes below.
