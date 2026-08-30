@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.9.0 (Unreleased)
+## 0.9.0 (2026-08-30)
 
 The 0.9 development line intentionally contains the public API and Cargo feature changes below.
 Applications upgrading from 0.8.x should follow the migration mappings in this section.
@@ -58,6 +58,19 @@ Applications upgrading from 0.8.x should follow the migration mappings in this s
   throttle). The default remains ~30 FPS.
 - **`LineLayout::{split_at, paint, paint_background}`** — callers can hold `Arc<LineLayout>`
   and their own decoration runs without allocating a large `ShapedLine`.
+- **`container_query` element** — `container_query(|size, window, cx| ...)` builds a subtree from
+  the size the element was assigned during layout. It fills its parent by default and is sized
+  only by its style and the space the parent offers, so the contents cannot influence it.
+- **Sticky-axis scrolling** — `restrict_scroll_to_axis` now locks a precise trackpad gesture to the
+  axis it starts on and unlocks only when the opposite axis is strong enough. Line-based wheel
+  remapping and `allow_concurrent_scroll` keep their previous semantics.
+- **`App::set_window_appearance`** — force light or dark independently of the OS setting; `None`
+  clears the override and follows the system again. macOS sets `NSApplication.appearance` so the
+  native chrome matches; other platforms store the override and report it from
+  `App::window_appearance`.
+- **Wrapping keeps closing punctuation** — UAX #14 LB13 closing marks (`)`, `]`, `}`, quotes, `»`,
+  `…`) count as word characters, so a wrapped line can no longer start with one. URL-glue
+  characters (`/`, `?`, `&`, `=`) are unchanged.
 - **Windows Restart Manager** — `WM_QUERYENDSESSION` / `WM_ENDSESSION` shut the app down
   cleanly so installers can replace binaries. `Platform::on_quit` now reports whether
   shutdown ran synchronously.
@@ -67,6 +80,19 @@ Applications upgrading from 0.8.x should follow the migration mappings in this s
   now receive them through `Platform::configure_gpu_resources` (driven by
   `Application::with_resource_profile`) and supply them to renderers at window creation, so
   `WindowParams` no longer carries renderer resource policy.
+- **Batched wgpu instance uploads** — the Linux wgpu renderer uploads a frame's instances once at
+  frame start instead of per batch, sizing and growing the buffer from `GpuResourceBudget`
+  watermarks so `Minimal` and `Utility` are not pinned to the 256 MiB desktop ceiling. A frame
+  whose instances exceed the profile or device cap now fails instead of presenting an unrecorded
+  swapchain image, and `GpuResourceBudget::new(atlas, initial)` keeps a two-field construction
+  path for callers that do not want to pick a maximum.
+- **Demand-driven Wayland frame loop** — the render loop parks when idle rather than committing
+  empty heartbeat frames, and wakes through `schedule_frame` when a window still needs work.
+  Hidden windows no longer attach buffers or schedule frames, so a refresh cannot remap a hidden
+  XDG or layer-shell surface, and the Linux event loop is skipped entirely when the app has
+  already quit instead of blocking forever in `dispatch`.
+- **Linux font cache prewarming** — `TextSystem::prewarm_fonts` warms the cosmic-text font-match
+  cache for the requested fonts so shaping does not pay that cost on the hot path.
 - **Feature contract checks** — `scripts/verify-features.sh` compiles the public feature
   combinations used by CI and the docs runbooks, and pins every published crate's public
   feature list against a whitelist so accidental additions or removals fail in CI.
@@ -78,7 +104,7 @@ Applications upgrading from 0.8.x should follow the migration mappings in this s
   present; this release adds the content-sized grid-column regression coverage that lands with
   the Zed 0.13 bump.
 
-## Utility crates 0.6.0 (Unreleased)
+## Utility crates 0.6.0 (2026-08-30)
 
 ### Breaking changes
 
