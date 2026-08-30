@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Improvements
+
+- **Every dependency now resolves from crates.io** — `adabraka-gpui-wgpu` depends on the published
+  `wgpu 29.0.4` instead of the `zed-industries/wgpu` `v29` branch, whose only two commits ahead of
+  the upstream `v29` release (the XCB EGL display handle and an examples README edit) both landed
+  in 29.0.4. The root `[patch.crates-io]` override for `windows-capture` is replaced by a
+  `>=1.3.6, <1.5` requirement on `adabraka-gpui-core`'s `screen-capture` feature, which keeps
+  `zed-scap 0.0.8-zed` on the five-argument `Settings::new` for downstream builds too instead of
+  only inside this workspace. Windows capture source titles lose Zed's `Monitor::name` display
+  detection fix, which is not in any published `windows-capture`; `zed-scap` falls back to the GDI
+  device name when `name()` fails.
+
 ## 0.9.0 (2026-08-30)
 
 The 0.9 development line intentionally contains the public API and Cargo feature changes below.
