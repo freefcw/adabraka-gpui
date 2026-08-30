@@ -1,4 +1,4 @@
-# adabraka-gpui Performance Optimization Plan
+# fc-gpui Performance Optimization Plan
 
 Comprehensive audit of the GPUI rendering pipeline, memory allocation patterns, layout engine, and GPU layer. Findings prioritized by impact and implementation complexity.
 

@@ -1,5 +1,5 @@
 [package]
-name = "adabraka-gpui-windows"
+name = "fc-gpui-windows"
 version = "0.9.0"
 edition = "2024"
 authors = ["Adabraka Team"]
@@ -28,11 +28,11 @@ accesskit = { version = "0.24.0", optional = true }
 accesskit_windows = { version = "0.33.1", optional = true }
 anyhow = "1.0.86"
 async-task = "4.7"
-collections = { package = "adabraka_collections", path = "../collections", version = "0.5.1" }
+collections = { package = "fc-gpui-collections", path = "../collections", version = "0.5.1" }
 etagere = "0.2"
 flume = "0.11"
 futures = "0.3"
-gpui = { package = "adabraka-gpui-core", path = "../gpui", version = "0.9.0", default-features = false }
+gpui = { package = "fc-gpui-core", path = "../gpui", version = "0.9.0", default-features = false }
 image = { version = "0.25.1", default-features = false }
 itertools = "0.14.0"
 log = { version = "0.4.16", features = ["kv_unstable_serde", "serde"] }
@@ -42,7 +42,7 @@ rand = "0.9"
 raw-window-handle = "0.6"
 scap = { package = "zed-scap", version = "0.0.8-zed", optional = true, default-features = false }
 smallvec = "1.6"
-util = { package = "adabraka_util", path = "../util", version = "0.6.0" }
+util = { package = "fc-gpui-util", path = "../util", version = "0.6.0" }
 uuid = { version = "1.1.2", features = ["v4", "v5", "v7", "serde"] }
 windows = { version = "0.62", features = ["Foundation_Numerics", "Storage_Search", "Storage_Streams", "UI_ViewManagement", "Wdk_System_SystemServices", "Win32_Globalization", "Win32_Graphics_Direct3D", "Win32_Graphics_Direct3D11", "Win32_Graphics_Direct3D_Fxc", "Win32_Graphics_DirectComposition", "Win32_Graphics_DirectWrite", "Win32_Graphics_DirectManipulation", "Win32_Graphics_Dwm", "Win32_Graphics_Dxgi", "Win32_Graphics_Dxgi_Common", "Win32_Graphics_Gdi", "Win32_Graphics_Imaging", "Win32_Graphics_Hlsl", "Win32_Networking_WinSock", "Win32_Security", "Win32_Security_Credentials", "Win32_Security_Cryptography", "Win32_Storage_FileSystem", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Console", "Win32_System_DataExchange", "Win32_System_Diagnostics_Debug", "Win32_System_IO", "Win32_System_LibraryLoader", "Win32_System_Memory", "Win32_System_Ole", "Win32_System_Performance", "Win32_System_Pipes", "Win32_System_Power", "Win32_System_RemoteDesktop", "Win32_System_SystemInformation", "Win32_System_SystemServices", "Win32_System_Threading", "Win32_System_Variant", "Win32_System_WindowsProgramming", "Win32_System_WinRT", "Win32_UI_Controls", "Win32_UI_HiDpi", "Win32_UI_Input_Ime", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Input_Pointer", "Win32_UI_Shell", "Win32_UI_Shell_Common", "Win32_UI_Shell_PropertiesSystem", "Win32_UI_WindowsAndMessaging", "Win32_Networking_NetworkListManager"] }
 windows-core = "0.62"
@@ -53,7 +53,7 @@ windows-registry = "0.5"
 embed-resource = { version = "3.0", optional = true }
 
 [target.'cfg(target_os = "windows")'.dev-dependencies]
-gpui = { package = "adabraka-gpui-core", path = "../gpui", version = "0.9.0", default-features = false, features = ["test-support"] }
+gpui = { package = "fc-gpui-core", path = "../gpui", version = "0.9.0", default-features = false, features = ["test-support"] }
 
 [lints.clippy]
 dbg_macro = "deny"

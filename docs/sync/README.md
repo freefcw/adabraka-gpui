@@ -26,6 +26,6 @@
 1. 只在完成一轮增量审计后更新 `CURRENT.md` 的上游基线。
 2. 每个 backport 提交记录完整 `Zed-Origin`。
 3. 对未迁移提交明确标记 `equivalent`、`deferred` 或 `not-applicable`。
-4. 核心测试使用 `adabraka-gpui-core`，兼容测试使用 `adabraka-gpui`。
+4. 核心测试使用 `fc-gpui-core`，兼容测试使用 `fc-gpui`。
 5. 使用 `scripts/verify-upstream-sync.sh` 校验分类完整性和 `Zed-Origin` 来源追踪。
 6. 完整闭环运行 `scripts/verify-migration.sh`。

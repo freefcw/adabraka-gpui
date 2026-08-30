@@ -8,18 +8,18 @@
 
 | Zed | Adabraka | 包名 |
 |-----|----------|------|
-| `gpui` | `gpui` | `adabraka-gpui` |
-| `gpui_macros` | `gpui-macros` | `adabraka_gpui_macros` |
-| `collections` | `collections` | `adabraka_collections` |
-| `util` | `util` | `adabraka_util` |
-| `util_macros` | `util_macros` | `adabraka_util_macros` |
-| `refineable` | `refineable` | `adabraka_refineable` |
-| `derive_refineable` | `derive_refineable` | `adabraka_derive_refineable` |
-| `sum_tree` | `sum_tree` | `adabraka_sum_tree` |
-| `semantic_version` | `semantic_version` | `adabraka_semantic_version` |
-| `http_client` | `http_client` | `adabraka_http_client` |
-| `media` | `media` | `adabraka_media` |
-| `perf` | `perf` | `adabraka_perf` |
+| `gpui` | `gpui` | `fc-gpui` |
+| `gpui_macros` | `gpui-macros` | `fc-gpui-macros` |
+| `collections` | `collections` | `fc-gpui-collections` |
+| `util` | `util` | `fc-gpui-util` |
+| `util_macros` | `util_macros` | `fc-gpui-util-macros` |
+| `refineable` | `refineable` | `fc-gpui-refineable` |
+| `derive_refineable` | `derive_refineable` | `fc-gpui-derive-refineable` |
+| `sum_tree` | `sum_tree` | `fc-gpui-sum-tree` |
+| `semantic_version` | `semantic_version` | `fc-gpui-semantic-version` |
+| `http_client` | `http_client` | `fc-gpui-http-client` |
+| `media` | `media` | `fc-gpui-media` |
+| `perf` | `perf` | `fc-gpui-perf` |
 
 ### 文件同步优先级
 
@@ -208,7 +208,7 @@ cd /Users/hejun/work/my/adabraka-gpui
 cargo test --all
 
 # 特定 crate
-cargo test -p adabraka-gpui
+cargo test -p fc-gpui
 
 # 特定平台
 cargo test --features "x11"
@@ -249,7 +249,7 @@ cp /Users/hejun/work/my/zed/crates/gpui/src/scene.rs \
    crates/gpui/src/scene.rs
 
 # 4. 测试
-cargo test -p adabraka-gpui
+cargo test -p fc-gpui
 
 # 5. 提交
 git add .
@@ -278,7 +278,7 @@ cp /Users/hejun/work/my/zed/crates/gpui/src/app.rs \
 diff /tmp/app.rs.adabraka crates/gpui/src/app.rs
 
 # 5. 测试
-cargo test -p adabraka-gpui
+cargo test -p fc-gpui
 
 # 6. 提交
 git add crates/gpui/src/app.rs

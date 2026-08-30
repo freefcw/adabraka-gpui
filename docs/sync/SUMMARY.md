@@ -60,18 +60,18 @@
 
 ### 提取方式
 Adabraka GPUI 是从 crates.io 的 GPUI v0.2.1 开始，提取了以下 12 个 crates：
-1. `gpui` → `adabraka-gpui`
-2. `gpui_macros` → `adabraka_gpui_macros`
-3. `collections` → `adabraka_collections`
-4. `util` → `adabraka_util`
-5. `util_macros` → `adabraka_util_macros`
-6. `refineable` → `adabraka_refineable`
-7. `derive_refineable` → `adabraka_derive_refineable`
-8. `sum_tree` → `adabraka_sum_tree`
-9. `semantic_version` → `adabraka_semantic_version`
-10. `http_client` → `adabraka_http_client`
-11. `media` → `adabraka_media`
-12. `perf` → `adabraka_perf`
+1. `gpui` → `fc-gpui`
+2. `gpui_macros` → `fc-gpui-macros`
+3. `collections` → `fc-gpui-collections`
+4. `util` → `fc-gpui-util`
+5. `util_macros` → `fc-gpui-util-macros`
+6. `refineable` → `fc-gpui-refineable`
+7. `derive_refineable` → `fc-gpui-derive-refineable`
+8. `sum_tree` → `fc-gpui-sum-tree`
+9. `semantic_version` → `fc-gpui-semantic-version`
+10. `http_client` → `fc-gpui-http-client`
+11. `media` → `fc-gpui-media`
+12. `perf` → `fc-gpui-perf`
 
 ### Adabraka 独有功能
 Adabraka GPUI 在 Zed GPUI 基础上新增了 10 大功能：

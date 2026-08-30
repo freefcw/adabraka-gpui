@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly PUBLIC_PACKAGE="adabraka-gpui"
-readonly CORE_PACKAGE="adabraka-gpui-core"
-readonly WGPU_PACKAGE="adabraka-gpui-wgpu"
+readonly PUBLIC_PACKAGE="fc-gpui"
+readonly CORE_PACKAGE="fc-gpui-core"
+readonly WGPU_PACKAGE="fc-gpui-wgpu"
 
 check_compile_baseline() {
     cargo check --locked -p "$PUBLIC_PACKAGE"

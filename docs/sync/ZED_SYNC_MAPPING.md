@@ -9,7 +9,7 @@
 - **Zed 源仓库**: `/Users/hejun/work/my/zed`
 - **Adabraka GPUI 仓库**: `/Users/hejun/work/my/adabraka-gpui`
 - **提取时间**: 2024年4月（基于 GPUI v0.2.1）
-- **提取方式**: 从 crates.io 导入 GPUI，然后重命名为 adabraka_* 命名空间
+- **提取方式**: 从 crates.io 导入 GPUI，然后重命名为独立的发布包命名空间（当前为 `fc-gpui*`）
 
 ## 核心提取策略
 
@@ -25,18 +25,18 @@ Adabraka GPUI 是从 Zed 仓库中提取的 GPUI 框架及其依赖 crates 的�
 
 | Adabraka GPUI Crate | Zed Crate | 说明 |
 |---------------------|-----------|------|
-| `adabraka-gpui` | `gpui` | 核心 UI 框架，包含窗口管理、渲染、事件系统 |
-| `adabraka_gpui_macros` | `gpui_macros` | GPUI 宏支持（derive macros） |
-| `adabraka_collections` | `collections` | 集合类型工具 |
-| `adabraka_util` | `util` | 通用工具函数和类型 |
-| `adabraka_util_macros` | `util_macros` | 工具宏 |
-| `adabraka_refineable` | `refineable` | 可精化类型系统 |
-| `adabraka_derive_refineable` | `derive_refineable` | Refineable derive 宏 |
-| `adabraka_sum_tree` | `sum_tree` | Sum tree 数据结构 |
-| `adabraka_semantic_version` | `semantic_version` | 语义化版本支持 |
-| `adabraka_http_client` | `http_client` | HTTP 客户端 |
-| `adabraka_media` | `media` | 媒体处理（音频/视频） |
-| `adabraka_perf` | `perf` | 性能分析工具 |
+| `fc-gpui` | `gpui` | 核心 UI 框架，包含窗口管理、渲染、事件系统 |
+| `fc-gpui-macros` | `gpui_macros` | GPUI 宏支持（derive macros） |
+| `fc-gpui-collections` | `collections` | 集合类型工具 |
+| `fc-gpui-util` | `util` | 通用工具函数和类型 |
+| `fc-gpui-util-macros` | `util_macros` | 工具宏 |
+| `fc-gpui-refineable` | `refineable` | 可精化类型系统 |
+| `fc-gpui-derive-refineable` | `derive_refineable` | Refineable derive 宏 |
+| `fc-gpui-sum-tree` | `sum_tree` | Sum tree 数据结构 |
+| `fc-gpui-semantic-version` | `semantic_version` | 语义化版本支持 |
+| `fc-gpui-http-client` | `http_client` | HTTP 客户端 |
+| `fc-gpui-media` | `media` | 媒体处理（音频/视频） |
+| `fc-gpui-perf` | `perf` | 性能分析工具 |
 
 ### 目录结构映射
 
@@ -299,8 +299,8 @@ impl App {
 ## 重要注意事项
 
 ### 1. 命名空间
-- 所有 crate 名称使用 `adabraka_*` 前缀
-- 包名在 `Cargo.toml` 中为 `adabraka-gpui` 或 `adabraka_*`
+- 所有发布包名称使用 `fc-gpui*` 前缀
+- 包名在 `Cargo.toml` 中为 `fc-gpui` 或 `fc-gpui-*`；`[lib] name` 保持不变
 - 保持与 crates.io 发布一致
 
 ### 2. 版本管理

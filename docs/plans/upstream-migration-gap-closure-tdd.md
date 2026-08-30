@@ -8,35 +8,35 @@ Upgrade the shared layout contract, implement cross-platform renderer readback, 
 
 - **Test added**: dependency-only upgrade in `crates/gpui/Cargo.toml`
 - **Behavior asserted**: GPUI must compile against Taffy 0.12.2 rather than silently retaining the old API.
-- **Command**: `cargo check -p adabraka-gpui --lib`
+- **Command**: `cargo check -p fc-gpui --lib`
 - **Observed failure**: 16 errors for removed `AlignItems::{Start,...}` / `AlignContent::{Start,...}` associated items.
 - **Failure is correct because**: Taffy 0.12 changed alignment values to safe-alignment structs exposed through uppercase associated constants; the failure was the expected dependency contract break.
 
 ## GREEN 1
 
 - **Minimal implementation**: migrated alignment conversions to uppercase constants, ported the upstream max-content list/uniform-list probes, recorded truncation constraints in `TextLayoutInner`, and prevented truncated layouts from answering unconstrained intrinsic probes.
-- **Command**: `cargo check -p adabraka-gpui --lib && cargo test -p adabraka-gpui --lib --features test-support -- elements::list elements::text elements::uniform_list --test-threads=1`
+- **Command**: `cargo check -p fc-gpui --lib && cargo test -p fc-gpui --lib --features test-support -- elements::list elements::text elements::uniform_list --test-threads=1`
 - **Observed pass**: compilation succeeded; 19 focused layout tests passed.
 
 ## REFACTOR 1
 
 - **Refactor done**: yes
 - **Change**: added explicit `f32` suffixes required by Taffy's generic grid helpers, eliminating future-incompatible literal fallback warnings.
-- **Command after refactor**: Linux full feature check and `cargo tree -p adabraka-gpui`
+- **Command after refactor**: Linux full feature check and `cargo tree -p fc-gpui`
 - **Observed result**: Linux check passed; Taffy resolved to exactly 0.12.2 locally and on `mp-dev`.
 
 ## RED 2 — GPU row-pitch and channel conversion
 
 - **Test added**: `platform::render_image::{converts_bgra_pixels_to_rgba, removes_gpu_row_padding, rejects_short_readback_buffers}`
 - **Behavior asserted**: GPU staging data must remove row padding, convert BGRA to RGBA, and reject truncated buffers.
-- **Command**: `cargo test -p adabraka-gpui --lib --features test-support -- platform::render_image --test-threads=1`
+- **Command**: `cargo test -p fc-gpui --lib --features test-support -- platform::render_image --test-threads=1`
 - **Observed failure**: all three tests failed with `BGRA readback conversion is not implemented`.
 - **Failure is correct because**: the shared conversion seam existed but intentionally returned an error before the implementation.
 
 ## GREEN 2
 
 - **Minimal implementation**: added checked row-size/buffer-size validation, compacted padded rows, converted BGRA channels, and preserved RGBA surfaces without swapping.
-- **Command**: `cargo test -p adabraka-gpui --lib --features test-support -- platform::render_image --test-threads=1`
+- **Command**: `cargo test -p fc-gpui --lib --features test-support -- platform::render_image --test-threads=1`
 - **Observed pass**: 4 conversion tests passed.
 
 ## REFACTOR 2
@@ -50,14 +50,14 @@ Upgrade the shared layout contract, implement cross-platform renderer readback, 
 
 - **Test added**: enabled `real_visual_smoke` for Linux.
 - **Behavior asserted**: Linux should compile and run the same native renderer/readback smoke contract as macOS.
-- **Command**: `cargo check -p adabraka-gpui --test real_visual_smoke --features test-support,x11` on `mp-dev`
+- **Command**: `cargo check -p fc-gpui --test real_visual_smoke --features test-support,x11` on `mp-dev`
 - **Observed failure**: unresolved import `gpui::RealVisualTestContext` because the context and proxy were macOS-gated.
 - **Failure is correct because**: Linux had WGPU windows but no exported real visual context.
 
 ## GREEN 3
 
 - **Minimal implementation**: enabled `VisualTestPlatform` and `RealVisualTestContext` on Linux/FreeBSD, added Linux primary-selection forwarding, used screen-outside positions on X11 and compositor-selected positions on Wayland, and connected Wayland/X11 windows to WGPU readback.
-- **Command**: `WGPU_BACKEND=vulkan xvfb-run -a -s '-screen 0 1024x768x24' cargo test -p adabraka-gpui --test real_visual_smoke --features test-support,x11 -- --ignored`
+- **Command**: `WGPU_BACKEND=vulkan xvfb-run -a -s '-screen 0 1024x768x24' cargo test -p fc-gpui --test real_visual_smoke --features test-support,x11 -- --ignored`
 - **Observed pass**: native X11 window render, request-attention call, WGPU staging-buffer readback, size/content assertions, and process exit all passed (`STATUS:0`).
 
 ## REFACTOR 3
@@ -71,7 +71,7 @@ Upgrade the shared layout contract, implement cross-platform renderer readback, 
 
 - **Test added**: Windows GNU cross-target compilation on `mp-dev`.
 - **Behavior asserted**: DirectX readback must at least compile for a Windows target when runtime hardware is unavailable.
-- **Command**: `cargo check -p adabraka-gpui --lib --features test-support --target x86_64-pc-windows-gnu`
+- **Command**: `cargo check -p fc-gpui --lib --features test-support --target x86_64-pc-windows-gnu`
 - **Observed failure**: existing Direct Manipulation code resolved `borrow_mut` against `Rc` instead of the inner `RefCell`, and `ScreenToClient` was not imported from GDI.
 - **Failure is correct because**: these were target-specific compile blockers that prevented reaching the new DirectX readback code.
 
@@ -92,7 +92,7 @@ Upgrade the shared layout contract, implement cross-platform renderer readback, 
 
 - **Tests added**: `optional_width_uses_max_content_when_unbounded`, `truncated_layout_is_not_reused_for_an_unconstrained_measurement`, and `exact_fit_shaped_text_does_not_require_truncation`.
 - **Behavior asserted**: an unbounded list width uses `MaxContent`; a size measured under truncation cannot answer a later unconstrained probe; an exact shaped width is considered a fit.
-- **Command**: `cargo test -p adabraka-gpui --lib --features test-support -- elements::text::tests taffy::tests --test-threads=1`
+- **Command**: `cargo test -p fc-gpui --lib --features test-support -- elements::text::tests taffy::tests --test-threads=1`
 - **Observed failure**: 5 compile errors because the three semantic helpers did not exist.
 - **Failure is correct because**: the migrated behavior was embedded in closures and duplicate call sites without a directly testable contract.
 

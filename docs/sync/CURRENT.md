@@ -5,37 +5,37 @@
 ## 当前基线
 
 - 当前开发分支：`develop/0.9`
-- 下一版本：GPUI 八个发布包为 `0.9.0`；`adabraka_util` 和 `adabraka_util_macros` 为 `0.6.0`
+- 下一版本：GPUI 八个发布包为 `0.9.0`；`fc-gpui-util` 和 `fc-gpui-util-macros` 为 `0.6.0`
 - 兼容基线：GPUI `0.8.1`、utility crates `0.5.1`；breaking API/feature 变化必须在 `CHANGELOG.md` 提供迁移映射
 - 永久兼容入口：`Application::new/headless`；不在任何版本安排弃用或删除
-- Registry 发布顺序：`adabraka_util_macros 0.6.0` → `adabraka_util 0.6.0` → `adabraka-gpui-macros 0.9.0` → core/renderer/backends → platform → public facade
+- Registry 发布顺序：`fc-gpui-util-macros 0.6.0` → `fc-gpui-util 0.6.0` → `fc-gpui-macros 0.9.0` → core/renderer/backends → platform → public facade
 - 当前仓库审计基线：`5aa5083184d6692167b905b51a00999d28ad20ab`（2026-07-26）
 - Zed 上游审计基线：`ec3d887507f272119d9fe146c685f0a941d0e798`（2026-07-22）
 - 上游仓库默认位置：`../zed`
-- 公共包：`adabraka-gpui`，lib 名仍为 `gpui`
-- 核心实现包：`adabraka-gpui-core`，lib 名为 `gpui_core`
+- 公共包：`fc-gpui`，lib 名仍为 `gpui`
+- 核心实现包：`fc-gpui-core`，lib 名为 `gpui_core`
 
 同步新改动前，先更新 `../zed`，再把上游基线改成实际审完的 commit。不要只按日期判断是否已同步。
 
 ## 当前结构
 
 ```text
-adabraka-gpui (public facade) -> adabraka-gpui-core
-adabraka-gpui (public facade) -> adabraka-gpui-platform
-adabraka-gpui-platform -> adabraka-gpui-core
-adabraka-gpui-platform -> adabraka-gpui-macos -> adabraka-gpui-core
-adabraka-gpui-platform -> adabraka-gpui-windows -> adabraka-gpui-core
-adabraka-gpui-platform -> adabraka-gpui-linux -> adabraka-gpui-core
-adabraka-gpui-linux -> adabraka-gpui-wgpu -> adabraka-gpui-core
+fc-gpui (public facade) -> fc-gpui-core
+fc-gpui (public facade) -> fc-gpui-platform
+fc-gpui-platform -> fc-gpui-core
+fc-gpui-platform -> fc-gpui-macos -> fc-gpui-core
+fc-gpui-platform -> fc-gpui-windows -> fc-gpui-core
+fc-gpui-platform -> fc-gpui-linux -> fc-gpui-core
+fc-gpui-linux -> fc-gpui-wgpu -> fc-gpui-core
 ```
 
-`adabraka-gpui` 负责兼容现有下游入口和 `Application::new/headless`。核心状态、元素、布局、窗口协议和单元测试属于 `adabraka-gpui-core`。平台选择属于 `adabraka-gpui-platform`，具体操作系统实现不再位于 core。
+`fc-gpui` 负责兼容现有下游入口和 `Application::new/headless`。核心状态、元素、布局、窗口协议和单元测试属于 `fc-gpui-core`。平台选择属于 `fc-gpui-platform`，具体操作系统实现不再位于 core。
 
 ## 上游路径映射
 
 | Zed 路径 | 当前路径 | 说明 |
 |---|---|---|
-| `crates/gpui` | `crates/gpui` | 核心实现；本地 package 是 `adabraka-gpui-core` |
+| `crates/gpui` | `crates/gpui` | 核心实现；本地 package 是 `fc-gpui-core` |
 | 无直接对应 | `crates/gpui-compat` | 公共兼容入口、示例和集成测试 |
 | `crates/gpui_platform` | `crates/gpui-platform` | 当前平台选择和应用组装 |
 | `crates/gpui_wgpu` | `crates/gpui-wgpu` | Linux WGPU renderer |
@@ -43,13 +43,13 @@ adabraka-gpui-linux -> adabraka-gpui-wgpu -> adabraka-gpui-core
 | `crates/gpui_macos` | `crates/gpui-macos` | 上游平铺文件对应本地 `src/mac` |
 | `crates/gpui_windows` | `crates/gpui-windows` | 上游平铺文件对应本地 `src/windows` |
 | `crates/gpui_macros` | `crates/gpui-macros` | proc macros；同时支持正常和重命名依赖 |
-| `crates/collections` | `crates/collections` | `adabraka_collections` |
-| `crates/util` | `crates/util` | `adabraka_util` |
-| `crates/util_macros` | `crates/util_macros` | `adabraka_util_macros` |
-| `crates/refineable` | `crates/refineable` | `adabraka_refineable` |
-| `crates/sum_tree` | `crates/sum_tree` | `adabraka_sum_tree` |
-| `crates/http_client` | `crates/http_client` | `adabraka_http_client` |
-| `crates/media` | `crates/media` | `adabraka_media` |
+| `crates/collections` | `crates/collections` | `fc-gpui-collections` |
+| `crates/util` | `crates/util` | `fc-gpui-util` |
+| `crates/util_macros` | `crates/util_macros` | `fc-gpui-util-macros` |
+| `crates/refineable` | `crates/refineable` | `fc-gpui-refineable` |
+| `crates/sum_tree` | `crates/sum_tree` | `fc-gpui-sum-tree` |
+| `crates/http_client` | `crates/http_client` | `fc-gpui-http-client` |
+| `crates/media` | `crates/media` | `fc-gpui-media` |
 
 不要直接覆盖 `app.rs`、`window.rs`、`platform.rs` 或平台 backend 文件。这些位置包含 daemon、tray、hotkey、overlay、notification、resource profile 和兼容层所需的本地行为。
 
@@ -86,19 +86,19 @@ git -C ../zed log --oneline \
 
 ## 有效验证命令
 
-核心 focused test 必须指定 `adabraka-gpui-core`：
+核心 focused test 必须指定 `fc-gpui-core`：
 
 ```sh
-cargo test --locked -p adabraka-gpui-core --lib --features test-support -- profiler
-cargo test --locked -p adabraka-gpui-core --lib --features test-support -- elements::list
+cargo test --locked -p fc-gpui-core --lib --features test-support -- profiler
+cargo test --locked -p fc-gpui-core --lib --features test-support -- elements::list
 ```
 
 公共兼容入口单独验证：
 
 ```sh
-cargo test --locked -p adabraka-gpui --tests --features test-support
-cargo check --locked -p adabraka-gpui-downstream-compat
-cargo check --locked -p adabraka-gpui-renamed-dependency-compat
+cargo test --locked -p fc-gpui --tests --features test-support
+cargo check --locked -p fc-gpui-downstream-compat
+cargo check --locked -p fc-gpui-renamed-dependency-compat
 ```
 
 完整本地闭环：

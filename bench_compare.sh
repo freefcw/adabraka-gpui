@@ -26,7 +26,7 @@ echo "Baseline FPS readings:"
 cat "$BASELINE_LOG"
 echo ""
 
-echo "--- OPTIMIZED (adabraka-gpui, with perf improvements) ---"
+echo "--- OPTIMIZED (fc-gpui, with perf improvements) ---"
 $OPTIMIZED 2>"$OPTIMIZED_LOG" &
 OPTIMIZED_PID=$!
 sleep "$DURATION"

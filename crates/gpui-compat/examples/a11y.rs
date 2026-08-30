@@ -1,8 +1,8 @@
 //! Accessibility (AccessKit) demo app.
 //!
-//! Run with: `cargo run -p adabraka-gpui --example a11y`
+//! Run with: `cargo run -p fc-gpui --example a11y`
 //!
-//! On Linux: `cargo run -p adabraka-gpui --features wayland,x11 --example a11y`
+//! On Linux: `cargo run -p fc-gpui --features wayland,x11 --example a11y`
 
 use gpui::{
     AccessibleAction, App, Application, Bounds, Context, FocusHandle, KeyBinding, Role,

@@ -7,24 +7,24 @@ TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/adabraka-release-archives.XXXXXX")"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 
 readonly RELEASE_PACKAGES=(
-    adabraka_util_macros
-    adabraka_util
-    adabraka_collections
-    adabraka_semantic_version
-    adabraka_derive_refineable
-    adabraka_refineable
-    adabraka_sum_tree
-    adabraka_http_client
-    adabraka_media
-    adabraka_perf
-    adabraka-gpui-macros
-    adabraka-gpui-core
-    adabraka-gpui-wgpu
-    adabraka-gpui-linux
-    adabraka-gpui-macos
-    adabraka-gpui-windows
-    adabraka-gpui-platform
-    adabraka-gpui
+    fc-gpui-util-macros
+    fc-gpui-util
+    fc-gpui-collections
+    fc-gpui-semantic-version
+    fc-gpui-derive-refineable
+    fc-gpui-refineable
+    fc-gpui-sum-tree
+    fc-gpui-http-client
+    fc-gpui-media
+    fc-gpui-perf
+    fc-gpui-macros
+    fc-gpui-core
+    fc-gpui-wgpu
+    fc-gpui-linux
+    fc-gpui-macos
+    fc-gpui-windows
+    fc-gpui-platform
+    fc-gpui
 )
 
 cd "$REPO_ROOT"

@@ -4,12 +4,13 @@ A GPU-accelerated UI framework for Rust, forked from [Zed's GPUI](https://github
 
 ## Getting Started
 
-This fork is consumed from Git, not from crates.io. The registry crate `adabraka-gpui` is still
-the upstream [Augani](https://github.com/Augani/adabraka-gpui) crate at `0.5.1` and does not carry
-this fork's releases. Depend on the `v0.9.0` tag:
+This fork is consumed from Git, not from crates.io. Its published packages are the `fc-gpui*`
+family, which has not been released to the registry yet; the unrelated `adabraka-gpui` registry
+crate is the upstream [Augani](https://github.com/Augani/adabraka-gpui) crate at `0.5.1` and does
+not carry this fork's releases. Depend on the `v0.9.0` tag:
 
 ```toml
-adabraka-gpui = { git = "https://github.com/freefcw/adabraka-gpui.git", tag = "v0.9.0" }
+fc-gpui = { git = "https://github.com/freefcw/adabraka-gpui.git", tag = "v0.9.0" }
 ```
 
 Building requires the toolchain pinned in
@@ -19,7 +20,7 @@ Rust `1.97.1` with edition 2024.
 To keep the build small, disable default features and opt into only the image formats you need:
 
 ```toml
-adabraka-gpui = { git = "https://github.com/freefcw/adabraka-gpui.git", tag = "v0.9.0", default-features = false, features = [
+fc-gpui = { git = "https://github.com/freefcw/adabraka-gpui.git", tag = "v0.9.0", default-features = false, features = [
     "font-kit",
     "wayland",
     "x11",
@@ -34,8 +35,8 @@ re-enables parallel decoding. SVG support is handled separately through `resvg`.
 
 ### Macro Dependency Override
 
-Macro paths are resolved automatically for normal `adabraka-gpui` dependencies and ordinary
-Cargo aliases. If one package directly lists both `adabraka-gpui` and `adabraka-gpui-core`, or
+Macro paths are resolved automatically for normal `fc-gpui` dependencies and ordinary
+Cargo aliases. If one package directly lists both `fc-gpui` and `fc-gpui-core`, or
 uses an alias that is indistinguishable from the normalized package name, select the intended
 crate once in the consuming package's `Cargo.toml`:
 
@@ -71,7 +72,7 @@ without this override fails with an actionable macro error instead of guessing a
 Linux X11 and Wayland use the internal wgpu renderer ported from Zed's current GPUI backend. Blade is
 no longer part of the crate. The default macOS renderer is Metal and Windows uses DirectX.
 
-Downstream applications continue to use only `adabraka-gpui`; the renderer package is an internal
+Downstream applications continue to use only `fc-gpui`; the renderer package is an internal
 implementation dependency and does not change the `Application::new()` entry point. See
 [the WGPU migration notes](https://github.com/freefcw/adabraka-gpui/blob/main/docs/wgpu-migration.md) for details.
 
@@ -85,7 +86,7 @@ Native adapters are enabled by the default `accessibility` feature. Disable defa
 exclude their platform dependencies; the core accessibility API remains available but inactive.
 
 ```sh
-cargo run -p adabraka-gpui --example a11y
+cargo run -p fc-gpui --example a11y
 ```
 
 See [`examples/a11y.rs`](examples/a11y.rs) for focus navigation, accessible actions, numeric
@@ -127,8 +128,8 @@ The layer-shell regression tests avoid requiring a real compositor. They cover c
 and protocol enum mapping:
 
 ```sh
-cargo test -p adabraka-gpui-core --lib --features test-support layer_shell
-cargo check -p adabraka-gpui --example layer_shell --features wayland
+cargo test -p fc-gpui-core --lib --features test-support layer_shell
+cargo check -p fc-gpui --example layer_shell --features wayland
 ```
 
 ## Features

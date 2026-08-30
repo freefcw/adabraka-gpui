@@ -1,6 +1,6 @@
 [package]
 edition = "2024"
-name = "adabraka_util_macros"
+name = "fc-gpui-util-macros"
 version = "0.6.0"
 publish = true
 description = "Utility macros for Adabraka GPUI (originally from Zed - github.com/zed-industries/zed)"
@@ -20,7 +20,7 @@ proc-macro = true
 
 [dependencies.perf]
 path = "../perf"
-package = "adabraka_perf"
+package = "fc-gpui-perf"
 version = "0.5.1"
 optional = true
 

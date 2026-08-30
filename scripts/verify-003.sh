@@ -26,6 +26,6 @@ test_core --test-threads=1
 
 echo
 echo "Optional real renderer smoke:"
-echo "  cargo test -p adabraka-gpui --test real_visual_smoke --features test-support -- --ignored"
+echo "  cargo test -p fc-gpui --test real_visual_smoke --features test-support -- --ignored"
 
 echo "=== 003 ALL PASSED ==="

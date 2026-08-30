@@ -15,28 +15,28 @@ set -euo pipefail
 echo "=== Feature contracts ==="
 
 echo "[1/8] facade: no default features..."
-cargo check --locked -q -p adabraka-gpui --lib --no-default-features
+cargo check --locked -q -p fc-gpui --lib --no-default-features
 
 echo "[2/8] facade: accessibility + font-kit + X11..."
-cargo check --locked -q -p adabraka-gpui --lib --no-default-features \
+cargo check --locked -q -p fc-gpui --lib --no-default-features \
     --features accessibility,font-kit,x11
 
 echo "[3/8] facade: accessibility + font-kit + Wayland..."
-cargo check --locked -q -p adabraka-gpui --lib --no-default-features \
+cargo check --locked -q -p fc-gpui --lib --no-default-features \
     --features accessibility,font-kit,wayland
 
 echo "[4/8] facade: wgpu headless marker (docs/plans runbook)..."
-cargo check --locked -q -p adabraka-gpui --no-default-features --features wgpu
+cargo check --locked -q -p fc-gpui --no-default-features --features wgpu
 
 echo "[5/8] facade: wgpu + Wayland + X11 (docs/sync migration runbook)..."
-cargo check --locked -q -p adabraka-gpui --no-default-features \
+cargo check --locked -q -p fc-gpui --no-default-features \
     --features wgpu,wayland,x11
 
 echo "[6/8] core: no default features..."
-cargo check --locked -q -p adabraka-gpui-core --no-default-features
+cargo check --locked -q -p fc-gpui-core --no-default-features
 
 echo "[7/8] core: test-support..."
-cargo check --locked -q -p adabraka-gpui-core --features test-support
+cargo check --locked -q -p fc-gpui-core --features test-support
 
 echo "[8/8] public feature whitelist..."
 python3 - <<'PY'
@@ -45,7 +45,7 @@ import subprocess
 import sys
 
 EXPECTED = {
-    "adabraka-gpui": [
+    "fc-gpui": [
         "accessibility", "default", "font-kit", "image-default-formats",
         "image-format-avif", "image-format-bmp", "image-format-dds",
         "image-format-exr", "image-format-farbfeld", "image-format-gif",
@@ -56,7 +56,7 @@ EXPECTED = {
         "leak-detection", "runtime_shaders", "screen-capture", "test-support",
         "wayland", "wgpu", "windows-manifest", "x11",
     ],
-    "adabraka-gpui-core": [
+    "fc-gpui-core": [
         "accessibility", "bench", "default", "font-kit", "image-default-formats",
         "image-format-avif", "image-format-bmp", "image-format-dds",
         "image-format-exr", "image-format-farbfeld", "image-format-gif",
@@ -67,7 +67,7 @@ EXPECTED = {
         "leak-detection", "runtime_shaders", "screen-capture", "test-support",
         "wayland", "windows-manifest", "x11",
     ],
-    "adabraka-gpui-platform": [
+    "fc-gpui-platform": [
         "accessibility", "default", "font-kit", "image-default-formats",
         "image-format-avif", "image-format-bmp", "image-format-dds",
         "image-format-exr", "image-format-farbfeld", "image-format-gif",
@@ -78,21 +78,21 @@ EXPECTED = {
         "leak-detection", "runtime_shaders", "screen-capture", "test-support",
         "wayland", "wgpu", "windows-manifest", "x11",
     ],
-    "adabraka-gpui-linux": [
+    "fc-gpui-linux": [
         "accessibility", "default", "font-kit", "screen-capture",
         "test-support", "wayland", "x11",
     ],
-    "adabraka-gpui-macos": [
+    "fc-gpui-macos": [
         "accessibility", "default", "font-kit", "runtime_shaders",
         "screen-capture", "test-support",
     ],
-    "adabraka-gpui-windows": [
+    "fc-gpui-windows": [
         "accessibility", "default", "screen-capture", "test-support",
         "windows-manifest",
     ],
-    "adabraka-gpui-wgpu": ["default", "test-support"],
-    "adabraka_util": ["test-support"],
-    "adabraka_util_macros": ["perf-enabled"],
+    "fc-gpui-wgpu": ["default", "test-support"],
+    "fc-gpui-util": ["test-support"],
+    "fc-gpui-util-macros": ["perf-enabled"],
 }
 
 meta = json.loads(

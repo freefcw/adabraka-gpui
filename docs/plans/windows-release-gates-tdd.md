@@ -37,7 +37,7 @@ The Windows real visual smoke test returns a 64x64 image containing opaque red s
 
 - **Test added**: Existing `real_visual_smoke` integration test in `crates/gpui-compat/tests/real_visual_smoke.rs`.
 - **Behavior asserted**: Rendering a red quad through the DirectX offscreen path must produce nontransparent, nonuniform image pixels.
-- **Command**: GitHub Actions run `30327564415`, job `Windows / real visual smoke`, running `cargo test -p adabraka-gpui --test real_visual_smoke --features test-support --locked -- --ignored`.
+- **Command**: GitHub Actions run `30327564415`, job `Windows / real visual smoke`, running `cargo test -p fc-gpui --test real_visual_smoke --features test-support --locked -- --ignored`.
 - **Observed failure**: The scene contained a quad, but readback was fully transparent: `channel_min=[0, 0, 0, 0]`, `channel_max=[0, 0, 0, 0]`, and `nonzero_rgb_pixels=0`.
 - **Failure is correct because**: Texture creation, dimensions, mapping, and scene construction succeeded; only rasterized scene content was absent from readback, isolating the DirectX scene/shader contract.
 
@@ -51,7 +51,7 @@ The Windows real visual smoke test returns a 64x64 image containing opaque red s
 
 - **Refactor done**: no
 - **Change**: No refactor needed; the shader declaration now directly mirrors the existing Rust ABI.
-- **Command after refactor**: `cargo check -p adabraka-gpui-windows --all-features`, `cargo fmt --all -- --check`, and the green GitHub Actions visual job.
+- **Command after refactor**: `cargo check -p fc-gpui-windows --all-features`, `cargo fmt --all -- --check`, and the green GitHub Actions visual job.
 - **Observed result**: Local checks passed and the full nine-job Linux, macOS, and Windows feature matrix completed successfully.
 
 ## Next Behavior

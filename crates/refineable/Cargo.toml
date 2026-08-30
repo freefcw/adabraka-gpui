@@ -1,6 +1,6 @@
 [package]
 edition = "2024"
-name = "adabraka_refineable"
+name = "fc-gpui-refineable"
 version = "0.5.1"
 publish = true
 description = "A macro for creating 'refinement' types (originally from Zed - github.com/zed-industries/zed)"
@@ -16,7 +16,7 @@ doctest = false
 
 [dependencies.derive_refineable]
 path = "../derive_refineable"
-package = "adabraka_derive_refineable"
+package = "fc-gpui-derive-refineable"
 version = "0.5.1"
 
 

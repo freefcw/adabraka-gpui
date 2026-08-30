@@ -1,6 +1,6 @@
 [package]
 edition = "2024"
-name = "adabraka-gpui"
+name = "fc-gpui"
 version = "0.9.0"
 authors = ["Adabraka Team"]
 publish = true
@@ -90,8 +90,8 @@ harness = false
 required-features = ["test-support"]
 
 [dependencies]
-gpui_core = { package = "adabraka-gpui-core", path = "../gpui", version = "0.9.0", default-features = false }
-gpui_platform = { package = "adabraka-gpui-platform", path = "../gpui-platform", version = "0.9.0", default-features = false }
+gpui_core = { package = "fc-gpui-core", path = "../gpui", version = "0.9.0", default-features = false }
+gpui_platform = { package = "fc-gpui-platform", path = "../gpui-platform", version = "0.9.0", default-features = false }
 log = "0.4.16"
 
 [dev-dependencies.anyhow]
@@ -100,7 +100,7 @@ version = "1.0.86"
 [dev-dependencies.collections]
 path = "../collections"
 features = ["test-support"]
-package = "adabraka_collections"
+package = "fc-gpui-collections"
 version = "0.5.1"
 
 [dev-dependencies.env_logger]
@@ -111,13 +111,13 @@ version = "0.3"
 
 [dev-dependencies.gpui_macros]
 path = "../gpui-macros"
-package = "adabraka-gpui-macros"
+package = "fc-gpui-macros"
 version = "0.9.0"
 
 [dev-dependencies.http_client]
 path = "../http_client"
 features = ["test-support"]
-package = "adabraka_http_client"
+package = "fc-gpui-http-client"
 version = "0.5.1"
 
 [dev-dependencies.lyon]

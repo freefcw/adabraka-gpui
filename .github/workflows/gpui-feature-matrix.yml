@@ -169,12 +169,12 @@ jobs:
             os: ubuntu-24.04
             cache-key: linux-no-default
             linux-native: false
-            command: cargo check -p adabraka-gpui --lib --no-default-features --locked
+            command: cargo check -p fc-gpui --lib --no-default-features --locked
           - name: Linux / async benchmark compile
             os: ubuntu-24.04
             cache-key: linux-async-benchmark
             linux-native: false
-            command: cargo check -p adabraka-gpui-core --features bench --benches --locked
+            command: cargo check -p fc-gpui-core --features bench --benches --locked
           - name: Linux / feature contracts
             os: ubuntu-24.04
             cache-key: linux-feature-contracts
@@ -187,17 +187,17 @@ jobs:
             require_real_visual: true
             allow_failure: true
             software_gl: true
-            command: timeout --kill-after=30s 12m xvfb-run -a cargo test -p adabraka-gpui --test real_visual_smoke --features test-support,x11 --locked -- --ignored
+            command: timeout --kill-after=30s 12m xvfb-run -a cargo test -p fc-gpui --test real_visual_smoke --features test-support,x11 --locked -- --ignored
           - name: Linux / accessibility + X11
             os: ubuntu-24.04
             cache-key: linux-accessibility-x11
             linux-native: true
-            command: cargo check -p adabraka-gpui --lib --no-default-features --features accessibility,font-kit,x11 --locked
+            command: cargo check -p fc-gpui --lib --no-default-features --features accessibility,font-kit,x11 --locked
           - name: Linux / accessibility + Wayland
             os: ubuntu-24.04
             cache-key: linux-accessibility-wayland
             linux-native: true
-            command: cargo check -p adabraka-gpui --lib --no-default-features --features accessibility,font-kit,wayland --locked
+            command: cargo check -p fc-gpui --lib --no-default-features --features accessibility,font-kit,wayland --locked
           - name: macOS / workspace tests
             os: macos-14
             cache-key: macos-workspace-tests
@@ -208,13 +208,13 @@ jobs:
             os: macos-14
             cache-key: macos-no-default
             linux-native: false
-            command: cargo check -p adabraka-gpui --lib --no-default-features --locked
+            command: cargo check -p fc-gpui --lib --no-default-features --locked
           - name: macOS / real visual smoke
             os: macos-14
             cache-key: macos-real-visual
             linux-native: false
             require_real_visual: true
-            command: cargo test -p adabraka-gpui --test real_visual_smoke --features test-support --locked -- --ignored
+            command: cargo test -p fc-gpui --test real_visual_smoke --features test-support --locked -- --ignored
           - name: Windows / workspace tests
             os: windows-2022
             cache-key: windows-workspace-tests
@@ -225,13 +225,13 @@ jobs:
             os: windows-2022
             cache-key: windows-no-default
             linux-native: false
-            command: cargo check -p adabraka-gpui --lib --no-default-features --locked
+            command: cargo check -p fc-gpui --lib --no-default-features --locked
           - name: Windows / real visual smoke
             os: windows-2022
             cache-key: windows-real-visual
             linux-native: false
             require_real_visual: true
-            command: cargo test -p adabraka-gpui --test real_visual_smoke --features test-support --locked -- --ignored
+            command: cargo test -p fc-gpui --test real_visual_smoke --features test-support --locked -- --ignored
 
     steps:
       - name: Check out repository
@@ -278,4 +278,4 @@ jobs:
 
       - name: Check public examples
         if: matrix.examples
-        run: cargo check -p adabraka-gpui --examples --locked
+        run: cargo check -p fc-gpui --examples --locked

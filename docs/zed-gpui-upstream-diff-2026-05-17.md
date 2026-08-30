@@ -4,7 +4,7 @@
 
 ## 结论摘要
 
-当前仓库已经不再是 Zed `crates/gpui` 的简单抽取版。Adabraka 在保留 GPUI 核心 API 的同时，把 daemon、托盘、全局热键、原生通知、自动启动、单实例、系统信息、窗口定位、资源 profile、Linux wgpu 后端等能力内置到 `adabraka-gpui`。上游 Zed 则在 `gpui-v0.2.2` 之后继续快速演进，并在 2026-02-19 起把原 GPUI 平台层拆分到多个 `gpui_*` crate。
+当前仓库已经不再是 Zed `crates/gpui` 的简单抽取版。Adabraka 在保留 GPUI 核心 API 的同时，把 daemon、托盘、全局热键、原生通知、自动启动、单实例、系统信息、窗口定位、资源 profile、Linux wgpu 后端等能力内置到 `fc-gpui`。上游 Zed 则在 `gpui-v0.2.2` 之后继续快速演进，并在 2026-02-19 起把原 GPUI 平台层拆分到多个 `gpui_*` crate。
 
 这次比对的主要结论：
 
@@ -23,7 +23,7 @@
 | Zed 上游 | `/Users/hejun/codespace/my/agenttray/zed` | `3bd9d13b63fc5a5ffa39326597bc4fd91adc82d1`，2026-05-16，`settings: Fix inverted VS Code import for files.simpleDialog.enable (#55678)` |
 | Zed GPUI 发布基线 | `/Users/hejun/codespace/my/agenttray/zed` tag `gpui-v0.2.2` | `69e2130295c2649963eb639fc70b4f2ee8ea1624`，2025-10-21，`gpui 0.2.2` |
 
-Adabraka `crates/gpui/Cargo.toml` 当前包名为 `adabraka-gpui`，版本 `0.6.2`。Zed `crates/gpui/Cargo.toml` 当前包名仍为 `gpui`，版本 `0.2.2`，但代码已经依赖拆分后的 `gpui_platform`、`gpui_shared_string`、`gpui_util` 等 workspace crate。
+Adabraka `crates/gpui/Cargo.toml` 当前包名为 `fc-gpui`，版本 `0.6.2`。Zed `crates/gpui/Cargo.toml` 当前包名仍为 `gpui`，版本 `0.2.2`，但代码已经依赖拆分后的 `gpui_platform`、`gpui_shared_string`、`gpui_util` 等 workspace crate。
 
 ## 结构差异
 
@@ -145,7 +145,7 @@ Zed 现在把原 GPUI 平台层拆到了这些 crate：
 - 问题：`pop()` 改变 `input_handlers` 长度，使 cached view 的 `paint_range.input_handlers_index` 失效；下一帧 `reuse_paint()` 用旧 range 切片时可能越界。
 - 影响：Input 组件放在 cached view 内时，输入首字符或下一帧可能 panic。对组件库、Dock、复杂 overlay UI 风险高。
 - 建议迁移：把上游 patch 手动应用到当前 `Window::draw`。核心是恢复旧 handler 时优先填回 `None` slot；注册新 handler 时用 `iter_mut().rev().find_map(|h| h.take())`，保留 vec 长度。
-- 建议测试：新增或移植上游回归测试；至少运行 `cargo test -p adabraka-gpui --lib stale_frame_index_is_clamped_when_image_changes` 之外再覆盖 cached input 场景。
+- 建议测试：新增或移植上游回归测试；至少运行 `cargo test -p fc-gpui --lib stale_frame_index_is_clamped_when_image_changes` 之外再覆盖 cached input 场景。
 
 ### P0. ListState streaming 内容增长时 scrollbar 拖拽错位
 
@@ -306,8 +306,8 @@ Zed 现在把原 GPUI 平台层拆到了这些 crate：
    - Linux input/IME/XInput compatibility patch set
    - text/SVG performance and correctness patch set
 5. 每批合并后至少运行：
-   - `cargo test -p adabraka-gpui --lib --features test-support`
-   - Linux 路径：`cargo test -p adabraka-gpui --lib --features test-support,wayland,x11`
+   - `cargo test -p fc-gpui --lib --features test-support`
+   - Linux 路径：`cargo test -p fc-gpui --lib --features test-support,wayland,x11`
    - Windows/macOS 平台改动需要对应平台 smoke test，因为本地非目标平台无法覆盖 native event loop 和 GPU device recovery。
 
 ## 附录：上游修复候选池

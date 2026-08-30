@@ -1,8 +1,8 @@
 [package]
-name = "adabraka-gpui-downstream-compat"
+name = "fc-gpui-downstream-compat"
 version = "0.0.0"
 edition = "2024"
 publish = false
 
 [dependencies]
-adabraka-gpui = { path = "../../crates/gpui-compat", default-features = false }
+fc-gpui = { path = "../../crates/gpui-compat", default-features = false }
