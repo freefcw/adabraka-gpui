@@ -32,7 +32,7 @@ profiling = "1"
 raw-window-handle = "0.6"
 smol = "2.0"
 util = { package = "adabraka_util", path = "../util", version = "0.6.0" }
-wgpu = { version = "29.0.0", git = "https://github.com/zed-industries/wgpu.git", branch = "v29" }
+wgpu = "29.0.4"
 
 [dev-dependencies]
 gpui = { package = "adabraka-gpui-core", path = "../gpui", version = "0.9.0", default-features = false, features = ["test-support"] }
