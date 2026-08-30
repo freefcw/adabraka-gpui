@@ -1,6 +1,6 @@
 [package]
 edition = "2024"
-name = "adabraka_media"
+name = "fc-gpui-media"
 version = "0.5.1"
 build = "build.rs"
 publish = true

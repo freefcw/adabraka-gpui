@@ -2,13 +2,45 @@
 
 ## Unreleased
 
+### Breaking changes
+
+- **Published package names moved to the `fc-gpui*` family** — the 18 release crates are renamed
+  on crates.io. Cargo target names are untouched, so `use gpui::*`, `use gpui_core::*`, and the
+  internal `collections`/`util`/`refineable` imports are unchanged; only the `package` you write
+  in `Cargo.toml` changes.
+
+  | Old package | New package |
+  | --- | --- |
+  | `adabraka-gpui` | `fc-gpui` |
+  | `adabraka-gpui-core` | `fc-gpui-core` |
+  | `adabraka-gpui-wgpu` | `fc-gpui-wgpu` |
+  | `adabraka-gpui-linux` | `fc-gpui-linux` |
+  | `adabraka-gpui-macos` | `fc-gpui-macos` |
+  | `adabraka-gpui-windows` | `fc-gpui-windows` |
+  | `adabraka-gpui-platform` | `fc-gpui-platform` |
+  | `adabraka-gpui-macros` | `fc-gpui-macros` |
+  | `adabraka_util` | `fc-gpui-util` |
+  | `adabraka_util_macros` | `fc-gpui-util-macros` |
+  | `adabraka_collections` | `fc-gpui-collections` |
+  | `adabraka_semantic_version` | `fc-gpui-semantic-version` |
+  | `adabraka_derive_refineable` | `fc-gpui-derive-refineable` |
+  | `adabraka_refineable` | `fc-gpui-refineable` |
+  | `adabraka_sum_tree` | `fc-gpui-sum-tree` |
+  | `adabraka_http_client` | `fc-gpui-http-client` |
+  | `adabraka_media` | `fc-gpui-media` |
+  | `adabraka_perf` | `fc-gpui-perf` |
+
+  Downstream packages that rename the facade dependency keep working; the GPUI macros now probe
+  `fc-gpui` and `fc-gpui-core` instead of the old names, and the
+  `[package.metadata.gpui-macros] crate = "…"` override is unchanged.
+
 ### Improvements
 
-- **Every dependency now resolves from crates.io** — `adabraka-gpui-wgpu` depends on the published
+- **Every dependency now resolves from crates.io** — `fc-gpui-wgpu` depends on the published
   `wgpu 29.0.4` instead of the `zed-industries/wgpu` `v29` branch, whose only two commits ahead of
   the upstream `v29` release (the XCB EGL display handle and an examples README edit) both landed
   in 29.0.4. The root `[patch.crates-io]` override for `windows-capture` is replaced by a
-  `>=1.3.6, <1.5` requirement on `adabraka-gpui-core`'s `screen-capture` feature, which keeps
+  `>=1.3.6, <1.5` requirement on `fc-gpui-core`'s `screen-capture` feature, which keeps
   `zed-scap 0.0.8-zed` on the five-argument `Settings::new` for downstream builds too instead of
   only inside this workspace. Windows capture source titles lose Zed's `Monitor::name` display
   detection fix, which is not in any published `windows-capture`; `zed-scap` falls back to the GDI

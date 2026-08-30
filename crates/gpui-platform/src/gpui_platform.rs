@@ -1,6 +1,6 @@
 //! Platform composition helpers for Adabraka GPUI.
 //!
-//! This crate is an internal migration boundary. The published `adabraka-gpui`
+//! This crate is an internal migration boundary. The published `fc-gpui`
 //! package remains the compatibility entry point for ordinary downstream users.
 
 use std::rc::Rc;

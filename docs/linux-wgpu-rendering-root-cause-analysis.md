@@ -317,7 +317,7 @@ crates/gpui/Cargo.toml
 运行：
 
 ```bash
-cargo run -p adabraka-gpui --example linux_rendering_probe
+cargo run -p fc-gpui --example linux_rendering_probe
 ```
 
 这个窗口集中放了四组 primitive：
@@ -330,7 +330,7 @@ cargo run -p adabraka-gpui --example linux_rendering_probe
 编译验证：
 
 ```bash
-cargo check -p adabraka-gpui --example linux_rendering_probe
+cargo check -p fc-gpui --example linux_rendering_probe
 ```
 
 已通过。
@@ -394,7 +394,7 @@ ABI 修复后，重新跑：
 
 ```bash
 python3 docs/tools/wgpu_shader_layout_probe.py
-cargo run -p adabraka-gpui --example linux_rendering_probe
+cargo run -p fc-gpui --example linux_rendering_probe
 ```
 
 如果仍有“窗口移动后消失 / 滚动后恢复”，再做这些实验：

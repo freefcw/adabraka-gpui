@@ -12,11 +12,11 @@
 当前仓库已经不是一个简单的 Zed GPUI 旧版本副本，而是一个具有明确产品边界和发布拓扑的桌面 GPUI fork：
 
 ```text
-adabraka-gpui facade
-    -> adabraka-gpui-core
-    -> adabraka-gpui-platform
-        -> adabraka-gpui-linux / macos / windows
-        -> adabraka-gpui-wgpu
+fc-gpui facade
+    -> fc-gpui-core
+    -> fc-gpui-platform
+        -> fc-gpui-linux / macos / windows
+        -> fc-gpui-wgpu
 ```
 
 本次对比基线之后，上游映射范围内共发现 49 个相关提交，其中绝大多数属于 Zed 产品、Web 后端、上游内部重构或本地已经等价覆盖的变化。真正值得迁移的内容应分为四层：
@@ -331,7 +331,7 @@ db.load_font_source(cosmic_text::fontdb::Source::Binary(Arc::new(bytes)));
 
 上游提交修改的是独立 `crates/path` 中的 `PathStyle::normalize` 测试和语义，`crates/util/src/paths.rs` 只是重新导出该类型。当前仓库没有上游 `path` crate，本地 `crates/util/src/paths.rs::PathStyle` 也没有同构的 `normalize` API。
 
-因此不能把测试孤立复制到 `adabraka_util`。只有在本地出现跨宿主处理 Windows 远端路径的真实调用点时，才应先决定：抽取最小 path crate，还是在本地 `PathStyle` 上新增清晰的词法规范化 API；随后再迁移盘符、UNC、混合分隔符、`.`、`..` 和根目录边界测试。
+因此不能把测试孤立复制到 `fc-gpui-util`。只有在本地出现跨宿主处理 Windows 远端路径的真实调用点时，才应先决定：抽取最小 path crate，还是在本地 `PathStyle` 上新增清晰的词法规范化 API；随后再迁移盘符、UNC、混合分隔符、`.`、`..` 和根目录边界测试。
 
 ### 5.7 滚动轴锁定
 
@@ -457,7 +457,7 @@ core ExternalDragPayload/FileDragPaths
 
 #### Windows 路径规范化 `2610332077`
 
-见第 5.6 节。它只依赖标准库，适合在 `adabraka_util` 内做增量移植。
+见第 5.6 节。它只依赖标准库，适合在 `fc-gpui-util` 内做增量移植。
 
 #### TypeId 专用 hasher：仅在有热点时
 
@@ -473,7 +473,7 @@ core ExternalDragPayload/FileDragPaths
 - `collections`、`util_macros`、`gpui_macros`、`refineable`、`derive_refineable`、`http_client`、`media`：基线后的对应源码变化不足以形成迁移项。
 - `sum_tree` 的 `truncate(0)` -> `clear()`：属于 Rust 版本/机械清理，不值得单独同步。
 - `semantic_version`：本地仍是 GPUI 公共依赖，不能因为上游组织变化就删除。
-- `perf`：上游工具化与本地可发布 `adabraka_perf` 是不同产品边界。
+- `perf`：上游工具化与本地可发布 `fc-gpui-perf` 是不同产品边界。
 
 ### 7.3 明确不适用的 util 改动
 
@@ -577,8 +577,8 @@ core ExternalDragPayload/FileDragPaths
 每个主题单独保留 `Zed-Origin`，先跑 focused tests，再跑：
 
 ```sh
-cargo test --locked -p adabraka-gpui-core --lib --features test-support
-cargo test --locked -p adabraka-gpui --tests --features test-support
+cargo test --locked -p fc-gpui-core --lib --features test-support
+cargo test --locked -p fc-gpui --tests --features test-support
 scripts/verify-migration.sh
 ```
 

@@ -54,7 +54,7 @@ AccessKit、benchmark/profiler 二期、web 平台和 scheduler 相关改动价�
 | C | `a1d2ef6514` | `bbdf299` | `ListState` viewport 查询 API |
 | C | `34cd17ff5e` | `0f5217a` | `BoxShadow` builder API 与宏 preset 使用 builder |
 
-验证已覆盖可在本机执行的默认 macOS `cargo check -p adabraka-gpui --lib`，以及对应纯 Rust / test-support 单测。Linux Wayland 与 Windows 目标的完整交叉检查受本机缺少平台 C toolchain 限制，需在对应平台补跑。
+验证已覆盖可在本机执行的默认 macOS `cargo check -p fc-gpui --lib`，以及对应纯 Rust / test-support 单测。Linux Wayland 与 Windows 目标的完整交叉检查受本机缺少平台 C toolchain 限制，需在对应平台补跑。
 
 ## Follow-up：Wayland serial 串号修复（2026-07-25）
 
@@ -66,7 +66,7 @@ AccessKit、benchmark/profiler 二期、web 平台和 scheduler 相关改动价�
   - `client.rs`：`write_to_primary`/`write_to_clipboard` 改用 `selection_serial()`，无合格 press serial 时 `log::warn!` 并跳过所有权请求；`KeyPress` 仅在 `Pressed` 时 `update`；其余 `set_cursor`/`set_shape`/`set_icon`/`set_serial`/`accept` 调用补 `.as_raw()`。
   - `window.rs`：`set_serial`/`show_window_menu`/`_move`/`resize` 4 处补 `.as_raw()`。
 - 与上游的预期分歧（非遗漏）：上游 `popup_grab` 的 `MousePress.max(KeyPress)`、`cursor_hidden_window` 隐藏光标方法、`WlPointer` 分发里的 `default_style` 光标设置三处 hunk 在本仓库结构中不存在（parent-native popup 在 `codex/parent-native-popup` 分支，本地 `MouseEnter` 分支直接用事件自带 serial），不影响本修复。
-- 验证：新增 `serial` 模块 5 个单测在 Linux 下通过；本机 macOS 受 `#[cfg(target_os = "linux")]` 门控不编译 wayland 模块，建议在 `mp-dev` 上 `cargo test -p adabraka-gpui --lib --features test-support,wayland serial::` 与 `cargo check -p adabraka-gpui --features wayland` 闭环。
+- 验证：新增 `serial` 模块 5 个单测在 Linux 下通过；本机 macOS 受 `#[cfg(target_os = "linux")]` 门控不编译 wayland 模块，建议在 `mp-dev` 上 `cargo test -p fc-gpui --lib --features test-support,wayland serial::` 与 `cargo check -p fc-gpui --features wayland` 闭环。
 
 ## 分析范围
 
@@ -110,7 +110,7 @@ AccessKit、benchmark/profiler 二期、web 平台和 scheduler 相关改动价�
 - 当前证据：`crates/gpui/src/platform/linux/platform.rs:1059`、`crates/gpui/src/platform/linux/wayland/clipboard.rs:91`、`crates/gpui/src/platform/linux/wayland/client.rs:2127`
 - 价值：避免 Firefox/外部应用挂起或半写入剪贴板时把 GPUI event loop 卡死。
 - 风险：低到中。需把上游 `read_fd_with_timeout` 映射进当前 `platform/linux/platform.rs`，并替换 Wayland clipboard 和相关读取点。
-- 验证：增加超时 pipe 单测；运行 `cargo test -p adabraka-gpui --lib --features test-support,wayland clipboard`。
+- 验证：增加超时 pipe 单测；运行 `cargo test -p fc-gpui --lib --features test-support,wayland clipboard`。
 
 ### P0. Atlas tile 空间释放
 
@@ -120,7 +120,7 @@ AccessKit、benchmark/profiler 二期、web 平台和 scheduler 相关改动价�
 - 当前证据：`crates/gpui/src/platform/mac/metal_atlas.rs:62`、`crates/gpui/src/platform/wgpu/wgpu_atlas.rs:135`、`crates/gpui/src/platform/windows/directx_atlas.rs:101`
 - 价值：修复图片/纹理反复加载释放时 atlas 空间不能复用导致资源增长。
 - 风险：中。三个后端实现相似但不完全一致，需分别补回归测试。
-- 验证：移植上游 `test_remove_deallocates_tile_space_for_reuse` 思路；运行对应 atlas 单测，至少 `cargo test -p adabraka-gpui atlas`。
+- 验证：移植上游 `test_remove_deallocates_tile_space_for_reuse` 思路；运行对应 atlas 单测，至少 `cargo test -p fc-gpui atlas`。
 
 ### P0. macOS fallback 字体级联修复
 
@@ -131,7 +131,7 @@ AccessKit、benchmark/profiler 二期、web 平台和 scheduler 相关改动价�
 - 当前证据：`crates/gpui/src/platform/mac/open_type.rs:110`、`crates/gpui/src/platform/mac/open_type.rs:122`
 - 价值：直接影响 macOS CJK/emoji/多语言 fallback 字体选择，尤其 bold/italic fallback。
 - 风险：中。CoreText FFI 代码需谨慎处理 CF 对象生命周期。
-- 验证：增加 `append_system_fallbacks` 不为空的可测封装或 macOS 字体 fallback 集成测试；运行 macOS `cargo test -p adabraka-gpui mac::text_system`。
+- 验证：增加 `append_system_fallbacks` 不为空的可测封装或 macOS 字体 fallback 集成测试；运行 macOS `cargo test -p fc-gpui mac::text_system`。
 
 ### P1. IME candidate 视觉行锚点
 
@@ -152,7 +152,7 @@ AccessKit、benchmark/profiler 二期、web 平台和 scheduler 相关改动价�
 - 当前证据：`crates/gpui/src/elements/list.rs:331`、`crates/gpui/src/elements/list.rs:710`、`crates/gpui/src/elements/list.rs:1348`
 - 价值：改善聊天、日志、agent streaming 列表在内容变高时的滚动平滑性。
 - 风险：中。List 状态机敏感，必须带回归测试。
-- 验证：移植上游 pending scroll/scroll wheel 测试；运行 `cargo test -p adabraka-gpui elements::list --features test-support`。
+- 验证：移植上游 pending scroll/scroll wheel 测试；运行 `cargo test -p fc-gpui elements::list --features test-support`。
 
 ### P1. Tooltip stuck 与 show delay 配置
 
@@ -162,7 +162,7 @@ AccessKit、benchmark/profiler 二期、web 平台和 scheduler 相关改动价�
 - 当前证据：`crates/gpui/src/elements/div.rs:48`、`crates/gpui/src/elements/div.rs:2815`
 - 价值：独立 GPUI app 比 Zed 更容易暴露 tooltip 卡住问题；配置 show delay 也更符合组件库需求。
 - 风险：低到中。主要在 `div.rs` / `text.rs` API 增量。
-- 验证：新增 tooltip 离开源元素后隐藏的交互测试；运行 `cargo test -p adabraka-gpui tooltip --features test-support`。
+- 验证：新增 tooltip 离开源元素后隐藏的交互测试；运行 `cargo test -p fc-gpui tooltip --features test-support`。
 
 ### P1. Windows immovable window hit-test
 
@@ -248,9 +248,9 @@ AccessKit、benchmark/profiler 二期、web 平台和 scheduler 相关改动价�
 建议验证：
 
 ```bash
-cargo test -p adabraka-gpui atlas
-cargo test -p adabraka-gpui --lib --features test-support
-cargo check -p adabraka-gpui --no-default-features --features wgpu,wayland
+cargo test -p fc-gpui atlas
+cargo test -p fc-gpui --lib --features test-support
+cargo check -p fc-gpui --no-default-features --features wgpu,wayland
 ```
 
 ### 批次 B：输入和交互修复
@@ -263,9 +263,9 @@ cargo check -p adabraka-gpui --no-default-features --features wgpu,wayland
 建议验证：
 
 ```bash
-cargo test -p adabraka-gpui tooltip --features test-support
-cargo test -p adabraka-gpui --lib --features test-support,wayland,x11
-cargo check -p adabraka-gpui --target x86_64-pc-windows-msvc
+cargo test -p fc-gpui tooltip --features test-support
+cargo test -p fc-gpui --lib --features test-support,wayland,x11
+cargo check -p fc-gpui --target x86_64-pc-windows-msvc
 ```
 
 ### 批次 C：列表和文本排版
@@ -278,9 +278,9 @@ cargo check -p adabraka-gpui --target x86_64-pc-windows-msvc
 建议验证：
 
 ```bash
-cargo test -p adabraka-gpui elements::list --features test-support
-cargo test -p adabraka-gpui line_wrapper
-cargo test -p adabraka-gpui --lib --features test-support
+cargo test -p fc-gpui elements::list --features test-support
+cargo test -p fc-gpui line_wrapper
+cargo test -p fc-gpui --lib --features test-support
 ```
 
 ### 批次 D：架构专题
@@ -297,4 +297,4 @@ cargo test -p adabraka-gpui --lib --features test-support
 - 不覆盖 `app.rs`、`window.rs`、`platform.rs` 整文件，按函数/trait 手动合并。
 - 平台实现保留 Adabraka 的 tray、global hotkey、daemon、resource profile、layer-shell 扩展。
 - 每个 bugfix 至少带一个最小回归测试；没有自动化条件的平台修复，文档记录手动验证步骤。
-- 优先跑 changed-area 测试，再跑 `cargo test -p adabraka-gpui --lib --features test-support`。
+- 优先跑 changed-area 测试，再跑 `cargo test -p fc-gpui --lib --features test-support`。

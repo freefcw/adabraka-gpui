@@ -188,10 +188,10 @@
 ### 命令
 
 ```bash
-cargo test -p adabraka-gpui-core test_app
-cargo test -p adabraka-gpui-core headless
-cargo test -p adabraka-gpui-core --lib --features test-support
-cargo check -p adabraka-gpui-core --no-default-features --features wgpu
+cargo test -p fc-gpui-core test_app
+cargo test -p fc-gpui-core headless
+cargo test -p fc-gpui-core --lib --features test-support
+cargo check -p fc-gpui-core --no-default-features --features wgpu
 ```
 
 ### 手动验证
@@ -214,8 +214,8 @@ cargo check -p adabraka-gpui-core --no-default-features --features wgpu
 已验证：
 
 ```bash
-cargo test -p adabraka-gpui-core --lib --features test-support -- test_app
-cargo test -p adabraka-gpui-core --lib --features test-support -- headless
+cargo test -p fc-gpui-core --lib --features test-support -- test_app
+cargo test -p fc-gpui-core --lib --features test-support -- headless
 ```
 
 结果：全部通过；macOS 当前覆盖 `headless_mac_text_layout_produces_nonzero_metrics`，Linux 对应覆盖 `headless_cosmic_text_layout_produces_nonzero_metrics`。
@@ -409,23 +409,23 @@ set -e
 echo "=== 002 - TestApp / Headless ==="
 
 echo "[1/5] Compile checks..."
-cargo check -p adabraka-gpui-core
-cargo check -p adabraka-gpui-core --no-default-features
-cargo check -p adabraka-gpui-core --no-default-features --features wgpu
+cargo check -p fc-gpui-core
+cargo check -p fc-gpui-core --no-default-features
+cargo check -p fc-gpui-core --no-default-features --features wgpu
 
 echo "[2/5] TestApp unit tests..."
-cargo test -p adabraka-gpui-core --lib --features test-support -- test_app
+cargo test -p fc-gpui-core --lib --features test-support -- test_app
 
 echo "[3/5] Headless tests..."
-cargo test -p adabraka-gpui-core --lib --features test-support -- headless
+cargo test -p fc-gpui-core --lib --features test-support -- headless
 
 echo "[4/5] Frozen tests (regression guard)..."
-cargo test -p adabraka-gpui-core --lib --features test-support -- app::test
-cargo test -p adabraka-gpui-core --lib --features test-support -- executor
-cargo test -p adabraka-gpui-core --lib --features test-support -- text_system
+cargo test -p fc-gpui-core --lib --features test-support -- app::test
+cargo test -p fc-gpui-core --lib --features test-support -- executor
+cargo test -p fc-gpui-core --lib --features test-support -- text_system
 
 echo "[5/5] Full lib test..."
-cargo test -p adabraka-gpui-core --lib --features test-support
+cargo test -p fc-gpui-core --lib --features test-support
 
 echo "=== 002 ALL PASSED ==="
 ```

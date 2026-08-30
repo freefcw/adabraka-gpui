@@ -94,7 +94,7 @@ if let Some(state) = &mut state {
 
 ### 编译检查
 ```bash
-cargo check -p adabraka-gpui
+cargo check -p fc-gpui
 ```
 **结果**: ✅ 通过（无新增错误或警告）
 

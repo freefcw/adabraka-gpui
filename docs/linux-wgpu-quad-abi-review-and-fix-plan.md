@@ -345,7 +345,7 @@ Quad: MATCH
 ### 编译验证
 
 ```bash
-cargo check -p adabraka-gpui --example linux_rendering_probe
+cargo check -p fc-gpui --example linux_rendering_probe
 ```
 
 ### 实机视觉验证

@@ -1,9 +1,9 @@
 [package]
-name = "adabraka-gpui-renamed-dependency-compat"
+name = "fc-gpui-renamed-dependency-compat"
 version = "0.0.0"
 edition = "2024"
 publish = false
 
 [dependencies]
 rand = "=0.9.4"
-ui = { package = "adabraka-gpui", path = "../../crates/gpui-compat", default-features = false, features = ["test-support"] }
+ui = { package = "fc-gpui", path = "../../crates/gpui-compat", default-features = false, features = ["test-support"] }

@@ -1,6 +1,6 @@
 [package]
 edition = "2024"
-name = "adabraka_semantic_version"
+name = "fc-gpui-semantic-version"
 version = "0.5.1"
 publish = true
 description = "A library for working with semantic versioning (originally from Zed - github.com/zed-industries/zed)"

@@ -25,7 +25,7 @@
 - 每个任务独立提交，独立验证。
 - 任何平台 dispatcher、executor、window lifecycle 改动都必须保留 Adabraka 的 daemon、tray、headless、resource profile 能力。
 
-> **架构说明（Multi-Crates Workspace）**：项目已拆分为 Workspace 多 Crate 架构（`adabraka-gpui-core` (`crates/gpui`)、`adabraka-gpui` (`crates/gpui-compat`)、`adabraka-gpui-wgpu` 等）。单元测试已归属至 `adabraka-gpui-core`。下述命令中的单元测试与检查均以 `adabraka-gpui-core` 为准，推荐使用 `scripts/verify-001.sh` ~ `scripts/verify-004.sh` 统一验证。
+> **架构说明（Multi-Crates Workspace）**：项目已拆分为 Workspace 多 Crate 架构（`fc-gpui-core` (`crates/gpui`)、`fc-gpui` (`crates/gpui-compat`)、`fc-gpui-wgpu` 等）。单元测试已归属至 `fc-gpui-core`。下述命令中的单元测试与检查均以 `fc-gpui-core` 为准，推荐使用 `scripts/verify-001.sh` ~ `scripts/verify-004.sh` 统一验证。
 
 ## 统一开关策略
 
@@ -53,10 +53,10 @@
 最小验证：
 
 ```bash
-cargo test -p adabraka-gpui-core profiler
-cargo test -p adabraka-gpui-core --lib --features test-support profiler
-cargo check -p adabraka-gpui-core --no-default-features
-cargo check -p adabraka-gpui-wgpu
+cargo test -p fc-gpui-core profiler
+cargo test -p fc-gpui-core --lib --features test-support profiler
+cargo check -p fc-gpui-core --no-default-features
+cargo check -p fc-gpui-wgpu
 ```
 
 ### 第二批：改善测试入口和 headless 能力
@@ -74,9 +74,9 @@ cargo check -p adabraka-gpui-wgpu
 最小验证：
 
 ```bash
-cargo test -p adabraka-gpui-core test_app
-cargo test -p adabraka-gpui-core headless
-cargo test -p adabraka-gpui-core --lib --features test-support
+cargo test -p fc-gpui-core test_app
+cargo test -p fc-gpui-core headless
+cargo test -p fc-gpui-core --lib --features test-support
 ```
 
 ### 第三批：真实渲染 smoke
@@ -94,14 +94,14 @@ cargo test -p adabraka-gpui-core --lib --features test-support
 最小验证：
 
 ```bash
-cargo test -p adabraka-gpui-core visual_test --features test-support
-cargo test -p adabraka-gpui-core --lib --features test-support
+cargo test -p fc-gpui-core visual_test --features test-support
+cargo test -p fc-gpui-core --lib --features test-support
 ```
 
 平台手动验证：
 
 ```bash
-cargo test -p adabraka-gpui-core real_visual --features test-support -- --ignored
+cargo test -p fc-gpui-core real_visual --features test-support -- --ignored
 ```
 
 ### 第四批：调度和优先级
@@ -120,10 +120,10 @@ cargo test -p adabraka-gpui-core real_visual --features test-support -- --ignore
 最小验证：
 
 ```bash
-cargo test -p adabraka-gpui-core executor
-cargo test -p adabraka-gpui-core dispatcher
-cargo test -p adabraka-gpui-core --lib --features test-support
-cargo check -p adabraka-gpui-wgpu
+cargo test -p fc-gpui-core executor
+cargo test -p fc-gpui-core dispatcher
+cargo test -p fc-gpui-core --lib --features test-support
+cargo check -p fc-gpui-wgpu
 ```
 
 ## 验证分层策略
@@ -133,9 +133,9 @@ cargo check -p adabraka-gpui-wgpu
 ### 层 1：编译确认（每个 Step 完成后必跑）
 
 ```bash
-cargo check -p adabraka-gpui-core
-cargo check -p adabraka-gpui-core --no-default-features
-cargo check -p adabraka-gpui-wgpu
+cargo check -p fc-gpui-core
+cargo check -p fc-gpui-core --no-default-features
+cargo check -p fc-gpui-wgpu
 ```
 
 确保改动不破坏任何 feature 组合的编译。三条命令分别覆盖默认 macOS 路径、最小编译、Linux wgpu 路径。
@@ -143,7 +143,7 @@ cargo check -p adabraka-gpui-wgpu
 ### 层 2：全量 lib 测试（每个任务开始前/完成后必跑）
 
 ```bash
-cargo test -p adabraka-gpui-core --lib --features test-support
+cargo test -p fc-gpui-core --lib --features test-support
 ```
 
 当前共 116+ 个 lib 测试，涵盖 app、executor、keymap、elements、text_system、platform 等模块。这是回退检测的主要手段。
@@ -152,13 +152,13 @@ cargo test -p adabraka-gpui-core --lib --features test-support
 
 ```bash
 # Linux
-cargo test -p adabraka-gpui-linux --lib --features test-support,wayland,x11
+cargo test -p fc-gpui-linux --lib --features test-support,wayland,x11
 
 # macOS 真实渲染（标记为 ignored 的测试）
-cargo test -p adabraka-gpui-core --lib --features test-support -- --ignored
+cargo test -p fc-gpui-core --lib --features test-support -- --ignored
 
 # 快速 smoke（不替代全量测试，适合频繁确认）
-cargo test -p adabraka-gpui-core window_positioner
+cargo test -p fc-gpui-core window_positioner
 ```
 
 ### 冻结测试清单
@@ -166,12 +166,12 @@ cargo test -p adabraka-gpui-core window_positioner
 以下测试模块在所有迁移任务期间必须始终通过。如果某个 step 导致其中任何一个失败，应立即停止并修复：
 
 ```bash
-cargo test -p adabraka-gpui-core --lib --features test-support -- app::test
-cargo test -p adabraka-gpui-core --lib --features test-support -- executor
-cargo test -p adabraka-gpui-core --lib --features test-support -- elements::list
-cargo test -p adabraka-gpui-core --lib --features test-support -- keymap
-cargo test -p adabraka-gpui-core --lib --features test-support -- text_system
-cargo test -p adabraka-gpui-core --test action_macros
+cargo test -p fc-gpui-core --lib --features test-support -- app::test
+cargo test -p fc-gpui-core --lib --features test-support -- executor
+cargo test -p fc-gpui-core --lib --features test-support -- elements::list
+cargo test -p fc-gpui-core --lib --features test-support -- keymap
+cargo test -p fc-gpui-core --lib --features test-support -- text_system
+cargo test -p fc-gpui-core --test action_macros
 ```
 
 这些测试覆盖核心功能（app 生命周期、task 调度、UI 元素、按键绑定、文本排版），是判断改动是否引入回退的最低门槛。

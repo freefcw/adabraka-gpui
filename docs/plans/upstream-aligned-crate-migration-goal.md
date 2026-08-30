@@ -11,7 +11,7 @@
 
 ## Target Outcome
 
-Adabraka GPUI keeps `adabraka-gpui` as its stable downstream entry point while moving renderer and operating-system implementations into upstream-aligned crates. The completed 0.8.x migration preserved the existing dependency declaration, startup API, feature names, and desktop behavior. The 0.9 development line retains the stable facade and startup API while allowing explicitly approved breaking API and feature cleanup with changelog migration guidance.
+Adabraka GPUI keeps `fc-gpui` as its stable downstream entry point while moving renderer and operating-system implementations into upstream-aligned crates. The completed 0.8.x migration preserved the existing dependency declaration, startup API, feature names, and desktop behavior. The 0.9 development line retains the stable facade and startup API while allowing explicitly approved breaking API and feature cleanup with changelog migration guidance.
 
 ## Goal Definition
 
@@ -27,16 +27,16 @@ Adabraka GPUI keeps `adabraka-gpui` as its stable downstream entry point while m
   - Feature-default reduction after compile-time and binary-size measurements exist.
 - **Verification rule**: Every phase must keep the public compatibility fixture, workspace check, core test suite, examples, and locally installed target checks green before the next phase starts.
 - **Evidence source**: Cargo compile fixtures, unit and integration tests, target checks, public API usage examples, and a final diff review.
-- **Pass criteria**: Existing `adabraka-gpui` dependency syntax and `gpui::Application::new()` continue to compile; the 0.8.x migration baseline keeps its documented feature names; any later 0.9 feature removal is explicitly versioned and documented; the core test suite remains green; platform implementations no longer reside in the core implementation crate at completion.
+- **Pass criteria**: Existing `fc-gpui` dependency syntax and `gpui::Application::new()` continue to compile; the 0.8.x migration baseline keeps its documented feature names; any later 0.9 feature removal is explicitly versioned and documented; the core test suite remains green; platform implementations no longer reside in the core implementation crate at completion.
 - **Confidence note**: Compile and test evidence covers the local macOS target directly and Zig-backed Windows/Linux type-checks, including Windows public all-features after pinning the upstream-compatible capture dependency. Linux and Windows runtime desktop integration still require platform CI or host smoke tests.
 - **Judgment owner**: Automated tests and target checks, followed by repository diff review.
 
 ## Current State
 
-- `adabraka-gpui` is one published crate containing core, renderer, test platform, Linux, macOS, and Windows implementations.
+- `fc-gpui` is one published crate containing core, renderer, test platform, Linux, macOS, and Windows implementations.
 - `Application::new()` selects a concrete backend inside core.
 - `Platform` and several supporting backend traits are crate-private.
-- The public derive macros generate a hard-coded `adabraka_gpui` path that fails for the documented `gpui` crate name.
+- The public derive macros generate a hard-coded `fc_gpui` path that fails for the documented `gpui` crate name.
 - The workspace baseline passes `cargo check --workspace` and the current core test suite, with ignored/native visual coverage bounded separately.
 - Adabraka-specific desktop behavior is implemented and must remain intact.
 
@@ -46,7 +46,7 @@ Adabraka GPUI keeps `adabraka-gpui` as its stable downstream entry point while m
 |---|---|---|
 | Fix every issue before migration | Rewrite | Only proven blockers are fixed first; unrelated changes would obscure migration regressions. |
 | Add `DesktopServices` immediately | Remove | No downstream or sync-conflict evidence justifies a new service-locator layer. |
-| Keep `adabraka-gpui` as pure core | Rewrite | The published package remains a compatibility entry point so downstream startup code stays stable. |
+| Keep `fc-gpui` as pure core | Rewrite | The published package remains a compatibility entry point so downstream startup code stays stable. |
 | Mirror upstream platform crates | Keep | This is the change that directly reduces path mapping and sync amplification. |
 | Migrate scheduler/View/web together | Remove | These are independent semantic changes and are not required for the crate boundary. |
 
@@ -120,16 +120,16 @@ Adabraka GPUI keeps `adabraka-gpui` as its stable downstream entry point while m
 - **Purpose**: Make the published package the outward composition root before any concrete backend leaves core.
 - **Entry condition**: Phase 2 green and independently reviewed.
 - **Phase rules**:
-  - Keep package `adabraka-gpui`, lib target `gpui`, the 0.8 migration baseline's feature names/defaults, examples, README, and downstream startup syntax at the compatibility root.
-  - Move implementation source to `adabraka-gpui-core`, lib target `gpui_core`.
+  - Keep package `fc-gpui`, lib target `gpui`, the 0.8 migration baseline's feature names/defaults, examples, README, and downstream startup syntax at the compatibility root.
+  - Move implementation source to `fc-gpui-core`, lib target `gpui_core`.
   - Wrap only `Application`; directly re-export every other core nominal type.
   - Do not move a backend or WGPU in this phase.
 - **Todos**:
-  - [x] Move the current implementation source and unit tests to `adabraka-gpui-core`.
+  - [x] Move the current implementation source and unit tests to `fc-gpui-core`.
     - **Surface**: Package graph and source ownership
     - **Proof**: Core package checks and unit tests pass.
     - **Depends on**: Phase 2
-  - [x] Convert `adabraka-gpui` into the compatibility umbrella with an exhaustive `Application` wrapper.
+  - [x] Convert `fc-gpui` into the compatibility umbrella with an exhaustive `Application` wrapper.
     - **Surface**: Public package, re-exports, examples, integration tests, features
     - **Proof**: Existing downstream fixtures remain source-identical and green; all current Application methods compile through the wrapper.
     - **Depends on**: Core package creation
@@ -149,7 +149,7 @@ Adabraka GPUI keeps `adabraka-gpui` as its stable downstream entry point while m
   - Do not copy WGPU; expose only the minimum current WGPU entry types from core.
   - Switch only Linux selection in `gpui-platform` after checks pass.
 - **Todos**:
-  - [x] Extract `adabraka-gpui-linux` and its target dependencies/features.
+  - [x] Extract `fc-gpui-linux` and its target dependencies/features.
     - **Surface**: Linux, Wayland, X11, headless, layer shell, desktop integrations
     - **Proof**: Linux no-feature, X11-only, Wayland-only, and combined checks.
     - **Depends on**: Phase 3
@@ -170,7 +170,7 @@ Adabraka GPUI keeps `adabraka-gpui` as its stable downstream entry point while m
   - Preserve atlas sizing, instance-buffer normalization, device-loss recovery, shader behavior, and current trim/stats semantics.
   - Do not import upstream subpixel/text features during movement.
 - **Todos**:
-  - [x] Extract `adabraka-gpui-wgpu` depending only on core.
+  - [x] Extract `fc-gpui-wgpu` depending only on core.
     - **Surface**: WGPU context, atlas, renderer, shader, Cargo features
     - **Proof**: Renderer tests and Linux feature checks pass against the external crate.
     - **Depends on**: Phase 4
@@ -189,7 +189,7 @@ Adabraka GPUI keeps `adabraka-gpui` as its stable downstream entry point while m
   - Move shader/build responsibilities with the backend.
   - Preserve tray, hotkey, permission, notification, biometric, power, network, screen capture, and GPU cache behavior.
 - **Todos**:
-  - [x] Extract `adabraka-gpui-macos`, switch facade selection, and remove the in-core implementation.
+  - [x] Extract `fc-gpui-macos`, switch facade selection, and remove the in-core implementation.
     - **Surface**: macOS backend and build script
     - **Proof**: Native macOS tests and examples pass.
     - **Depends on**: Phase 5
@@ -204,11 +204,11 @@ Adabraka GPUI keeps `adabraka-gpui` as its stable downstream entry point while m
   - Move HLSL and manifest/build responsibilities with the backend.
   - Preserve tray, hotkey, overlay, notification, power, network, auto-launch, and jump-list behavior.
 - **Todos**:
-  - [x] Extract `adabraka-gpui-windows`, switch facade selection, and remove the in-core implementation.
+  - [x] Extract `fc-gpui-windows`, switch facade selection, and remove the in-core implementation.
     - **Surface**: Windows backend and build script
     - **Proof**: Zig-backed no-default and all-feature checks pass for both the Windows backend and public umbrella after pinning the upstream-compatible `windows-capture` revision. Native host checks remain external.
     - **Depends on**: Phase 6
-- **Exit proof**: One Windows implementation remains outside core. Win32/DirectX sources, HLSL, manifest/resources, and build logic are owned by `adabraka-gpui-windows`; core retains only contracts and product-independent Windows primitives.
+- **Exit proof**: One Windows implementation remains outside core. Win32/DirectX sources, HLSL, manifest/resources, and build logic are owned by `fc-gpui-windows`; core retains only contracts and product-independent Windows primitives.
 - **Stop condition**: DirectX shader/manifest output or a desktop integration changes behavior.
 
 ### Phase 8: Final Cleanup and Release Proof

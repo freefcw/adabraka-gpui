@@ -316,7 +316,7 @@ Zed 只在内部使用 TransformationMatrix，未暴露给用户 API。
 ### 7. 多 Crate 架构拆分与全平台契约硬化 (v0.8.0 / v0.8.1)
 **状态**: ✅ Adabraka 独有 / 架构重构
 
-- ✅ **Workspace 8 包拆分架构**：解耦核心引擎与底层平台包（`adabraka-gpui-core`, `gpui-wgpu`, `gpui-linux`, `gpui-macos`, `gpui-windows`, `gpui-platform`, `gpui-macros` 及Facade `adabraka-gpui`）。
+- ✅ **Workspace 8 包拆分架构**：解耦核心引擎与底层平台包（`fc-gpui-core`, `gpui-wgpu`, `gpui-linux`, `gpui-macos`, `gpui-windows`, `gpui-platform`, `gpui-macros` 及Facade `fc-gpui`）。
 - ✅ **全平台权限与 Accessibility 契约**：引入 `PermissionStatus::Unavailable` 和 `PermissionRequestStatus`，支持键盘快捷键辅助树节点探测与自动化视觉测试产物。
 - ✅ **屏幕捕获生命周期**：增加流创建 `Ended` / `Cancelled` / `Failed` 回调机制，释放 macOS 捕获句柄。
 - ✅ **Windows DirectX 离屏 Readback 物理对齐 (v0.8.1)**：对齐 HLSL Quad Transform Padding 物理结构。

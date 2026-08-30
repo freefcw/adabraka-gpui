@@ -20,7 +20,7 @@ Upstream GPUI changes can be synchronized and released without silently skipping
 - **Deferred work**:
   - Production task-priority semantics until profiling shows a user-visible scheduling problem.
   - Structured notification actions and parent-anchored popups until an application needs them.
-- **Verification rule**: Focused commands must execute tests from `adabraka-gpui-core`; compatibility tests must execute from `adabraka-gpui`; the workspace suite, three-platform CI definitions, formatting, package inventories, and documentation links must remain valid.
+- **Verification rule**: Focused commands must execute tests from `fc-gpui-core`; compatibility tests must execute from `fc-gpui`; the workspace suite, three-platform CI definitions, formatting, package inventories, and documentation links must remain valid.
 - **Evidence source**: Cargo command output, shell syntax checks, workflow review, package inventories, and repository searches for stale active commands.
 - **Pass criteria**: Core focused tests no longer report zero tests, the full workspace remains green, active docs identify the split topology and current upstream baseline, and the public package keeps its existing API fixtures.
 - **Confidence note**: Local execution directly covers macOS and all platform-independent tests. Linux and Windows runtime confidence remains owned by their CI runners.
@@ -28,9 +28,9 @@ Upstream GPUI changes can be synchronized and released without silently skipping
 
 ## Current State
 
-- `adabraka-gpui` is a compatibility facade; `adabraka-gpui-core` owns 195 current unit tests.
+- `fc-gpui` is a compatibility facade; `fc-gpui-core` owns 195 current unit tests.
 - The four `scripts/verify-*.sh` files still target the facade for core test filters, so commands can exit successfully with zero tests.
-- A macOS `--features wgpu` facade check does not include `adabraka-gpui-wgpu` in its dependency tree.
+- A macOS `--features wgpu` facade check does not include `fc-gpui-wgpu` in its dependency tree.
 - Sync index, mapping, quick reference, README commands, and example paths still contain pre-split guidance.
 - The workspace currently passes formatting, checking, and 277 tests with 2 ignored.
 
@@ -142,8 +142,8 @@ Upstream GPUI changes can be synchronized and released without silently skipping
 - `cargo fmt --all -- --check`
 - `cargo check --workspace --locked`
 - `cargo test --workspace --lib --tests --locked -- --test-threads=1`
-- `cargo test -p adabraka-gpui-core --lib --features test-support --locked -- profiler`
-- `cargo test -p adabraka-gpui --tests --features test-support --locked`
+- `cargo test -p fc-gpui-core --lib --features test-support --locked -- profiler`
+- `cargo test -p fc-gpui --tests --features test-support --locked`
 - `git diff --check`
 
 ## Completion Evidence

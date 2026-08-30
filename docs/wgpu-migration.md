@@ -1,7 +1,7 @@
 # Linux wgpu Migration
 
 This repository now uses a Zed-style wgpu renderer for Linux X11 and Wayland.
-The migration replaces the previous Linux Blade renderer while keeping the public `adabraka-gpui`
+The migration replaces the previous Linux Blade renderer while keeping the public `fc-gpui`
 application API stable.
 
 ## What Changed
@@ -27,10 +27,10 @@ Application::new().run(|cx| {
 });
 ```
 
-The crate split publishes `adabraka-gpui-wgpu` because the published Linux backend depends on it.
+The crate split publishes `fc-gpui-wgpu` because the published Linux backend depends on it.
 Its Rust library name is `gpui_wgpu`, and it exposes the renderer integration types required by the
 platform packages. It remains an implementation package rather than the supported application entry
-point; downstream applications should normally depend only on `adabraka-gpui`.
+point; downstream applications should normally depend only on `fc-gpui`.
 
 ## Shader Layout
 

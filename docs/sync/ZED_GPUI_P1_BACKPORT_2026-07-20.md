@@ -140,7 +140,7 @@ Adabraka GPUI contains the seven applicable P1 correctness, interaction, platfor
 
 ## Final Validation
 
-- `cargo test -p adabraka-gpui --lib --features test-support -- --test-threads=1`
+- `cargo test -p fc-gpui --lib --features test-support -- --test-threads=1`
 - `cargo test --workspace --lib --tests -- --test-threads=1`
 - `cargo check --workspace`
 - Changed-file `rustfmt --check` and `git diff --check`
@@ -153,8 +153,8 @@ The previously deferred platform gates were revisited with the final migration-g
 
 | Gate | Environment | Result | Evidence |
 | --- | --- | --- | --- |
-| GPUI Linux suite | `mp-dev`, Ubuntu x86_64 | passed | `cargo test -p adabraka-gpui --lib --features test-support,wayland,x11 -- --test-threads=1`: 219 passed |
-| Linux feature compilation | `mp-dev` | passed | `cargo check -p adabraka-gpui --no-default-features --features wgpu,wayland,x11` |
+| GPUI Linux suite | `mp-dev`, Ubuntu x86_64 | passed | `cargo test -p fc-gpui --lib --features test-support,wayland,x11 -- --test-threads=1`: 219 passed |
+| Linux feature compilation | `mp-dev` | passed | `cargo check -p fc-gpui --no-default-features --features wgpu,wayland,x11` |
 | X11 WGPU render/readback | `mp-dev`, Xvfb, Vulkan llvmpipe | passed | `real_visual_smoke` rendered, requested per-window attention, read back RGBA pixels, and exited 0 |
 | Wayland layer-shell edge validation | `mp-dev` native Linux build | passed | focused `exclusive_edge` tests: 2 passed; combined Wayland/X11 build passed |
 | Wayland real compositor smoke | `mp-dev`, Sway headless | environment blocked | Sway pixman starts and exposes layer-shell, but the VM has no DRM render node; WGPU's Vulkan adapter cannot configure the pixman Wayland surface. This remains a runner capability gate, not an unrecorded validation gap. |
@@ -180,7 +180,7 @@ This closes the missing validation-record problem. Linux X11 behavior is runtime
 - Root cause: the earlier `get_latest()` took the max serial across all kinds, but `InputMethod`, `MouseEnter`, and `DataDevice` serials are not from the same pool as `KeyPress`/`MousePress`. After prolonged IME use the `InputMethod` serial overtakes press serials and is wrongly used for clipboard/primary-selection authorization on Mutter/kWin, poisoning selection ownership until exit.
 - Fix: dedicated `selection_serial()` updated only by `KeyPress`/`MousePress`, with ownership requests skipped (and warned) when no eligible press serial exists. Adds `Serial`/`SelectionSerial` wrappers, drops `get_latest()`, restricts `KeyPress` updates to press, and adds five focused unit tests.
 - Expected divergence (not a gap): three upstream hunks (`popup_grab` `MousePress.max(KeyPress)`, `cursor_hidden_window`, `WlPointer` `default_style`) are absent here because the local cursor/popup code paths diverge from upstream; none affect the selection-ownership fix.
-- Validation: serial unit tests compile-pass under the wayland feature on Linux; macOS host is gated out of the wayland module, so closure belongs on `mp-dev` (`cargo test -p adabraka-gpui --lib --features test-support,wayland serial::`).
+- Validation: serial unit tests compile-pass under the wayland feature on Linux; macOS host is gated out of the wayland module, so closure belongs on `mp-dev` (`cargo test -p fc-gpui --lib --features test-support,wayland serial::`).
 
 ## First Execution Step
 

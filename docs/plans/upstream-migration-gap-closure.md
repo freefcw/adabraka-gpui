@@ -172,7 +172,7 @@ The repository closes migration findings 1-4 in code and evidence: platform-spec
 - The follow-up completes finding 4's bounded code scope; broader landmarks/menu behavior remains a separate migration batch.
 
 ## Final Validation
-- `cargo test -p adabraka-gpui --lib --features test-support -- --test-threads=1`
+- `cargo test -p fc-gpui --lib --features test-support -- --test-threads=1`
 - `cargo test --workspace --lib --tests -- --test-threads=1`
 - `cargo check --workspace`
 - `cargo fmt --all -- --check`

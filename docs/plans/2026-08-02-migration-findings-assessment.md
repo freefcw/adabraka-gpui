@@ -62,7 +62,7 @@
 核心实现：
 
 - `crates/gpui-macros/Cargo.toml` 使用 `proc-macro-crate`。
-- `crates/gpui-macros/src/gpui_macros.rs` 同时解析 `adabraka-gpui` 和 `adabraka-gpui-core`。
+- `crates/gpui-macros/src/gpui_macros.rs` 同时解析 `fc-gpui` 和 `fc-gpui-core`。
 - 处理 package 名、lib target 名和 dependency rename 的差异。
 - facade/core 同时作为直接依赖时，支持通过 `[package.metadata.gpui-macros]` 显式选择。
 
@@ -118,8 +118,8 @@ Application::with_resource_profile
 当前已经建立：
 
 - core `Application::with_platform`
-- `adabraka-gpui-platform` 组合 facade
-- `adabraka-gpui` 公共兼容 facade
+- `fc-gpui-platform` 组合 facade
+- `fc-gpui` 公共兼容 facade
 - Linux/macOS/Windows/WGPU 独立 crate
 - 锁步 GPUI crate 版本
 

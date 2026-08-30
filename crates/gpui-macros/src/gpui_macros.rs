@@ -229,8 +229,8 @@ pub(crate) fn gpui_crate_path() -> proc_macro2::TokenStream {
         return path;
     }
 
-    let facade = crate_name("adabraka-gpui").ok();
-    let core = crate_name("adabraka-gpui-core").ok();
+    let facade = crate_name("fc-gpui").ok();
+    let core = crate_name("fc-gpui-core").ok();
 
     select_gpui_crate_path(facade, core)
 }
@@ -241,12 +241,12 @@ fn select_gpui_crate_path(
 ) -> proc_macro2::TokenStream {
     match (facade, core) {
         (Some(_), Some(_)) => panic!(
-            "both adabraka-gpui and adabraka-gpui-core are direct dependencies; \
+            "both fc-gpui and fc-gpui-core are direct dependencies; \
              set [package.metadata.gpui-macros] crate = \"<dependency identifier>\" \
              in Cargo.toml to select the crate used by GPUI macros"
         ),
-        (Some(found), None) => crate_path(found, "adabraka_gpui", "gpui"),
-        (None, Some(found)) => crate_path(found, "adabraka_gpui_core", "gpui_core"),
+        (Some(found), None) => crate_path(found, "fc_gpui", "gpui"),
+        (None, Some(found)) => crate_path(found, "fc_gpui_core", "gpui_core"),
         (None, None) => quote!(::gpui),
     }
 }
@@ -312,7 +312,7 @@ mod tests {
     use super::{FoundCrate, select_gpui_crate_path};
 
     #[test]
-    #[should_panic(expected = "both adabraka-gpui and adabraka-gpui-core are direct dependencies")]
+    #[should_panic(expected = "both fc-gpui and fc-gpui-core are direct dependencies")]
     fn ambiguous_direct_dependencies_require_an_explicit_crate() {
         select_gpui_crate_path(
             Some(FoundCrate::Name("facade_ui".into())),

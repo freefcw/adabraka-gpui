@@ -10,7 +10,7 @@ source "$SCRIPT_DIR/verify-common.sh"
 # proc-macro-only, which cargo-semver-checks does not support, and the extracted
 # internal packages have not been published yet.
 readonly SEMVER_PACKAGES=(
-    adabraka-gpui
+    fc-gpui
 )
 
 case "${1:-}" in

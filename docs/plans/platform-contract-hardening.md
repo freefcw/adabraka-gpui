@@ -115,7 +115,7 @@ Unsupported platform permissions cannot look granted, screen-capture consumers c
 - Native macOS capture cannot be exercised in the current focused unit tests; implementation must remain small and preserve Objective-C ownership behavior.
 
 ## Final Validation
-- `cargo test -p adabraka-gpui --lib --features screen-capture -- --test-threads=1`
+- `cargo test -p fc-gpui --lib --features screen-capture -- --test-threads=1`
 - Run the focused permission, stream-drop, exactly-once, and macOS error-mapping tests independently.
 - Run rustfmt in check mode for every changed Rust file.
 - Compile the Linux `screen-capture` feature path in Linux CI; local cross-compilation requires a Linux C toolchain.

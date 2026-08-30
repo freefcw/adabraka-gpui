@@ -92,439 +92,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "adabraka-gpui"
-version = "0.9.0"
-dependencies = [
- "adabraka-gpui-core",
- "adabraka-gpui-macros",
- "adabraka-gpui-platform",
- "adabraka_collections",
- "adabraka_http_client",
- "anyhow",
- "env_logger",
- "futures",
- "log",
- "lyon",
- "rand 0.9.4",
- "schemars",
- "serde",
- "serde_json",
- "smallvec",
- "unicode-segmentation",
- "zed-reqwest",
-]
-
-[[package]]
-name = "adabraka-gpui-core"
-version = "0.9.0"
-dependencies = [
- "accesskit",
- "adabraka-gpui-macros",
- "adabraka_collections",
- "adabraka_http_client",
- "adabraka_refineable",
- "adabraka_semantic_version",
- "adabraka_sum_tree",
- "adabraka_util",
- "adabraka_util_macros",
- "anyhow",
- "async-channel 2.5.0",
- "async-task",
- "backtrace",
- "bitflags 2.11.1",
- "core-video",
- "criterion",
- "ctor 0.3.6",
- "derive_more",
- "env_logger",
- "etagere",
- "futures",
- "hdrhistogram",
- "image",
- "inventory",
- "itertools 0.14.0",
- "libc",
- "log",
- "lyon",
- "num_cpus",
- "parking",
- "parking_lot",
- "postage",
- "pretty_assertions",
- "profiling",
- "rand 0.9.4",
- "raw-window-handle",
- "regex",
- "resvg",
- "schemars",
- "seahash",
- "serde",
- "serde_json",
- "slotmap",
- "smallvec",
- "smol",
- "smol_str",
- "stacksafe",
- "strum",
- "taffy",
- "thiserror 2.0.18",
- "ttf-parser",
- "unicode-segmentation",
- "usvg",
- "uuid",
- "waker-fn",
- "windows 0.62.2",
- "windows-capture",
- "zed-reqwest",
- "zed-scap",
-]
-
-[[package]]
-name = "adabraka-gpui-core-with-facade-dev-compat"
-version = "0.0.0"
-dependencies = [
- "adabraka-gpui",
- "adabraka-gpui-core",
-]
-
-[[package]]
-name = "adabraka-gpui-downstream-compat"
-version = "0.0.0"
-dependencies = [
- "adabraka-gpui",
-]
-
-[[package]]
-name = "adabraka-gpui-linux"
-version = "0.9.0"
-dependencies = [
- "accesskit",
- "accesskit_unix",
- "adabraka-gpui-core",
- "adabraka-gpui-wgpu",
- "adabraka_collections",
- "adabraka_http_client",
- "adabraka_util",
- "anyhow",
- "as-raw-xcb-connection",
- "ashpd 0.11.1",
- "async-task",
- "bytemuck",
- "calloop",
- "calloop-wayland-source",
- "cosmic-text",
- "filedescriptor",
- "flume",
- "futures",
- "image",
- "itertools 0.14.0",
- "ksni",
- "libc",
- "log",
- "notify-rust",
- "oo7",
- "open",
- "parking",
- "parking_lot",
- "pathfinder_geometry",
- "profiling",
- "raw-window-handle",
- "smallvec",
- "smol",
- "strum",
- "ttf-parser",
- "unicode-bidi",
- "unicode-segmentation",
- "uuid",
- "wayland-backend",
- "wayland-client",
- "wayland-cursor",
- "wayland-protocols",
- "wayland-protocols-plasma",
- "wayland-protocols-wlr",
- "wayland-scanner",
- "x11-clipboard",
- "x11rb",
- "xkbcommon",
- "zed-font-kit",
- "zed-xim",
-]
-
-[[package]]
-name = "adabraka-gpui-macos"
-version = "0.9.0"
-dependencies = [
- "accesskit",
- "accesskit_macos",
- "adabraka-gpui-core",
- "adabraka_collections",
- "adabraka_media",
- "adabraka_util",
- "anyhow",
- "async-task",
- "bindgen",
- "block",
- "cbindgen",
- "core-foundation 0.10.1",
- "core-foundation-sys",
- "core-graphics 0.24.0",
- "core-text",
- "core-video",
- "ctor 0.3.6",
- "derive_more",
- "dispatch2",
- "etagere",
- "foreign-types",
- "futures",
- "image",
- "itertools 0.14.0",
- "libc",
- "log",
- "metal",
- "objc",
- "objc2 0.6.4",
- "objc2-app-kit 0.3.2",
- "objc2-foundation 0.3.2",
- "parking",
- "parking_lot",
- "pathfinder_geometry",
- "raw-window-handle",
- "smallvec",
- "smol",
- "strum",
- "uuid",
- "zed-font-kit",
-]
-
-[[package]]
-name = "adabraka-gpui-macros"
-version = "0.9.0"
-dependencies = [
- "adabraka-gpui-core",
- "heck 0.5.0",
- "proc-macro-crate",
- "proc-macro2",
- "quote",
- "syn",
- "toml_edit 0.25.11+spec-1.1.0",
-]
-
-[[package]]
-name = "adabraka-gpui-platform"
-version = "0.9.0"
-dependencies = [
- "adabraka-gpui-core",
- "adabraka-gpui-linux",
- "adabraka-gpui-macos",
- "adabraka-gpui-windows",
-]
-
-[[package]]
-name = "adabraka-gpui-renamed-dependency-compat"
-version = "0.0.0"
-dependencies = [
- "adabraka-gpui",
- "rand 0.9.4",
-]
-
-[[package]]
-name = "adabraka-gpui-underscore-alias-compat"
-version = "0.0.0"
-dependencies = [
- "adabraka-gpui",
- "rand 0.9.4",
-]
-
-[[package]]
-name = "adabraka-gpui-wgpu"
-version = "0.9.0"
-dependencies = [
- "adabraka-gpui-core",
- "adabraka_collections",
- "adabraka_util",
- "anyhow",
- "bytemuck",
- "etagere",
- "image",
- "log",
- "parking_lot",
- "profiling",
- "raw-window-handle",
- "smol",
- "wgpu",
-]
-
-[[package]]
-name = "adabraka-gpui-windows"
-version = "0.9.0"
-dependencies = [
- "accesskit",
- "accesskit_windows",
- "adabraka-gpui-core",
- "adabraka_collections",
- "adabraka_util",
- "anyhow",
- "async-task",
- "embed-resource",
- "etagere",
- "flume",
- "futures",
- "image",
- "itertools 0.14.0",
- "log",
- "parking",
- "parking_lot",
- "rand 0.9.4",
- "raw-window-handle",
- "smallvec",
- "uuid",
- "windows 0.62.2",
- "windows-core 0.62.2",
- "windows-numerics 0.3.1",
- "windows-registry 0.5.3",
- "zed-scap",
-]
-
-[[package]]
-name = "adabraka_collections"
-version = "0.5.1"
-dependencies = [
- "indexmap",
- "rustc-hash 2.1.2",
-]
-
-[[package]]
-name = "adabraka_derive_refineable"
-version = "0.5.1"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "adabraka_http_client"
-version = "0.5.1"
-dependencies = [
- "adabraka_util",
- "anyhow",
- "async-compression",
- "async-fs",
- "async-tar",
- "bytes",
- "derive_more",
- "futures",
- "http",
- "http-body",
- "log",
- "parking_lot",
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
- "url",
- "zed-reqwest",
-]
-
-[[package]]
-name = "adabraka_media"
-version = "0.5.1"
-dependencies = [
- "anyhow",
- "bindgen",
- "core-foundation 0.10.1",
- "core-video",
- "ctor 0.4.3",
- "foreign-types",
- "metal",
- "objc",
-]
-
-[[package]]
-name = "adabraka_perf"
-version = "0.5.1"
-dependencies = [
- "adabraka_collections",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "adabraka_refineable"
-version = "0.5.1"
-dependencies = [
- "adabraka_derive_refineable",
-]
-
-[[package]]
-name = "adabraka_semantic_version"
-version = "0.5.1"
-dependencies = [
- "anyhow",
- "serde",
-]
-
-[[package]]
-name = "adabraka_sum_tree"
-version = "0.5.1"
-dependencies = [
- "arrayvec",
- "ctor 0.4.3",
- "env_logger",
- "log",
- "rand 0.9.4",
- "rayon",
-]
-
-[[package]]
-name = "adabraka_util"
-version = "0.6.0"
-dependencies = [
- "adabraka_collections",
- "adabraka_util_macros",
- "anyhow",
- "async-fs",
- "async_zip",
- "command-fds",
- "dirs",
- "dunce",
- "futures",
- "futures-lite",
- "git2",
- "globset",
- "indoc",
- "itertools 0.14.0",
- "libc",
- "log",
- "nix",
- "pretty_assertions",
- "rand 0.9.4",
- "regex",
- "rust-embed",
- "schemars",
- "serde",
- "serde_json",
- "serde_json_lenient",
- "shlex",
- "smol",
- "take-until",
- "tempfile",
- "tendril",
- "unicase",
- "walkdir",
- "which",
-]
-
-[[package]]
-name = "adabraka_util_macros"
-version = "0.6.0"
-dependencies = [
- "adabraka_perf",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "addr2line"
 version = "0.25.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2280,6 +1847,439 @@ name = "fax"
 version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "caf1079563223d5d59d83c85886a56e586cfd5c1a26292e971a0fa266531ac5a"
+
+[[package]]
+name = "fc-gpui"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "env_logger",
+ "fc-gpui-collections",
+ "fc-gpui-core",
+ "fc-gpui-http-client",
+ "fc-gpui-macros",
+ "fc-gpui-platform",
+ "futures",
+ "log",
+ "lyon",
+ "rand 0.9.4",
+ "schemars",
+ "serde",
+ "serde_json",
+ "smallvec",
+ "unicode-segmentation",
+ "zed-reqwest",
+]
+
+[[package]]
+name = "fc-gpui-collections"
+version = "0.5.1"
+dependencies = [
+ "indexmap",
+ "rustc-hash 2.1.2",
+]
+
+[[package]]
+name = "fc-gpui-core"
+version = "0.9.0"
+dependencies = [
+ "accesskit",
+ "anyhow",
+ "async-channel 2.5.0",
+ "async-task",
+ "backtrace",
+ "bitflags 2.11.1",
+ "core-video",
+ "criterion",
+ "ctor 0.3.6",
+ "derive_more",
+ "env_logger",
+ "etagere",
+ "fc-gpui-collections",
+ "fc-gpui-http-client",
+ "fc-gpui-macros",
+ "fc-gpui-refineable",
+ "fc-gpui-semantic-version",
+ "fc-gpui-sum-tree",
+ "fc-gpui-util",
+ "fc-gpui-util-macros",
+ "futures",
+ "hdrhistogram",
+ "image",
+ "inventory",
+ "itertools 0.14.0",
+ "libc",
+ "log",
+ "lyon",
+ "num_cpus",
+ "parking",
+ "parking_lot",
+ "postage",
+ "pretty_assertions",
+ "profiling",
+ "rand 0.9.4",
+ "raw-window-handle",
+ "regex",
+ "resvg",
+ "schemars",
+ "seahash",
+ "serde",
+ "serde_json",
+ "slotmap",
+ "smallvec",
+ "smol",
+ "smol_str",
+ "stacksafe",
+ "strum",
+ "taffy",
+ "thiserror 2.0.18",
+ "ttf-parser",
+ "unicode-segmentation",
+ "usvg",
+ "uuid",
+ "waker-fn",
+ "windows 0.62.2",
+ "windows-capture",
+ "zed-reqwest",
+ "zed-scap",
+]
+
+[[package]]
+name = "fc-gpui-core-with-facade-dev-compat"
+version = "0.0.0"
+dependencies = [
+ "fc-gpui",
+ "fc-gpui-core",
+]
+
+[[package]]
+name = "fc-gpui-derive-refineable"
+version = "0.5.1"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "fc-gpui-downstream-compat"
+version = "0.0.0"
+dependencies = [
+ "fc-gpui",
+]
+
+[[package]]
+name = "fc-gpui-http-client"
+version = "0.5.1"
+dependencies = [
+ "anyhow",
+ "async-compression",
+ "async-fs",
+ "async-tar",
+ "bytes",
+ "derive_more",
+ "fc-gpui-util",
+ "futures",
+ "http",
+ "http-body",
+ "log",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "url",
+ "zed-reqwest",
+]
+
+[[package]]
+name = "fc-gpui-linux"
+version = "0.9.0"
+dependencies = [
+ "accesskit",
+ "accesskit_unix",
+ "anyhow",
+ "as-raw-xcb-connection",
+ "ashpd 0.11.1",
+ "async-task",
+ "bytemuck",
+ "calloop",
+ "calloop-wayland-source",
+ "cosmic-text",
+ "fc-gpui-collections",
+ "fc-gpui-core",
+ "fc-gpui-http-client",
+ "fc-gpui-util",
+ "fc-gpui-wgpu",
+ "filedescriptor",
+ "flume",
+ "futures",
+ "image",
+ "itertools 0.14.0",
+ "ksni",
+ "libc",
+ "log",
+ "notify-rust",
+ "oo7",
+ "open",
+ "parking",
+ "parking_lot",
+ "pathfinder_geometry",
+ "profiling",
+ "raw-window-handle",
+ "smallvec",
+ "smol",
+ "strum",
+ "ttf-parser",
+ "unicode-bidi",
+ "unicode-segmentation",
+ "uuid",
+ "wayland-backend",
+ "wayland-client",
+ "wayland-cursor",
+ "wayland-protocols",
+ "wayland-protocols-plasma",
+ "wayland-protocols-wlr",
+ "wayland-scanner",
+ "x11-clipboard",
+ "x11rb",
+ "xkbcommon",
+ "zed-font-kit",
+ "zed-xim",
+]
+
+[[package]]
+name = "fc-gpui-macos"
+version = "0.9.0"
+dependencies = [
+ "accesskit",
+ "accesskit_macos",
+ "anyhow",
+ "async-task",
+ "bindgen",
+ "block",
+ "cbindgen",
+ "core-foundation 0.10.1",
+ "core-foundation-sys",
+ "core-graphics 0.24.0",
+ "core-text",
+ "core-video",
+ "ctor 0.3.6",
+ "derive_more",
+ "dispatch2",
+ "etagere",
+ "fc-gpui-collections",
+ "fc-gpui-core",
+ "fc-gpui-media",
+ "fc-gpui-util",
+ "foreign-types",
+ "futures",
+ "image",
+ "itertools 0.14.0",
+ "libc",
+ "log",
+ "metal",
+ "objc",
+ "objc2 0.6.4",
+ "objc2-app-kit 0.3.2",
+ "objc2-foundation 0.3.2",
+ "parking",
+ "parking_lot",
+ "pathfinder_geometry",
+ "raw-window-handle",
+ "smallvec",
+ "smol",
+ "strum",
+ "uuid",
+ "zed-font-kit",
+]
+
+[[package]]
+name = "fc-gpui-macros"
+version = "0.9.0"
+dependencies = [
+ "fc-gpui-core",
+ "heck 0.5.0",
+ "proc-macro-crate",
+ "proc-macro2",
+ "quote",
+ "syn",
+ "toml_edit 0.25.11+spec-1.1.0",
+]
+
+[[package]]
+name = "fc-gpui-media"
+version = "0.5.1"
+dependencies = [
+ "anyhow",
+ "bindgen",
+ "core-foundation 0.10.1",
+ "core-video",
+ "ctor 0.4.3",
+ "foreign-types",
+ "metal",
+ "objc",
+]
+
+[[package]]
+name = "fc-gpui-perf"
+version = "0.5.1"
+dependencies = [
+ "fc-gpui-collections",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "fc-gpui-platform"
+version = "0.9.0"
+dependencies = [
+ "fc-gpui-core",
+ "fc-gpui-linux",
+ "fc-gpui-macos",
+ "fc-gpui-windows",
+]
+
+[[package]]
+name = "fc-gpui-refineable"
+version = "0.5.1"
+dependencies = [
+ "fc-gpui-derive-refineable",
+]
+
+[[package]]
+name = "fc-gpui-renamed-dependency-compat"
+version = "0.0.0"
+dependencies = [
+ "fc-gpui",
+ "rand 0.9.4",
+]
+
+[[package]]
+name = "fc-gpui-semantic-version"
+version = "0.5.1"
+dependencies = [
+ "anyhow",
+ "serde",
+]
+
+[[package]]
+name = "fc-gpui-sum-tree"
+version = "0.5.1"
+dependencies = [
+ "arrayvec",
+ "ctor 0.4.3",
+ "env_logger",
+ "log",
+ "rand 0.9.4",
+ "rayon",
+]
+
+[[package]]
+name = "fc-gpui-underscore-alias-compat"
+version = "0.0.0"
+dependencies = [
+ "fc-gpui",
+ "rand 0.9.4",
+]
+
+[[package]]
+name = "fc-gpui-util"
+version = "0.6.0"
+dependencies = [
+ "anyhow",
+ "async-fs",
+ "async_zip",
+ "command-fds",
+ "dirs",
+ "dunce",
+ "fc-gpui-collections",
+ "fc-gpui-util-macros",
+ "futures",
+ "futures-lite",
+ "git2",
+ "globset",
+ "indoc",
+ "itertools 0.14.0",
+ "libc",
+ "log",
+ "nix",
+ "pretty_assertions",
+ "rand 0.9.4",
+ "regex",
+ "rust-embed",
+ "schemars",
+ "serde",
+ "serde_json",
+ "serde_json_lenient",
+ "shlex",
+ "smol",
+ "take-until",
+ "tempfile",
+ "tendril",
+ "unicase",
+ "walkdir",
+ "which",
+]
+
+[[package]]
+name = "fc-gpui-util-macros"
+version = "0.6.0"
+dependencies = [
+ "fc-gpui-perf",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "fc-gpui-wgpu"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "bytemuck",
+ "etagere",
+ "fc-gpui-collections",
+ "fc-gpui-core",
+ "fc-gpui-util",
+ "image",
+ "log",
+ "parking_lot",
+ "profiling",
+ "raw-window-handle",
+ "smol",
+ "wgpu",
+]
+
+[[package]]
+name = "fc-gpui-windows"
+version = "0.9.0"
+dependencies = [
+ "accesskit",
+ "accesskit_windows",
+ "anyhow",
+ "async-task",
+ "embed-resource",
+ "etagere",
+ "fc-gpui-collections",
+ "fc-gpui-core",
+ "fc-gpui-util",
+ "flume",
+ "futures",
+ "image",
+ "itertools 0.14.0",
+ "log",
+ "parking",
+ "parking_lot",
+ "rand 0.9.4",
+ "raw-window-handle",
+ "smallvec",
+ "uuid",
+ "windows 0.62.2",
+ "windows-core 0.62.2",
+ "windows-numerics 0.3.1",
+ "windows-registry 0.5.3",
+ "zed-scap",
+]
 
 [[package]]
 name = "fdeflate"
