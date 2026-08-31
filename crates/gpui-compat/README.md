@@ -10,17 +10,17 @@ crate is the upstream [Augani](https://github.com/Augani/adabraka-gpui) crate at
 not carry this fork's releases. Depend on the `v0.9.0` tag:
 
 ```toml
-fc-gpui = { git = "https://github.com/freefcw/adabraka-gpui.git", tag = "v0.9.0" }
+fc-gpui = { git = "https://github.com/freefcw/fc-gpui.git", tag = "v0.9.0" }
 ```
 
 Building requires the toolchain pinned in
-[`rust-toolchain.toml`](https://github.com/freefcw/adabraka-gpui/blob/main/rust-toolchain.toml):
+[`rust-toolchain.toml`](https://github.com/freefcw/fc-gpui/blob/main/rust-toolchain.toml):
 Rust `1.97.1` with edition 2024.
 
 To keep the build small, disable default features and opt into only the image formats you need:
 
 ```toml
-fc-gpui = { git = "https://github.com/freefcw/adabraka-gpui.git", tag = "v0.9.0", default-features = false, features = [
+fc-gpui = { git = "https://github.com/freefcw/fc-gpui.git", tag = "v0.9.0", default-features = false, features = [
     "font-kit",
     "wayland",
     "x11",
@@ -74,7 +74,7 @@ no longer part of the crate. The default macOS renderer is Metal and Windows use
 
 Downstream applications continue to use only `fc-gpui`; the renderer package is an internal
 implementation dependency and does not change the `Application::new()` entry point. See
-[the WGPU migration notes](https://github.com/freefcw/adabraka-gpui/blob/main/docs/wgpu-migration.md) for details.
+[the WGPU migration notes](https://github.com/freefcw/fc-gpui/blob/main/docs/wgpu-migration.md) for details.
 
 ### Accessibility
 
@@ -101,7 +101,7 @@ version 5 cannot select `exclusive_edge`, so that option is ignored with a warni
 height of zero is passed through to let the compositor choose that dimension.
 
 Applications upgrading from `0.6.x` should follow the
-[layer-shell migration and implementation provenance guide](https://github.com/freefcw/adabraka-gpui/blob/main/docs/layer-shell-migration.md).
+[layer-shell migration and implementation provenance guide](https://github.com/freefcw/fc-gpui/blob/main/docs/layer-shell-migration.md).
 
 ```rust
 use gpui::{

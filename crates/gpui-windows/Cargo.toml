@@ -6,8 +6,8 @@ authors = ["Adabraka Team"]
 build = "build.rs"
 publish = true
 license = "Apache-2.0"
-homepage = "https://github.com/freefcw/adabraka-gpui"
-repository = "https://github.com/freefcw/adabraka-gpui"
+homepage = "https://github.com/freefcw/fc-gpui"
+repository = "https://github.com/freefcw/fc-gpui"
 readme = "README.md"
 description = "Windows platform and DirectX renderer backend for Adabraka GPUI"
 

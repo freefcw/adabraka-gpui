@@ -5,7 +5,7 @@ version = "0.5.1"
 publish = true
 description = "A sum tree data structure, a concurrency-friendly B-tree (originally from Zed - github.com/zed-industries/zed)"
 authors = ["Adabraka Team"]
-repository = "https://github.com/freefcw/adabraka-gpui"
+repository = "https://github.com/freefcw/fc-gpui"
 readme = false
 license = "Apache-2.0"
 
