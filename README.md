@@ -16,7 +16,7 @@ crate is the upstream [Augani](https://github.com/Augani/adabraka-gpui) crate at
 not carry this fork's releases. Depend on the `v0.9.0` tag:
 
 ```toml
-fc-gpui = { git = "https://github.com/freefcw/adabraka-gpui.git", tag = "v0.9.0" }
+fc-gpui = { git = "https://github.com/freefcw/fc-gpui.git", tag = "v0.9.0" }
 ```
 
 Building requires the toolchain pinned in [`rust-toolchain.toml`](rust-toolchain.toml): Rust
@@ -26,7 +26,7 @@ To trim image decoder footprint, disable default features and list only the plat
 formats you need:
 
 ```toml
-fc-gpui = { git = "https://github.com/freefcw/adabraka-gpui.git", tag = "v0.9.0", default-features = false, features = [
+fc-gpui = { git = "https://github.com/freefcw/fc-gpui.git", tag = "v0.9.0", default-features = false, features = [
     "font-kit",
     "wayland",
     "x11",
