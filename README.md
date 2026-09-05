@@ -19,8 +19,11 @@ not carry this fork's releases. Depend on the `v0.9.0` tag:
 fc-gpui = { git = "https://github.com/freefcw/fc-gpui.git", tag = "v0.9.0" }
 ```
 
-Building requires the toolchain pinned in [`rust-toolchain.toml`](rust-toolchain.toml): Rust
-`1.97.1` with edition 2024.
+Contributors build with the toolchain pinned in [`rust-toolchain.toml`](rust-toolchain.toml): Rust
+`1.97.1` with edition 2024. Consuming these crates does not require that toolchain — they build on
+Rust `1.90.0` and newer. That floor comes from the dependency tree (`ordered-float 5.5.0` and
+`cosmic-text 0.19`), not from this fork's own code, so the `fc-gpui*` packages declare no
+`rust-version` of their own, matching upstream Zed's `gpui`.
 
 To trim image decoder footprint, disable default features and list only the platform and image
 formats you need:
