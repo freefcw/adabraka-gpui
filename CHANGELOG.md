@@ -36,6 +36,8 @@
 
 ### Improvements
 
+- **HoverListenerMode for keyboard-modality hover listeners** — `div().hover_listener_mode(HoverListenerMode::InputModalityIndependent)` keeps `on_hover` hit-testing after keyboard input (menus that pause on hover). Default `InputModalityAware` still clears hover on key press. Hover styles and tooltips are unchanged.
+
 - **Layout padding snap, SVG data/ExactSize, and test-window handles** — snap recomputed
   padding to the device-pixel grid before `clamp_scroll` so fractional rem sizes do not grow
   phantom scrollbars; `svg().data(bytes)` renders from raw SVG bytes; `SvgSize::ExactSize` and
