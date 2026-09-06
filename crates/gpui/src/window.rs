@@ -3771,6 +3771,19 @@ impl Window {
         color: Hsla,
         cx: &App,
     ) -> Result<()> {
+        self.paint_svg_from(bounds, path, None, transformation, color, cx)
+    }
+
+    /// Paint a monochrome SVG from an asset path or raw bytes.
+    pub(crate) fn paint_svg_from(
+        &mut self,
+        bounds: Bounds<Pixels>,
+        path: SharedString,
+        data: Option<&[u8]>,
+        transformation: TransformationMatrix,
+        color: Hsla,
+        cx: &App,
+    ) -> Result<()> {
         self.invalidator.debug_assert_paint();
 
         let element_opacity = self.element_opacity();
@@ -3785,7 +3798,7 @@ impl Window {
         let Some(tile) =
             self.sprite_atlas
                 .get_or_insert_with(&params.clone().into(), &mut || {
-                    let Some((size, bytes)) = cx.svg_renderer.render(&params)? else {
+                    let Some((size, bytes)) = cx.svg_renderer.render(&params, data)? else {
                         return Ok(None);
                     };
                     Ok(Some((size, Cow::Owned(bytes))))

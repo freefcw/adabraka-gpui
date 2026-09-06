@@ -188,15 +188,24 @@ impl SvgRenderer {
     pub(crate) fn render(
         &self,
         params: &RenderSvgParams,
+        data: Option<&[u8]>,
     ) -> Result<Option<(Size<DevicePixels>, Vec<u8>)>> {
         anyhow::ensure!(!params.size.is_zero(), "can't render at a zero size");
 
-        // Load the tree.
-        let Some(bytes) = self.asset_source.load(&params.path)? else {
-            return Ok(None);
+        let owned;
+        let bytes = if let Some(data) = data {
+            data
+        } else {
+            match self.asset_source.load(&params.path)? {
+                Some(bytes) => {
+                    owned = bytes;
+                    owned.as_ref()
+                }
+                None => return Ok(None),
+            }
         };
 
-        let pixmap = self.render_pixmap(&bytes, SvgSize::Size(params.size))?;
+        let pixmap = self.render_pixmap(bytes, SvgSize::Size(params.size))?;
 
         // Convert the pixmap's pixels into an alpha mask.
         let size = Size::new(

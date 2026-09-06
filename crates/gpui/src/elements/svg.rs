@@ -4,6 +4,10 @@ use crate::{
     StyleRefinement, Styled, TransformationMatrix, Window, geometry::Negate as _, point, px,
     radians, size,
 };
+use std::{
+    hash::{Hash, Hasher},
+    sync::Arc,
+};
 use util::ResultExt;
 
 /// An SVG element.
@@ -11,6 +15,8 @@ pub struct Svg {
     interactivity: Interactivity,
     transformation: Option<Transformation>,
     path: Option<SharedString>,
+    data: Option<Arc<[u8]>>,
+    data_path: Option<SharedString>,
 }
 
 /// Create a new SVG element.
@@ -20,6 +26,8 @@ pub fn svg() -> Svg {
         interactivity: Interactivity::new(),
         transformation: None,
         path: None,
+        data: None,
+        data_path: None,
     }
 }
 
@@ -27,6 +35,19 @@ impl Svg {
     /// Set the path to the SVG file for this element.
     pub fn path(mut self, path: impl Into<SharedString>) -> Self {
         self.path = Some(path.into());
+        self
+    }
+
+    /// Set the raw SVG data for this element.
+    /// The SVG will be rendered directly from the provided bytes.
+    pub fn data(mut self, data: &[u8]) -> Self {
+        // Generate a unique deterministic path based on the data hash for caching
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        data.hash(&mut hasher);
+        let hash = hasher.finish();
+        let path = SharedString::from(format!("__binary_svg__{}", hash));
+        self.data = Some(Arc::from(data));
+        self.data_path = Some(path);
         self
     }
 
@@ -107,17 +128,30 @@ impl Element for Svg {
             window,
             cx,
             |style, window, cx| {
-                if let Some((path, color)) = self.path.as_ref().zip(style.text.color) {
-                    let transformation = self
-                        .transformation
-                        .as_ref()
-                        .map(|transformation| {
-                            transformation.into_matrix(bounds.center(), window.scale_factor())
-                        })
-                        .unwrap_or_default();
+                let transformation = self
+                    .transformation
+                    .as_ref()
+                    .map(|transformation| {
+                        transformation.into_matrix(bounds.center(), window.scale_factor())
+                    })
+                    .unwrap_or_default();
 
+                if let Some((data, path)) = self.data.as_ref().zip(self.data_path.as_ref()) {
+                    if let Some(color) = style.text.color {
+                        window
+                            .paint_svg_from(
+                                bounds,
+                                path.clone(),
+                                Some(&**data),
+                                transformation,
+                                color,
+                                cx,
+                            )
+                            .log_err();
+                    }
+                } else if let Some((path, color)) = self.path.as_ref().zip(style.text.color) {
                     window
-                        .paint_svg(bounds, path.clone(), transformation, color, cx)
+                        .paint_svg_from(bounds, path.clone(), None, transformation, color, cx)
                         .log_err();
                 }
             },
