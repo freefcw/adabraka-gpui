@@ -52,7 +52,7 @@ use super::{
 use crate::linux::{
     DEFAULT_CURSOR_ICON_NAME, LinuxClient, LinuxCommon, LinuxKeyboardLayout, X11Window,
     get_xkb_compose_state, is_within_click_distance, log_cursor_icon_warning,
-    modifiers_from_xinput_info, open_uri_internal,
+    modifiers_from_xinput_info, new_xkb_context, open_uri_internal,
     platform::{
         DOUBLE_CLICK_INTERVAL, LinuxTrayClickEvent, LinuxTrayEventTarget, SCROLL_LINES,
         TrayIconClickEventCallback, TrayIconEventCallback, TrayMenuActionCallback,
@@ -455,7 +455,7 @@ impl X11Client {
             ),
         )?;
 
-        let xkb_context = xkbc::Context::new(xkbc::CONTEXT_NO_FLAGS);
+        let xkb_context = new_xkb_context()?;
         let xkb_device_id = xkbc::x11::get_core_keyboard_device_id(&xcb_connection);
         let xkb_state = {
             let xkb_keymap = xkbc::x11::keymap_new_from_device(

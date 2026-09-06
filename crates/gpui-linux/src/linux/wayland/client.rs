@@ -78,7 +78,8 @@ use super::{
 
 use crate::linux::{
     DOUBLE_CLICK_INTERVAL, LinuxClient, LinuxCommon, LinuxKeyboardLayout, PIPE_READ_TIMEOUT,
-    SCROLL_LINES, get_xkb_compose_state, is_within_click_distance, open_uri_internal,
+    SCROLL_LINES, get_xkb_compose_state, is_within_click_distance, new_xkb_context,
+    open_uri_internal,
     platform::{
         LinuxTrayClickEvent, LinuxTrayEventTarget, TrayIconClickEventCallback,
         TrayIconEventCallback, TrayMenuActionCallback, install_linux_tray_event_source,
@@ -1508,7 +1509,13 @@ impl Dispatch<wl_keyboard::WlKeyboard, ()> for WaylandClientStatePtr {
                     log::error!("Received keymap format {:?}, expected XkbV1", format);
                     return;
                 }
-                let xkb_context = xkb::Context::new(xkb::CONTEXT_NO_FLAGS);
+                let xkb_context = match new_xkb_context() {
+                    Ok(context) => context,
+                    Err(error) => {
+                        log::error!("Failed to process Wayland keymap: {error:#}");
+                        return;
+                    }
+                };
                 let keymap = unsafe {
                     xkb::Keymap::new_from_fd(
                         &xkb_context,

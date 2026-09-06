@@ -16,6 +16,8 @@ use std::{
     os::fd::{AsFd, AsRawFd},
 };
 
+#[cfg(any(feature = "wayland", feature = "x11"))]
+use anyhow::ensure;
 use anyhow::{Context as _, anyhow};
 use async_task::Runnable;
 use calloop::{
@@ -1140,6 +1142,20 @@ pub(super) fn is_within_click_distance(a: Point<Pixels>, b: Point<Pixels>) -> bo
 }
 
 #[cfg(any(feature = "wayland", feature = "x11"))]
+pub(super) fn new_xkb_context() -> anyhow::Result<xkb::Context> {
+    validate_xkb_context(xkb::Context::new(xkb::CONTEXT_NO_FLAGS))
+}
+
+#[cfg(any(feature = "wayland", feature = "x11"))]
+fn validate_xkb_context(context: xkb::Context) -> anyhow::Result<xkb::Context> {
+    ensure!(
+        !context.get_raw_ptr().is_null(),
+        "libxkbcommon failed to create an XKB context"
+    );
+    Ok(context)
+}
+
+#[cfg(any(feature = "wayland", feature = "x11"))]
 pub(super) fn get_xkb_compose_state(cx: &xkb::Context) -> Option<xkb::compose::State> {
     let mut locales = Vec::default();
     if let Some(locale) = env::var_os("LC_CTYPE") {
@@ -1517,6 +1533,23 @@ pub(super) fn capslock_from_xkb(keymap_state: &State) -> gpui::Capslock {
 mod tests {
     use super::*;
     use gpui::{Point, px};
+
+    #[cfg(any(feature = "wayland", feature = "x11"))]
+    #[test]
+    fn rejects_null_xkb_context() {
+        let context = unsafe {
+            // libxkbcommon permits unref on null, matching the value returned by Context::new on failure.
+            xkb::Context::from_raw_ptr(std::ptr::null_mut())
+        };
+        let error = validate_xkb_context(context)
+            .err()
+            .expect("null XKB context should be rejected");
+
+        assert_eq!(
+            error.to_string(),
+            "libxkbcommon failed to create an XKB context"
+        );
+    }
 
     #[test]
     fn test_is_within_click_distance() {
