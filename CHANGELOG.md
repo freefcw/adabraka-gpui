@@ -36,6 +36,13 @@
 
 ### Improvements
 
+- **Linux X11/Wayland correctness ports** — enable `wayland-backend`'s `log` feature so connection
+  errors cannot panic when stderr is gone; write a trailing NUL on X11 `WM_CLASS`; clear the ICCCM
+  urgency hint when a window becomes active; reject a null XKB context instead of using it; drop the
+  X11 client `RefMut` before `WM_DELETE_WINDOW` close callbacks; drain x11rb-buffered events after
+  foreground idle work and stop forcing `SetInputFocus` (keep `_NET_ACTIVE_WINDOW`) so the first map
+  is not blank.
+
 - **Every dependency now resolves from crates.io** — `fc-gpui-wgpu` depends on the published
   `wgpu 29.0.4` instead of the `zed-industries/wgpu` `v29` branch, whose only two commits ahead of
   the upstream `v29` release (the XCB EGL display handle and an examples README edit) both landed
