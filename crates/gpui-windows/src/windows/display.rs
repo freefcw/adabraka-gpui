@@ -49,6 +49,12 @@ impl WindowsDisplay {
         Self::new(Self::display_id_for_monitor(monitor))
     }
 
+    /// The DPI scale factor of this monitor, independent of whatever monitor
+    /// a not-yet-positioned window currently happens to be on.
+    pub(crate) fn scale_factor(&self) -> f32 {
+        self.scale_factor
+    }
+
     fn from_monitor_info(
         handle: HMONITOR,
         display_id: DisplayId,
