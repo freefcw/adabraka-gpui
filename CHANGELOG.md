@@ -36,6 +36,14 @@
 
 ### Improvements
 
+- **Layout padding snap, SVG data/ExactSize, and test-window handles** — snap recomputed
+  padding to the device-pixel grid before `clamp_scroll` so fractional rem sizes do not grow
+  phantom scrollbars; `svg().data(bytes)` renders from raw SVG bytes; `SvgSize::ExactSize` and
+  `render_parsed` rasterize at exact device-pixel dimensions while the scale-factor path stays 2×;
+  `TestWindow` returns `HandleError::NotSupported` instead of panicking on raw handles;
+  `Hitbox::is_hovered_at` hit-tests a position against the last frame; `Window::painted_quads`
+  exposes scene quads under `test-support`.
+
 - **Windows mixed-DPI placement and COLR emoji clear** — place new windows using the target
   monitor's DPI instead of `GetDpiForWindow` after `CW_USEDEFAULT`; clear the COLR emoji D3D
   render target before compositing layers so uncovered texels do not keep DXGI pool garbage.
