@@ -468,10 +468,16 @@ fn set_wm_hints_urgency(xcb: &XCBConnection, x_window: xproto::Window, urgent: b
             Ok(Some(existing_hints)) => hints = existing_hints,
             Ok(None) => {}
             Err(error) => {
+                if !urgent {
+                    return;
+                }
                 log::debug!("failed to read X11 WM_HINTS before setting urgency: {error}")
             }
         },
         Err(error) => {
+            if !urgent {
+                return;
+            }
             log::debug!("failed to request X11 WM_HINTS before setting urgency: {error}")
         }
     }
