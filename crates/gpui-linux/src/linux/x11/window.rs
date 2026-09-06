@@ -1149,6 +1149,7 @@ impl X11WindowStatePtr {
 
         // The urgency hint has no withdrawal signal of its own; ICCCM leaves that to
         // the client, and focus is the conventional means for the user to zero it.
+        // _NET_WM_STATE_FOCUSED is optional; FocusIn also clears via set_active(true).
         if state.active && !was_active {
             set_wm_hints_urgency(&self.xcb, self.x_window, false);
         }
@@ -1310,6 +1311,11 @@ impl X11WindowStatePtr {
     }
 
     pub fn set_active(&self, focus: bool) {
+        if focus {
+            // FocusIn is the ICCCM-level focus signal. Do not rely only on
+            // _NET_WM_STATE_FOCUSED, which some window managers never set.
+            set_wm_hints_urgency(&self.xcb, self.x_window, false);
+        }
         if let Some(ref mut fun) = self.callbacks.borrow_mut().active_status_change {
             fun(focus);
         }
