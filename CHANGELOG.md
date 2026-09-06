@@ -36,6 +36,8 @@
 
 ### Improvements
 
+- **Malformed `${...}` shell variables no longer panic** — `ShellKind::to_cmd_variable` and `to_powershell_variable` use `strip_suffix('}')` and pass through malformed references such as `${` instead of slicing off the last byte.
+
 - **HoverListenerMode for keyboard-modality hover listeners** — `div().hover_listener_mode(HoverListenerMode::InputModalityIndependent)` keeps `on_hover` hit-testing after keyboard input (menus that pause on hover). Default `InputModalityAware` still clears hover on key press. Hover styles and tooltips are unchanged.
 
 - **Layout padding snap, SVG data/ExactSize, and test-window handles** — snap recomputed
