@@ -36,6 +36,10 @@
 
 ### Improvements
 
+- **Windows mixed-DPI placement and COLR emoji clear** — place new windows using the target
+  monitor's DPI instead of `GetDpiForWindow` after `CW_USEDEFAULT`; clear the COLR emoji D3D
+  render target before compositing layers so uncovered texels do not keep DXGI pool garbage.
+
 - **Linux X11/Wayland correctness ports** — enable `wayland-backend`'s `log` feature so connection
   errors cannot panic when stderr is gone; write a trailing NUL on X11 `WM_CLASS`; clear the ICCCM
   urgency hint when a window becomes active; reject a null XKB context instead of using it; drop the
